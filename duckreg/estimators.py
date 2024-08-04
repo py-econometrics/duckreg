@@ -4,6 +4,7 @@ import re
 from tqdm import tqdm
 from .demean import demean, _convert_to_int
 from .duckreg import DuckReg, wls
+from pyfixest.estimation.estimation import feols
 
 ################################################################################
 
@@ -15,11 +16,12 @@ class DuckRegression(DuckReg):
         table_name: str,
         formula: str,
         cluster_col: str,
+        seed: int,
         n_bootstraps: int = 100,
-        seed: int = 42,
         rowid_col: str = "rowid",
+        fitter: str = "numpy"
     ):
-        super().__init__(db_name, table_name, n_bootstraps, seed)
+        super().__init__(db_name, table_name, n_bootstraps, seed, fitter = fitter)
         self.formula = formula
         self.cluster_col = cluster_col
         self.rowid_col = rowid_col
@@ -90,6 +92,23 @@ class DuckRegression(DuckReg):
         y, X, n = self.collect_data(data=self.df_compressed)
 
         return wls(X, y, n)
+
+    def estimate_feols(self):
+
+        if self.fevars:
+            fml = f"mean_{self.outcome_vars[0]} ~ {' + '.join(self.covars)} | {' + '.join(self.fevars)}"
+        else:
+            fml = f"mean_{self.outcome_vars[0]} ~ {' + '.join(self.covars)}"
+
+        fit = feols(
+            fml = fml,
+            data = self.df_compressed,
+            vcov = "iid",  # most performant
+            weights = "count",
+            weights_type = "fweights"
+        )
+
+        return fit
 
     def bootstrap(self):
         if self.fevars:
@@ -162,10 +181,10 @@ class DuckMundlak(DuckReg):
         table_name: str,
         outcome_var: str,
         covariates: list,
+        seed: int,
         unit_col: str,
         time_col: str = None,
         n_bootstraps: int = 100,
-        seed: int = 42,
         cluster_col: str = None,
     ):
         super().__init__(db_name, table_name, n_bootstraps, seed)
@@ -258,6 +277,9 @@ class DuckMundlak(DuckReg):
         y, X, n = self.collect_data(data=self.df_compressed)
         return wls(X, y, n)
 
+    def estimate_feols(self):
+        pass
+
     def bootstrap(self):
         rhs = (
             self.covariates
@@ -338,8 +360,8 @@ class DuckDoubleDemeaning(DuckReg):
         treatment_var: str,
         unit_col: str,
         time_col: str,
+        seed: int,
         n_bootstraps: int = 100,
-        seed: int = 42,
         cluster_col: str = None,
     ):
         super().__init__(db_name, table_name, n_bootstraps, seed)
@@ -420,6 +442,9 @@ class DuckDoubleDemeaning(DuckReg):
     def estimate(self):
         y, X, n = self.collect_data(data=self.df_compressed)
         return wls(X, y, n)
+
+    def estimate_feols(self):
+        pass
 
     def bootstrap(self):
         boot_coefs = np.zeros((self.n_bootstraps, 2))  # Intercept and treatment effect
