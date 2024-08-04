@@ -8,4 +8,8 @@ Specific regressions:
 + `DuckDoubleDemeaning`: Double demeaning regression, which compresses the data to y averages by all values of $w$ after demeaning by $\bar{w}_{i, \cdot}, \bar{w}_{\cdot, t}$ .
 
 
-This package makes heavy use of Jeff Wooldridge's [Generalized Mundlak paper](https://www.researchgate.net/publication/353938385_Two-Way_Fixed_Effects_the_Two-Way_Mundlak_Regression_and_Difference-in-Differences_Estimators).
+---
+references:
+
++ [Arkhangelsky and Imbens (2023)](https://arxiv.org/abs/1807.02099)
++ [Wooldridge 2021](https://www.researchgate.net/publication/353938385_Two-Way_Fixed_Effects_the_Two-Way_Mundlak_Regression_and_Difference-in-Differences_Estimators).
