@@ -63,7 +63,7 @@ class DuckRegression(DuckReg):
         )
         self.df_compressed.eval(create_means, inplace=True)
 
-    def collect_and_demean(self, data: pd.DataFrame) -> pd.DataFrame:
+    def collect_data(self, data: pd.DataFrame) -> pd.DataFrame:
 
         y = data[f"mean_{self.outcome_vars[0]}"].values
         X = data[self.covars].values
@@ -88,7 +88,7 @@ class DuckRegression(DuckReg):
 
     def estimate(self):
 
-        y, X, n = self.collect_and_demean(data=self.df_compressed)
+        y, X, n = self.collect_data(data=self.df_compressed)
 
         return wls(X, y, n)
 
@@ -142,7 +142,7 @@ class DuckRegression(DuckReg):
             )
             df_boot.eval(create_means, inplace=True)
 
-            y, X, n = self.collect_and_demean(data=df_boot)
+            y, X, n = self.collect_data(data=df_boot)
 
             boot_coefs[b, :] = wls(X, y, n).flatten()
 
