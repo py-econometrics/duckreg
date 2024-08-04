@@ -2,11 +2,13 @@ import numpy as np
 import pandas as pd
 import re
 from tqdm import tqdm
-
+from .demean import demean, _convert_to_int
 from .duckreg import DuckReg, wls
-
+from pyfixest.estimation.estimation import feols
 
 ################################################################################
+
+
 class DuckRegression(DuckReg):
     def __init__(
         self,
@@ -14,20 +16,28 @@ class DuckRegression(DuckReg):
         table_name: str,
         formula: str,
         cluster_col: str,
+        seed: int,
         n_bootstraps: int = 100,
-        seed: int = 42,
         rowid_col: str = "rowid",
+        fitter: str = "numpy"
     ):
-        super().__init__(db_name, table_name, n_bootstraps, seed)
+        super().__init__(db_name, table_name, n_bootstraps, seed, fitter = fitter)
         self.formula = formula
         self.cluster_col = cluster_col
         self.rowid_col = rowid_col
         self._parse_formula()
 
     def _parse_formula(self):
-        ff_parts = self.formula.split("~")
-        self.outcome_vars = [x.strip() for x in ff_parts[0].split("+")]
-        self.strata_cols = [x.strip() for x in re.split(r"\+|\|", ff_parts[1])]
+
+        lhs, rhs = self.formula.split("~")
+        rhs_deparsed = rhs.split("|")
+        covars, fevars = rhs.split("|") if len(rhs_deparsed) > 1 else (rhs, None)
+
+        self.outcome_vars = [x.strip() for x in lhs.split("+")]
+        self.covars = [x.strip() for x in covars.split("+")]
+        self.fevars = [x.strip() for x in fevars.split("+")] if fevars else []
+        self.strata_cols = self.covars + self.fevars
+
         if not self.outcome_vars:
             raise ValueError("No outcome variables found in the formula")
 
@@ -54,15 +64,57 @@ class DuckRegression(DuckReg):
         )
         self.df_compressed.eval(create_means, inplace=True)
 
+    def collect_data(self, data: pd.DataFrame) -> pd.DataFrame:
+
+        y = data[f"mean_{self.outcome_vars[0]}"].values
+        X = data[self.covars].values
+        n = data["count"].values
+
+        # y, X, w need to be two-dimensional for the demean function
+        y = y.reshape(-1, 1) if y.ndim == 1 else y
+        X = X.reshape(-1, 1) if X.ndim == 1 else X
+
+        if self.fevars:
+            # fe needs to contain of only integers for
+            # the demean function to work
+            fe = _convert_to_int(data[self.fevars])
+            fe = fe.reshape(-1, 1) if fe.ndim == 1 else fe
+
+            y, _ = demean(x=y, flist=fe, weights=n)
+            X, _ = demean(x=X, flist=fe, weights=n)
+        else:
+            X = np.c_[np.ones(X.shape[0]), X]
+
+        return y, X, n
+
     def estimate(self):
-        y = self.df_compressed[f"mean_{self.outcome_vars[0]}"].values
-        X = self.df_compressed[self.strata_cols].values
-        X = np.c_[np.ones(X.shape[0]), X]
-        n = self.df_compressed["count"].values
+
+        y, X, n = self.collect_data(data=self.df_compressed)
+
         return wls(X, y, n)
 
+    def estimate_feols(self):
+
+        if self.fevars:
+            fml = f"mean_{self.outcome_vars[0]} ~ {' + '.join(self.covars)} | {' + '.join(self.fevars)}"
+        else:
+            fml = f"mean_{self.outcome_vars[0]} ~ {' + '.join(self.covars)}"
+
+        fit = feols(
+            fml = fml,
+            data = self.df_compressed,
+            vcov = "iid",  # most performant
+            weights = "count",
+            weights_type = "fweights"
+        )
+
+        return fit
+
     def bootstrap(self):
-        boot_coefs = np.zeros((self.n_bootstraps, len(self.strata_cols) + 1))
+        if self.fevars:
+            boot_coefs = np.zeros((self.n_bootstraps, len(self.covars)))
+        else:
+            boot_coefs = np.zeros((self.n_bootstraps, len(self.strata_cols) + 1))
 
         if not self.cluster_col:
             # IID bootstrap
@@ -108,13 +160,15 @@ class DuckRegression(DuckReg):
             )
             df_boot.eval(create_means, inplace=True)
 
-            y = df_boot[f"mean_{self.outcome_vars[0]}"].values
-            X = df_boot[self.strata_cols].values
-            X = np.c_[np.ones(X.shape[0]), X]
-            n = df_boot["count"].values
-            boot_coefs[b, :] = wls(X, y, n)
+            y, X, n = self.collect_data(data=df_boot)
 
-        return np.cov(boot_coefs.T)
+            boot_coefs[b, :] = wls(X, y, n).flatten()
+
+            # else np.diag() fails if input is not at least 1-dim
+            vcov = np.cov(boot_coefs.T)
+            vcov = np.expand_dims(vcov, axis=0) if vcov.ndim == 0 else vcov
+
+        return vcov
 
 
 ################################################################################
@@ -127,10 +181,10 @@ class DuckMundlak(DuckReg):
         table_name: str,
         outcome_var: str,
         covariates: list,
+        seed: int,
         unit_col: str,
         time_col: str = None,
         n_bootstraps: int = 100,
-        seed: int = 42,
         cluster_col: str = None,
     ):
         super().__init__(db_name, table_name, n_bootstraps, seed)
@@ -196,7 +250,8 @@ class DuckMundlak(DuckReg):
             self.df_compressed[f"sum_{self.outcome_var}"] / self.df_compressed["count"]
         )
 
-    def estimate(self):
+    def collect_data(self, data: pd.DataFrame):
+
         rhs = (
             self.covariates
             + [f"avg_{cov}_unit" for cov in self.covariates]
@@ -206,11 +261,24 @@ class DuckMundlak(DuckReg):
                 else []
             )
         )
-        X = self.df_compressed[rhs].values
+
+        X = data[rhs].values
         X = np.c_[np.ones(X.shape[0]), X]
-        y = self.df_compressed[f"mean_{self.outcome_var}"].values
-        n = self.df_compressed["count"].values
+        y = data[f"mean_{self.outcome_var}"].values
+        n = data["count"].values
+
+        y = y.reshape(-1, 1) if y.ndim == 1 else y
+        X = X.reshape(-1, 1) if X.ndim == 1 else X
+
+        return y, X, n
+
+    def estimate(self):
+
+        y, X, n = self.collect_data(data=self.df_compressed)
         return wls(X, y, n)
+
+    def estimate_feols(self):
+        pass
 
     def bootstrap(self):
         rhs = (
@@ -273,11 +341,9 @@ class DuckMundlak(DuckReg):
                 df_boot[f"sum_{self.outcome_var}"] / df_boot["count"]
             )
 
-            X = df_boot[rhs].values
-            X = np.c_[np.ones(X.shape[0]), X]
-            y = df_boot[f"mean_{self.outcome_var}"].values
-            n = df_boot["count"].values
-            boot_coefs[b, :] = wls(X, y, n)
+            y, X, n = self.collect_data(data=df_boot)
+
+            boot_coefs[b, :] = wls(X, y, n).flatten()
 
         return np.cov(boot_coefs.T)
 
@@ -294,8 +360,8 @@ class DuckDoubleDemeaning(DuckReg):
         treatment_var: str,
         unit_col: str,
         time_col: str,
+        seed: int,
         n_bootstraps: int = 100,
-        seed: int = 42,
         cluster_col: str = None,
     ):
         super().__init__(db_name, table_name, n_bootstraps, seed)
@@ -361,12 +427,24 @@ class DuckDoubleDemeaning(DuckReg):
             self.df_compressed[f"sum_{self.outcome_var}"] / self.df_compressed["count"]
         )
 
-    def estimate(self):
-        X = self.df_compressed[f"ddot_{self.treatment_var}"].values
+    def collect_data(self, data: pd.DataFrame):
+
+        X = data[f"ddot_{self.treatment_var}"].values
         X = np.c_[np.ones(X.shape[0]), X]
-        y = self.df_compressed[f"mean_{self.outcome_var}"].values
-        n = self.df_compressed["count"].values
+        y = data[f"mean_{self.outcome_var}"].values
+        n = data["count"].values
+        y = y.reshape(-1, 1) if y.ndim == 1 else y
+        X = X.reshape(-1, 1) if X.ndim == 1 else X
+
+        return y, X, n
+
+
+    def estimate(self):
+        y, X, n = self.collect_data(data=self.df_compressed)
         return wls(X, y, n)
+
+    def estimate_feols(self):
+        pass
 
     def bootstrap(self):
         boot_coefs = np.zeros((self.n_bootstraps, 2))  # Intercept and treatment effect
@@ -416,11 +494,9 @@ class DuckDoubleDemeaning(DuckReg):
                 df_boot[f"sum_{self.outcome_var}"] / df_boot["count"]
             )
 
-            X = df_boot[f"ddot_{self.treatment_var}"].values
-            X = np.c_[np.ones(X.shape[0]), X]
-            y = df_boot[f"mean_{self.outcome_var}"].values
-            n = df_boot["count"].values
-            boot_coefs[b, :] = wls(X, y, n)
+            y, X, n = self.collect_data(data=df_boot)
+
+            boot_coefs[b, :] = wls(X, y, n).flatten()
 
         return np.cov(boot_coefs.T)
 

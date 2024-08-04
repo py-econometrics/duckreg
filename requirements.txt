@@ -2,3 +2,5 @@ numpy
 pandas
 tqdm
 duckdb
+numba
+pyfixest

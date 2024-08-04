@@ -29,3 +29,9 @@
 *.blg
 *.out
 *.synctex.gz
+*venv
+*newenv
+*build
+debug.py
+pyvenv.cfg
+intro.ipynb
