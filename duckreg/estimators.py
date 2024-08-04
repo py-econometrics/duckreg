@@ -2,11 +2,12 @@ import numpy as np
 import pandas as pd
 import re
 from tqdm import tqdm
-
+from .demean import demean
 from .duckreg import DuckReg, wls
 
 
 ################################################################################
+
 class DuckRegression(DuckReg):
     def __init__(
         self,
@@ -25,11 +26,19 @@ class DuckRegression(DuckReg):
         self._parse_formula()
 
     def _parse_formula(self):
-        ff_parts = self.formula.split("~")
-        self.outcome_vars = [x.strip() for x in ff_parts[0].split("+")]
-        self.strata_cols = [x.strip() for x in re.split(r"\+|\|", ff_parts[1])]
+
+        lhs, rhs = self.formula.split("~")
+        rhs_deparsed = rhs.split("|")
+        covars, fevars = rhs.split("|") if len(rhs_deparsed) > 1 else (rhs, None)
+
+        self.outcome_vars = [x.strip() for x in lhs.split("+")]
+        self.covars = [x.strip() for x in covars.split("+")]
+        self.fevars = [x.strip() for x in fevars.split("+")] if fevars else []
+        self.strata_cols = self.covars + self.fevars
+
         if not self.outcome_vars:
             raise ValueError("No outcome variables found in the formula")
+
 
     def prepare_data(self):
         # No preparation needed for simple regression
@@ -54,11 +63,33 @@ class DuckRegression(DuckReg):
         )
         self.df_compressed.eval(create_means, inplace=True)
 
+    def collect_and_demean(self, data: pd.DataFrame) -> pd.DataFrame:
+
+        y = data[f"mean_{self.outcome_vars[0]}"].values
+        X = data[self.covars].values
+        n = data["count"].values
+
+        # y, X, w need to be two-dimensional for the demean function
+        y = y.reshape(-1, 1) if y.ndim == 1 else y
+        X = X.reshape(-1, 1) if X.ndim == 1 else X
+
+        if self.fevars:
+            # fe needs to contain of only integers for
+            # the demean function to work
+            fe = _convert_to_int(data[self.fevars])
+            fe = fe.reshape(-1, 1) if fe.ndim == 1 else fe
+
+            y, _ = demean(x = y, flist = fe, weights = n)
+            X, _ = demean(x = X, flist = fe, weights = n)
+        else:
+            X = np.c_[np.ones(X.shape[0]), X]
+
+        return y, X, n
+
     def estimate(self):
-        y = self.df_compressed[f"mean_{self.outcome_vars[0]}"].values
-        X = self.df_compressed[self.strata_cols].values
-        X = np.c_[np.ones(X.shape[0]), X]
-        n = self.df_compressed["count"].values
+
+        y, X, n = self.collect_and_demean(data = self.df_compressed)
+
         return wls(X, y, n)
 
     def bootstrap(self):
@@ -108,17 +139,14 @@ class DuckRegression(DuckReg):
             )
             df_boot.eval(create_means, inplace=True)
 
-            y = df_boot[f"mean_{self.outcome_vars[0]}"].values
-            X = df_boot[self.strata_cols].values
-            X = np.c_[np.ones(X.shape[0]), X]
-            n = df_boot["count"].values
-            boot_coefs[b, :] = wls(X, y, n)
+            y, X, n = self.collect_and_demean(data = df_boot)
+
+            boot_coefs[b, :] = wls(X, y, n).flatten()
 
         return np.cov(boot_coefs.T)
 
 
 ################################################################################
-
 
 class DuckMundlak(DuckReg):
     def __init__(
@@ -426,3 +454,16 @@ class DuckDoubleDemeaning(DuckReg):
 
 
 ######################################################################
+
+def _convert_to_int(data: pd.DataFrame) -> pd.DataFrame:
+
+    fval = np.zeros_like(data)
+    for i, col in enumerate(data.columns):
+        fval[:, i] = pd.factorize(data[col])[0]
+
+    if fval.dtype != int:
+        fval = fval.astype(int)
+
+    fval = fval.reshape(-1, 1) if fval.ndim == 1 else fval
+
+    return fval
