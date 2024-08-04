@@ -30,17 +30,20 @@ class DuckReg(ABC):
     def bootstrap(self):
         pass
 
-    def run(self):
+    def fit(self):
         self.prepare_data()
         self.compress_data()
-        point_estimate = self.estimate()
+        self.point_estimate = self.estimate()
         if self.n_bootstraps > 0:
-            boot_results = self.bootstrap()
+            self.boot_results = self.bootstrap()
+
+    def summary(self):
+        if self.n_bootstraps > 0:
             return {
-                "point_estimate": point_estimate,
-                "standard_error": np.sqrt(np.diag(boot_results)),
+                "point_estimate": self.point_estimate,
+                "standard_error": np.sqrt(np.diag(self.boot_results)),
             }
-        return {"point_estimate": point_estimate}
+        return {"point_estimate": self.point_estimate}
 
 
 def wls(X: np.ndarray, y: np.ndarray, n: np.ndarray) -> np.ndarray:

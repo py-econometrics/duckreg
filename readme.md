@@ -6,3 +6,6 @@ Specific regressions:
 + `DuckRegression`: general linear regression, which compresses the data to y averages stratified by all unique values of the x variables
 + `DuckMundlak`: Mundlak regression, which compresses the data to y averages stratified by $1, w, \bar{w}_{i, \cdot}, \bar{w}_{\cdot, t}$  where $w$ is a covariate (typically treatment)
 + `DuckDoubleDemeaning`: Double demeaning regression, which compresses the data to y averages by all values of $w$ after demeaning by $\bar{w}_{i, \cdot}, \bar{w}_{\cdot, t}$ .
+
+
+This package makes heavy use of Jeff Wooldridge's [Generalized Mundlak paper](https://www.researchgate.net/publication/353938385_Two-Way_Fixed_Effects_the_Two-Way_Mundlak_Regression_and_Difference-in-Differences_Estimators).

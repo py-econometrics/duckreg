@@ -142,28 +142,28 @@ class DuckMundlak(DuckReg):
 
     def prepare_data(self):
         # Step 1: Compute unit averages
-        unit_avg_query = f"""
+        self.unit_avg_query = f"""
         CREATE TEMP TABLE unit_avgs AS
         SELECT {self.unit_col},
                {', '.join([f'AVG({cov}) AS avg_{cov}_unit' for cov in self.covariates])}
         FROM {self.table_name}
         GROUP BY {self.unit_col}
         """
-        self.conn.execute(unit_avg_query)
+        self.conn.execute(self.unit_avg_query)
 
         # Step 2: Compute time averages (only if time_col is provided)
         if self.time_col is not None:
-            time_avg_query = f"""
+            self.time_avg_query = f"""
             CREATE TEMP TABLE time_avgs AS
             SELECT {self.time_col},
                    {', '.join([f'AVG({cov}) AS avg_{cov}_time' for cov in self.covariates])}
             FROM {self.table_name}
             GROUP BY {self.time_col}
             """
-            self.conn.execute(time_avg_query)
+            self.conn.execute(self.time_avg_query)
 
         # Step 3: Create the design matrix
-        design_matrix_query = f"""
+        self.design_matrix_query = f"""
         CREATE TEMP TABLE design_matrix AS
         SELECT
             t.{self.unit_col},
@@ -176,10 +176,10 @@ class DuckMundlak(DuckReg):
         JOIN unit_avgs u ON t.{self.unit_col} = u.{self.unit_col}
         {f"JOIN time_avgs tm ON t.{self.time_col} = tm.{self.time_col}" if self.time_col is not None else ""}
         """
-        self.conn.execute(design_matrix_query)
+        self.conn.execute(self.design_matrix_query)
 
     def compress_data(self):
-        compress_query = f"""
+        self.compress_query = f"""
         SELECT
             {', '.join([f'{cov}' for cov in self.covariates])},
             {', '.join([f'avg_{cov}_unit' for cov in self.covariates])}
@@ -191,7 +191,7 @@ class DuckMundlak(DuckReg):
                     {', '.join([f'avg_{cov}_unit' for cov in self.covariates])}
                     {', ' + ', '.join([f'avg_{cov}_time' for cov in self.covariates]) if self.time_col is not None else ''}
         """
-        self.df_compressed = self.conn.execute(compress_query).fetchdf()
+        self.df_compressed = self.conn.execute(self.compress_query).fetchdf()
         self.df_compressed[f"mean_{self.outcome_var}"] = (
             self.df_compressed[f"sum_{self.outcome_var}"] / self.df_compressed["count"]
         )
@@ -307,33 +307,33 @@ class DuckDoubleDemeaning(DuckReg):
 
     def prepare_data(self):
         # Compute overall mean
-        overall_mean_query = f"""
+        self.overall_mean_query = f"""
         CREATE TEMP TABLE overall_mean AS
         SELECT AVG({self.treatment_var}) AS mean_{self.treatment_var}
         FROM {self.table_name}
         """
-        self.conn.execute(overall_mean_query)
+        self.conn.execute(self.overall_mean_query)
 
         # Compute unit means
-        unit_mean_query = f"""
+        self.unit_mean_query = f"""
         CREATE TEMP TABLE unit_means AS
         SELECT {self.unit_col}, AVG({self.treatment_var}) AS mean_{self.treatment_var}_unit
         FROM {self.table_name}
         GROUP BY {self.unit_col}
         """
-        self.conn.execute(unit_mean_query)
+        self.conn.execute(self.unit_mean_query)
 
         # Compute time means
-        time_mean_query = f"""
+        self.time_mean_query = f"""
         CREATE TEMP TABLE time_means AS
         SELECT {self.time_col}, AVG({self.treatment_var}) AS mean_{self.treatment_var}_time
         FROM {self.table_name}
         GROUP BY {self.time_col}
         """
-        self.conn.execute(time_mean_query)
+        self.conn.execute(self.time_mean_query)
 
         # Create double-demeaned variables
-        double_demean_query = f"""
+        self.double_demean_query = f"""
         CREATE TEMP TABLE double_demeaned AS
         SELECT
             t.{self.unit_col},
@@ -345,10 +345,10 @@ class DuckDoubleDemeaning(DuckReg):
         JOIN time_means tm ON t.{self.time_col} = tm.{self.time_col}
         CROSS JOIN overall_mean om
         """
-        self.conn.execute(double_demean_query)
+        self.conn.execute(self.double_demean_query)
 
     def compress_data(self):
-        compress_query = f"""
+        self.compress_query = f"""
         SELECT
             ddot_{self.treatment_var},
             COUNT(*) as count,
@@ -356,7 +356,7 @@ class DuckDoubleDemeaning(DuckReg):
         FROM double_demeaned
         GROUP BY ddot_{self.treatment_var}
         """
-        self.df_compressed = self.conn.execute(compress_query).fetchdf()
+        self.df_compressed = self.conn.execute(self.compress_query).fetchdf()
         self.df_compressed[f"mean_{self.outcome_var}"] = (
             self.df_compressed[f"sum_{self.outcome_var}"] / self.df_compressed["count"]
         )
