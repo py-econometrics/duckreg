@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import duckdb
 import numpy as np
 
+
 ######################################################################
 class DuckReg(ABC):
     def __init__(

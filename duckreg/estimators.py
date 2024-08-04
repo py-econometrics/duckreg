@@ -8,6 +8,7 @@ from .duckreg import DuckReg, wls
 
 ################################################################################
 
+
 class DuckRegression(DuckReg):
     def __init__(
         self,
@@ -38,7 +39,6 @@ class DuckRegression(DuckReg):
 
         if not self.outcome_vars:
             raise ValueError("No outcome variables found in the formula")
-
 
     def prepare_data(self):
         # No preparation needed for simple regression
@@ -79,8 +79,8 @@ class DuckRegression(DuckReg):
             fe = _convert_to_int(data[self.fevars])
             fe = fe.reshape(-1, 1) if fe.ndim == 1 else fe
 
-            y, _ = demean(x = y, flist = fe, weights = n)
-            X, _ = demean(x = X, flist = fe, weights = n)
+            y, _ = demean(x=y, flist=fe, weights=n)
+            X, _ = demean(x=X, flist=fe, weights=n)
         else:
             X = np.c_[np.ones(X.shape[0]), X]
 
@@ -88,7 +88,7 @@ class DuckRegression(DuckReg):
 
     def estimate(self):
 
-        y, X, n = self.collect_and_demean(data = self.df_compressed)
+        y, X, n = self.collect_and_demean(data=self.df_compressed)
 
         return wls(X, y, n)
 
@@ -142,8 +142,7 @@ class DuckRegression(DuckReg):
             )
             df_boot.eval(create_means, inplace=True)
 
-            y, X, n = self.collect_and_demean(data = df_boot)
-
+            y, X, n = self.collect_and_demean(data=df_boot)
 
             boot_coefs[b, :] = wls(X, y, n).flatten()
 
@@ -155,6 +154,7 @@ class DuckRegression(DuckReg):
 
 
 ################################################################################
+
 
 class DuckMundlak(DuckReg):
     def __init__(
@@ -462,6 +462,7 @@ class DuckDoubleDemeaning(DuckReg):
 
 
 ######################################################################
+
 
 def _convert_to_int(data: pd.DataFrame) -> pd.DataFrame:
 
