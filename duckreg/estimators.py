@@ -232,7 +232,8 @@ class DuckMundlak(DuckReg):
             self.df_compressed[f"sum_{self.outcome_var}"] / self.df_compressed["count"]
         )
 
-    def estimate(self):
+    def collect_data(self, data: pd.DataFrame):
+
         rhs = (
             self.covariates
             + [f"avg_{cov}_unit" for cov in self.covariates]
@@ -242,10 +243,20 @@ class DuckMundlak(DuckReg):
                 else []
             )
         )
-        X = self.df_compressed[rhs].values
+
+        X = data[rhs].values
         X = np.c_[np.ones(X.shape[0]), X]
-        y = self.df_compressed[f"mean_{self.outcome_var}"].values
-        n = self.df_compressed["count"].values
+        y = data[f"mean_{self.outcome_var}"].values
+        n = data["count"].values
+
+        y = y.reshape(-1, 1) if y.ndim == 1 else y
+        X = X.reshape(-1, 1) if X.ndim == 1 else X
+
+        return y, X, n
+
+    def estimate(self):
+
+        y, X, n = self.collect_data(data=self.df_compressed)
         return wls(X, y, n)
 
     def bootstrap(self):
@@ -309,11 +320,9 @@ class DuckMundlak(DuckReg):
                 df_boot[f"sum_{self.outcome_var}"] / df_boot["count"]
             )
 
-            X = df_boot[rhs].values
-            X = np.c_[np.ones(X.shape[0]), X]
-            y = df_boot[f"mean_{self.outcome_var}"].values
-            n = df_boot["count"].values
-            boot_coefs[b, :] = wls(X, y, n)
+            y, X, n = self.collect_data(data=df_boot)
+
+            boot_coefs[b, :] = wls(X, y, n).flatten()
 
         return np.cov(boot_coefs.T)
 
@@ -397,11 +406,20 @@ class DuckDoubleDemeaning(DuckReg):
             self.df_compressed[f"sum_{self.outcome_var}"] / self.df_compressed["count"]
         )
 
-    def estimate(self):
-        X = self.df_compressed[f"ddot_{self.treatment_var}"].values
+    def collect_data(self, data: pd.DataFrame):
+
+        X = data[f"ddot_{self.treatment_var}"].values
         X = np.c_[np.ones(X.shape[0]), X]
-        y = self.df_compressed[f"mean_{self.outcome_var}"].values
-        n = self.df_compressed["count"].values
+        y = data[f"mean_{self.outcome_var}"].values
+        n = data["count"].values
+        y = y.reshape(-1, 1) if y.ndim == 1 else y
+        X = X.reshape(-1, 1) if X.ndim == 1 else X
+
+        return y, X, n
+
+
+    def estimate(self):
+        y, X, n = self.collect_data(data=self.df_compressed)
         return wls(X, y, n)
 
     def bootstrap(self):
@@ -452,11 +470,9 @@ class DuckDoubleDemeaning(DuckReg):
                 df_boot[f"sum_{self.outcome_var}"] / df_boot["count"]
             )
 
-            X = df_boot[f"ddot_{self.treatment_var}"].values
-            X = np.c_[np.ones(X.shape[0]), X]
-            y = df_boot[f"mean_{self.outcome_var}"].values
-            n = df_boot["count"].values
-            boot_coefs[b, :] = wls(X, y, n)
+            y, X, n = self.collect_data(data=df_boot)
+
+            boot_coefs[b, :] = wls(X, y, n).flatten()
 
         return np.cov(boot_coefs.T)
 

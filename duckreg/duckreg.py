@@ -24,6 +24,10 @@ class DuckReg(ABC):
         pass
 
     @abstractmethod
+    def collect_data(self):
+        pass
+
+    @abstractmethod
     def estimate(self):
         pass
 
