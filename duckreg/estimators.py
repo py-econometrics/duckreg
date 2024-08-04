@@ -93,7 +93,10 @@ class DuckRegression(DuckReg):
         return wls(X, y, n)
 
     def bootstrap(self):
-        boot_coefs = np.zeros((self.n_bootstraps, len(self.strata_cols) + 1))
+        if self.fevars:
+            boot_coefs = np.zeros((self.n_bootstraps, len(self.covars)))
+        else:
+            boot_coefs = np.zeros((self.n_bootstraps, len(self.strata_cols) + 1))
 
         if not self.cluster_col:
             # IID bootstrap
@@ -141,9 +144,14 @@ class DuckRegression(DuckReg):
 
             y, X, n = self.collect_and_demean(data = df_boot)
 
+
             boot_coefs[b, :] = wls(X, y, n).flatten()
 
-        return np.cov(boot_coefs.T)
+            # else np.diag() fails if input is not at least 1-dim
+            vcov = np.cov(boot_coefs.T)
+            vcov = np.expand_dims(vcov, axis=0) if vcov.ndim == 0 else vcov
+
+        return vcov
 
 
 ################################################################################

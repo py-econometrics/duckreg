@@ -29,3 +29,5 @@
 *.blg
 *.out
 *.synctex.gz
+*venv
+*build
