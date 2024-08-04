@@ -6,7 +6,7 @@ import numpy as np
 ######################################################################
 class DuckReg(ABC):
     def __init__(
-        self, db_name: str, table_name: str, n_bootstraps: int = 100, seed: int = 42
+        self, db_name: str, table_name: str, seed: int, n_bootstraps: int = 100, fitter = "numpy"
     ):
         self.db_name = db_name
         self.table_name = table_name
@@ -14,6 +14,7 @@ class DuckReg(ABC):
         self.seed = seed
         self.conn = duckdb.connect(db_name)
         self.rng = np.random.default_rng(seed)
+        self.fitter = fitter
 
     @abstractmethod
     def prepare_data(self):
@@ -32,15 +33,34 @@ class DuckReg(ABC):
         pass
 
     @abstractmethod
+    def estimate_feols(self):
+        pass
+
+    @abstractmethod
     def bootstrap(self):
         pass
 
     def fit(self):
+
         self.prepare_data()
         self.compress_data()
-        self.point_estimate = self.estimate()
-        if self.n_bootstraps > 0:
-            self.boot_results = self.bootstrap()
+
+        if self.fitter == "numpy":
+            self.point_estimate = self.estimate()
+            if self.n_bootstraps > 0:
+                self.boot_results = self.bootstrap()
+            return None
+        elif self.fitter == "feols":
+            fit = self.estimate_feols()
+            self.point_estimate = fit.coef().values
+            if self.n_bootstraps > 0:
+                self.boot_results = self.bootstrap()
+            fit._vcov = self.boot_results
+            return fit
+
+        else:
+            raise ValueError("Argument 'fitter' must be 'numpy' or 'feols', got {}".format(self.fitter))
+
 
     def summary(self):
         if self.n_bootstraps > 0:
