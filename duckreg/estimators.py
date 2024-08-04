@@ -2,9 +2,8 @@ import numpy as np
 import pandas as pd
 import re
 from tqdm import tqdm
-from .demean import demean
+from .demean import demean, _convert_to_int
 from .duckreg import DuckReg, wls
-
 
 ################################################################################
 
@@ -478,17 +477,3 @@ class DuckDoubleDemeaning(DuckReg):
 
 
 ######################################################################
-
-
-def _convert_to_int(data: pd.DataFrame) -> pd.DataFrame:
-
-    fval = np.zeros_like(data)
-    for i, col in enumerate(data.columns):
-        fval[:, i] = pd.factorize(data[col])[0]
-
-    if fval.dtype != int:
-        fval = fval.astype(int)
-
-    fval = fval.reshape(-1, 1) if fval.ndim == 1 else fval
-
-    return fval

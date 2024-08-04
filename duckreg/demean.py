@@ -126,3 +126,17 @@ def demean(
 
     success = not not_converged
     return (res, success)
+
+
+def _convert_to_int(data: pd.DataFrame) -> pd.DataFrame:
+
+    fval = np.zeros_like(data)
+    for i, col in enumerate(data.columns):
+        fval[:, i] = pd.factorize(data[col])[0]
+
+    if fval.dtype != int:
+        fval = fval.astype(int)
+
+    fval = fval.reshape(-1, 1) if fval.ndim == 1 else fval
+
+    return fval
