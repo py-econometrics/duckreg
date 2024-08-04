@@ -1,6 +1,6 @@
 import numba as nb
 import numpy as np
-
+import pandas as pd
 
 @nb.njit
 def _sad_converged(a: np.ndarray, b: np.ndarray, tol: float) -> bool:
