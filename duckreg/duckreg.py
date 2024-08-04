@@ -47,8 +47,10 @@ class DuckReg(ABC):
 
 
 def wls(X: np.ndarray, y: np.ndarray, n: np.ndarray) -> np.ndarray:
-    N = np.sqrt(np.diag(n))
-    Xn = np.dot(N, X)
-    yn = np.dot(y, N)
+
+    N = np.sqrt(n)
+    N = N.reshape(-1, 1) if N.ndim == 1 else N
+    Xn = X * N
+    yn = y * N
     betahat = np.linalg.lstsq(Xn, yn, rcond=None)[0]
     return betahat
