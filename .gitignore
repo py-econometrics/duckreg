@@ -32,3 +32,5 @@
 *venv
 *build
 debug.py
+pyvenv.cfg
+intro.ipynb
