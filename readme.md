@@ -17,5 +17,9 @@ Currently supports the following regression specifications:
 ---
 references:
 
+methods:
 + [Arkhangelsky and Imbens (2023)](https://arxiv.org/abs/1807.02099)
 + [Wooldridge 2021](https://www.researchgate.net/publication/353938385_Two-Way_Fixed_Effects_the_Two-Way_Mundlak_Regression_and_Difference-in-Differences_Estimators).
+
+libraries:
++ [Grant McDermott's duckdb lecture](https://grantmcdermott.com/duckdb-polars/)
