@@ -8,6 +8,14 @@ See examples in `notebooks/introduction.ipynb`.
   <img src="https://static.independent.co.uk/s3fs-public/thumbnails/image/2016/02/14/12/duck-rabbit.png" width="350">
 </p>
 
+install (preferably in a `venv`) with
+```
+(uv) pip install git+https://github.com/apoorvalal/duckreg.git
+```
+
+or git clone this repository and install in editable mode.
+
+---
 
 Currently supports the following regression specifications:
 + `DuckRegression`: general linear regression, which compresses the data to y averages stratified by all unique values of the x variables

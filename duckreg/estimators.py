@@ -19,9 +19,9 @@ class DuckRegression(DuckReg):
         seed: int,
         n_bootstraps: int = 100,
         rowid_col: str = "rowid",
-        fitter: str = "numpy"
+        fitter: str = "numpy",
     ):
-        super().__init__(db_name, table_name, n_bootstraps, seed, fitter = fitter)
+        super().__init__(db_name, table_name, n_bootstraps, seed, fitter=fitter)
         self.formula = formula
         self.cluster_col = cluster_col
         self.rowid_col = rowid_col
@@ -66,7 +66,9 @@ class DuckRegression(DuckReg):
 
     def collect_data(self, data: pd.DataFrame) -> pd.DataFrame:
 
-        y = data[f"mean_{self.outcome_vars[0]}"].values
+        y = data.filter(
+            regex=f"mean_{'(' +  '|'.join(self.outcome_vars) + ')'}", axis=1
+        ).values
         X = data[self.covars].values
         n = data["count"].values
 
@@ -91,30 +93,37 @@ class DuckRegression(DuckReg):
 
         y, X, n = self.collect_data(data=self.df_compressed)
 
-        return wls(X, y, n)
+        return wls(X, y, n).flatten()
 
     def estimate_feols(self):
 
         if self.fevars:
-            fml = f"mean_{self.outcome_vars[0]} ~ {' + '.join(self.covars)} | {' + '.join(self.fevars)}"
+            fml = f"{'+'.join([f'mean_{x}' for x in self.outcome_vars])} ~ {' + '.join(self.covars)} | {' + '.join(self.fevars)}"
         else:
-            fml = f"mean_{self.outcome_vars[0]} ~ {' + '.join(self.covars)}"
+            fml = f"{'+'.join([f'mean_{x}' for x in self.outcome_vars])} ~ {' + '.join(self.covars)}"
 
         fit = feols(
-            fml = fml,
-            data = self.df_compressed,
-            vcov = "iid",  # most performant
-            weights = "count",
-            weights_type = "fweights"
+            fml=fml,
+            data=self.df_compressed,
+            vcov="iid",  # most performant
+            weights="count",
+            weights_type="fweights",
         )
 
         return fit
 
     def bootstrap(self):
         if self.fevars:
-            boot_coefs = np.zeros((self.n_bootstraps, len(self.covars)))
+            boot_coefs = np.zeros(
+                (self.n_bootstraps, len(self.covars) * len(self.outcome_vars))
+            )
         else:
-            boot_coefs = np.zeros((self.n_bootstraps, len(self.strata_cols) + 1))
+            boot_coefs = np.zeros(
+                (
+                    self.n_bootstraps,
+                    (len(self.strata_cols) + 1) * len(self.outcome_vars),
+                )
+            )
 
         if not self.cluster_col:
             # IID bootstrap
@@ -437,7 +446,6 @@ class DuckDoubleDemeaning(DuckReg):
         X = X.reshape(-1, 1) if X.ndim == 1 else X
 
         return y, X, n
-
 
     def estimate(self):
         y, X, n = self.collect_data(data=self.df_compressed)
