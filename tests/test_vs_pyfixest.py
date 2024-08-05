@@ -44,7 +44,21 @@ def test_vs_pyfixest_deterministic(get_data, fml, cluster_col):
     np.testing.assert_allclose(coefs, m_feols.coef().values), "Coeficients are not equal"
     #np.testing.assert_allclose(se, m_feols.se().values), "Standard errors are not equal"
 
+def test_multiple_estimation_deterministic():
+
+    pass
+
 
 def test_vs_pyfixest_stochastic():
+
+    pass
+
+
+def test_mundlak():
+
+    pass
+
+
+def test_double_demeaning():
 
     pass
