@@ -38,8 +38,8 @@ def test_fitters(fml, cluster_col):
     coefs = results["point_estimate"]
     se = results["standard_error"]
 
-    assert np.all(np.abs(coefs) - np.abs(m_feols.coef().values) < 1e-8), "Coeficients are not equal"
-    assert np.all(np.abs(se) - np.abs(m_feols.se().values) < 1e-8), "Standard errors are not equal"
+    assert np.all(np.abs(coefs) - np.abs(m_feols.coef().values) < 1e-12), "Coeficients are not equal"
+    assert np.all(np.abs(se) - np.abs(m_feols.se().values) < 1e-12), "Standard errors are not equal"
 
 
 
