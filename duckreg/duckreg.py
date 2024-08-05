@@ -6,7 +6,12 @@ import numpy as np
 ######################################################################
 class DuckReg(ABC):
     def __init__(
-        self, db_name: str, table_name: str, seed: int, n_bootstraps: int = 100, fitter = "numpy"
+        self,
+        db_name: str,
+        table_name: str,
+        seed: int,
+        n_bootstraps: int = 100,
+        fitter="numpy",
     ):
         self.db_name = db_name
         self.table_name = table_name
@@ -48,25 +53,28 @@ class DuckReg(ABC):
         if self.fitter == "numpy":
             self.point_estimate = self.estimate()
             if self.n_bootstraps > 0:
-                self.boot_results = self.bootstrap()
+                self.vcov = self.bootstrap()
             return None
         elif self.fitter == "feols":
             fit = self.estimate_feols()
             self.point_estimate = fit.coef().values
             if self.n_bootstraps > 0:
-                self.boot_results = self.bootstrap()
-            fit._vcov = self.boot_results
+                self.vcov = self.bootstrap()
+            fit._vcov = self.vcov
             return fit
 
         else:
-            raise ValueError("Argument 'fitter' must be 'numpy' or 'feols', got {}".format(self.fitter))
-
+            raise ValueError(
+                "Argument 'fitter' must be 'numpy' or 'feols', got {}".format(
+                    self.fitter
+                )
+            )
 
     def summary(self):
         if self.n_bootstraps > 0:
             return {
                 "point_estimate": self.point_estimate,
-                "standard_error": np.sqrt(np.diag(self.boot_results)),
+                "standard_error": np.sqrt(np.diag(self.vcov)),
             }
         return {"point_estimate": self.point_estimate}
 

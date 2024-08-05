@@ -21,7 +21,13 @@ class DuckRegression(DuckReg):
         rowid_col: str = "rowid",
         fitter: str = "numpy",
     ):
-        super().__init__(db_name, table_name, n_bootstraps, seed, fitter=fitter)
+        super().__init__(
+            db_name=db_name,
+            table_name=table_name,
+            seed=seed,
+            n_bootstraps=n_bootstraps,
+            fitter=fitter,
+        )
         self.formula = formula
         self.cluster_col = cluster_col
         self.rowid_col = rowid_col
@@ -46,8 +52,10 @@ class DuckRegression(DuckReg):
         pass
 
     def compress_data(self):
-        agg_expressions = ["COUNT(*) as count"] + [
-            f"SUM({var}) as sum_{var}" for var in self.outcome_vars
+        agg_expressions = ["COUNT(*) as count"]
+        agg_expressions += [f"SUM({var}) as sum_{var}" for var in self.outcome_vars]
+        agg_expressions += [
+            f"SUM(POW({var}, 2)) as sum_{var}_sq" for var in self.outcome_vars
         ]
         group_by_cols = ", ".join(self.strata_cols)
         self.agg_query = f"""
@@ -57,7 +65,10 @@ class DuckRegression(DuckReg):
         """
         self.df_compressed = pd.DataFrame(self.conn.execute(self.agg_query).fetchall())
         self.df_compressed.columns = (
-            self.strata_cols + ["count"] + [f"sum_{var}" for var in self.outcome_vars]
+            self.strata_cols
+            + ["count"]
+            + [f"sum_{var}" for var in self.outcome_vars]
+            + [f"sum_{var}_sq" for var in self.outcome_vars]
         )
         create_means = "\n".join(
             [f"mean_{var} = sum_{var}/count" for var in self.outcome_vars]
@@ -90,10 +101,27 @@ class DuckRegression(DuckReg):
         return y, X, n
 
     def estimate(self):
-
         y, X, n = self.collect_data(data=self.df_compressed)
+        betahat = wls(X, y, n).flatten()
+        return betahat
 
-        return wls(X, y, n).flatten()
+    def fit_vcov(self):
+        """compressed estimation of the heteroskedasticity-robust variance covariance matrix"""
+        self.se = "hc1"
+        y, X, n = self.collect_data(data=self.df_compressed)
+        betahat = wls(X, y, n).flatten()
+        # only works for single outcome for now
+        self.n_bootstraps = 0  # disable bootstrap
+        yprime = self.df_compressed[f"sum_{self.outcome_vars[0]}"].values.reshape(-1, 1)
+        yprimeprime = self.df_compressed[
+            f"sum_{self.outcome_vars[0]}_sq"
+        ].values.reshape(-1, 1)
+        yhat = (X @ betahat).reshape(-1, 1)
+        rss_g = (yhat**2) * n.reshape(-1, 1) - 2 * yhat * yprime + yprimeprime
+        bread = np.linalg.inv(X.T @ np.diag(n.flatten()) @ X)
+        meat = X.T @ np.diag(rss_g.flatten()) @ X
+        n_nk = n.sum() / (n.sum() - X.shape[1])
+        self.vcov = n_nk * (bread @ meat @ bread)
 
     def estimate_feols(self):
 
@@ -179,6 +207,14 @@ class DuckRegression(DuckReg):
 
         return vcov
 
+    def summary(self): # ovveride the summary method to include the heteroskedasticity-robust variance covariance matrix when available
+        if self.n_bootstraps > 0 or self.se == "hc1":
+            return {
+                "point_estimate": self.point_estimate,
+                "standard_error": np.sqrt(np.diag(self.vcov)),
+            }
+        return {"point_estimate": self.point_estimate}
+
 
 ################################################################################
 
@@ -196,7 +232,12 @@ class DuckMundlak(DuckReg):
         n_bootstraps: int = 100,
         cluster_col: str = None,
     ):
-        super().__init__(db_name, table_name, n_bootstraps, seed)
+        super().__init__(
+            db_name=db_name,
+            table_name=table_name,
+            seed=seed,
+            n_bootstraps=n_bootstraps,
+        )
         self.outcome_var = outcome_var
         self.covariates = covariates
         self.unit_col = unit_col
@@ -373,7 +414,12 @@ class DuckDoubleDemeaning(DuckReg):
         n_bootstraps: int = 100,
         cluster_col: str = None,
     ):
-        super().__init__(db_name, table_name, n_bootstraps, seed)
+        super().__init__(
+            db_name=db_name,
+            table_name=table_name,
+            seed=seed,
+            n_bootstraps=n_bootstraps,
+        )
         self.outcome_var = outcome_var
         self.treatment_var = treatment_var
         self.unit_col = unit_col
