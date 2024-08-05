@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import duckdb
 import numpy as np
+from pyfixest.estimation.FixestMulti_ import FixestMulti
 
 
 ######################################################################
@@ -60,7 +61,13 @@ class DuckReg(ABC):
             self.point_estimate = fit.coef().values
             if self.n_bootstraps > 0:
                 self.vcov = self.bootstrap()
-            fit._vcov = self.vcov
+            if isinstance(fit, FixestMulti):
+                for i in FixestMulti.to_list():
+                    fit.fetch_model(i)._vcov = self.vcov
+                    fit.fetch_model(i).get_inference()
+            else:
+                fit._vcov = self.vcov
+                fit.get_inference()
             return fit
 
         else:

@@ -130,6 +130,8 @@ class DuckRegression(DuckReg):
         else:
             fml = f"{'+'.join([f'mean_{x}' for x in self.outcome_vars])} ~ {' + '.join(self.covars)}"
 
+        print("fml", fml)
+
         fit = feols(
             fml=fml,
             data=self.df_compressed,
