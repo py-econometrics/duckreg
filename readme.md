@@ -1,6 +1,6 @@
 # `duckreg` : very fast out-of-memory regressions with `duckdb`
 
-python 0ackage to run stratified/saturated regressions out-of-memory with duckdb. The package is a wrapper around the `duckdb` package and provides a simple interface to run regressions on very large datasets that do not fit in memory by reducing the data to a set of summary statistics and runs weighted least squares with frequency weights. Robust standard errors are computed from sufficient statistics, while clustered standard errors are computed using the cluster bootstrap. 
+python package to run stratified/saturated regressions out-of-memory with duckdb. The package is a wrapper around the `duckdb` package and provides a simple interface to run regressions on very large datasets that do not fit in memory by reducing the data to a set of summary statistics and runs weighted least squares with frequency weights. Robust standard errors are computed from sufficient statistics, while clustered standard errors are computed using the cluster bootstrap.
 
 See examples in `notebooks/introduction.ipynb`.
 
@@ -19,8 +19,8 @@ or git clone this repository and install in editable mode.
 
 Currently supports the following regression specifications:
 + `DuckRegression`: general linear regression, which compresses the data to y averages stratified by all unique values of the x variables
-+ `DuckMundlak`: Mundlak regression, which compresses the data to y averages stratified by $1, w, \bar{w}_{i, \cdot}, \bar{w}_{\cdot, t}$  where $w$ is a covariate (typically treatment)
-+ `DuckDoubleDemeaning`: Double demeaning regression, which compresses the data to y averages by all values of $w$ after demeaning by $\bar{w}_{i, \cdot}, \bar{w}_{\cdot, t}$ .
++ `DuckMundlak`: Mundlak regression, which compresses the data to y averages stratified by $1, w, \bar{w}_{i, .}, \bar{w}_{., t}$  where $w$ is a covariate (typically treatment)
++ `DuckDoubleDemeaning`: Double demeaning regression, which compresses the data to y averages by all values of $w$ after demeaning by $\bar{w}_{i, .}, \bar{w}_{., t}, \bar{w}$ .
 
 ---
 references:
