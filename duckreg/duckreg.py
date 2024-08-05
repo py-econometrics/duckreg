@@ -58,9 +58,13 @@ class DuckReg(ABC):
         elif self.fitter == "feols":
             fit = self.estimate_feols()
             self.point_estimate = fit.coef().values
-            if self.n_bootstraps > 0:
-                self.vcov = self.bootstrap()
-            fit._vcov = self.vcov
+            if isinstance(fit, FixestMulti):
+                for model in FixestMulti.to_list():
+                    model._vcov = self.vcov
+                    model.get_inference()
+            else:
+                fit._vcov = self.vcov
+                fit.get_inference()
             return fit
 
         else:
