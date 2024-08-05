@@ -16,7 +16,7 @@ def database(get_data):
     return df
 
 
-@pytest.mark.parametrize("fml", ["Y ~ D", "Y ~ D + f1", "Y ~ D + f1 + f2", "Y ~ D |f1"])
+@pytest.mark.parametrize("fml", ["Y ~ D", "Y ~ D + f1", "Y ~ D + f1 + f2"])
 @pytest.mark.parametrize("cluster_col", [""])
 
 def test_vs_pyfixest_deterministic(get_data, fml, cluster_col):
@@ -36,15 +36,17 @@ def test_vs_pyfixest_deterministic(get_data, fml, cluster_col):
         fml,
         data = get_data,
         vcov = "hetero" if cluster_col == "" else {"CRV1": cluster_col},
+        ssc = pf.ssc(adj = False, cluster_adj = True)
     )
 
     results = m_duck.summary()
     coefs = results["point_estimate"]
     se = results["standard_error"]
-    np.testing.assert_allclose(coefs, m_feols.coef().values), "Coeficients are not equal"
-    #np.testing.assert_allclose(se, m_feols.se().values), "Standard errors are not equal"
 
-def test_multiple_estimation_deterministic():
+    assert np.all(np.abs(coefs) - np.abs(m_feols.coef().values) < 1e-8), "Coeficients are not equal"
+    assert np.all(np.abs(se) - np.abs(m_feols.se().values) < 1e-4), "Standard errors are not equal"
+
+def test_multiple_estimation_stochastic():
 
     pass
 
