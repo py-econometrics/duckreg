@@ -141,6 +141,7 @@ class DuckRegression(DuckReg):
         return fit
 
     def bootstrap(self):
+        self.se = "bootstrap"
         if self.fevars:
             boot_coefs = np.zeros(
                 (self.n_bootstraps, len(self.covars) * len(self.outcome_vars))
@@ -207,8 +208,10 @@ class DuckRegression(DuckReg):
 
         return vcov
 
-    def summary(self): # ovveride the summary method to include the heteroskedasticity-robust variance covariance matrix when available
-        if self.n_bootstraps > 0 or self.se == "hc1":
+    def summary(
+        self,
+    ):  # ovveride the summary method to include the heteroskedasticity-robust variance covariance matrix when available
+        if self.n_bootstraps > 0 or (hasattr(self, "se") and self.se == "hc1"):
             return {
                 "point_estimate": self.point_estimate,
                 "standard_error": np.sqrt(np.diag(self.vcov)),
