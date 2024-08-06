@@ -331,7 +331,7 @@ class DuckMundlak(DuckReg):
         return wls(X, y, n)
 
     def estimate_feols(self):
-        pass
+        raise NotImplementedError("feols solver not implemented for Mundlak estimator")
 
     def bootstrap(self):
         rhs = (
@@ -501,7 +501,7 @@ class DuckDoubleDemeaning(DuckReg):
         return wls(X, y, n)
 
     def estimate_feols(self):
-        pass
+        raise NotImplementedError("feols solver not implemented for double-demeaning")
 
     def bootstrap(self):
         boot_coefs = np.zeros((self.n_bootstraps, 2))  # Intercept and treatment effect
