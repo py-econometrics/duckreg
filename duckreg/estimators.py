@@ -118,7 +118,7 @@ class DuckRegression(DuckReg):
         ].values.reshape(-1, 1)
         yhat = (X @ betahat).reshape(-1, 1)
         rss_g = (yhat**2) * n.reshape(-1, 1) - 2 * yhat * yprime + yprimeprime
-        bread = np.linalg.inv(X.T @ np.diag(n.flatten()) @ X)
+        bread = np.linalg.inv( (X * n).T @ X)
         meat = (X * rss_g).T @ X
         n_nk = n.sum() / (n.sum() - X.shape[1])
         self.vcov = n_nk * (bread @ meat @ bread)
