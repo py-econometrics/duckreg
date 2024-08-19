@@ -18,8 +18,10 @@ class DuckRegression(DuckReg):
         cluster_col: str,
         seed: int,
         n_bootstraps: int = 100,
+        event_study: bool = False,
         rowid_col: str = "rowid",
         fitter: str = "numpy",
+        **kwargs,
     ):
         super().__init__(
             db_name=db_name,
@@ -27,6 +29,7 @@ class DuckRegression(DuckReg):
             seed=seed,
             n_bootstraps=n_bootstraps,
             fitter=fitter,
+            **kwargs,
         )
         self.formula = formula
         self.cluster_col = cluster_col
@@ -234,12 +237,14 @@ class DuckMundlak(DuckReg):
         time_col: str = None,
         n_bootstraps: int = 100,
         cluster_col: str = None,
+        **kwargs,
     ):
         super().__init__(
             db_name=db_name,
             table_name=table_name,
             seed=seed,
             n_bootstraps=n_bootstraps,
+            **kwargs,
         )
         self.outcome_var = outcome_var
         self.covariates = covariates
@@ -299,6 +304,7 @@ class DuckMundlak(DuckReg):
                     {', ' + ', '.join([f'avg_{cov}_time' for cov in self.covariates]) if self.time_col is not None else ''}
         """
         self.df_compressed = self.conn.execute(self.compress_query).fetchdf()
+
         self.df_compressed[f"mean_{self.outcome_var}"] = (
             self.df_compressed[f"sum_{self.outcome_var}"] / self.df_compressed["count"]
         )
@@ -416,12 +422,14 @@ class DuckDoubleDemeaning(DuckReg):
         seed: int,
         n_bootstraps: int = 100,
         cluster_col: str = None,
+        **kwargs,
     ):
         super().__init__(
             db_name=db_name,
             table_name=table_name,
             seed=seed,
             n_bootstraps=n_bootstraps,
+            **kwargs
         )
         self.outcome_var = outcome_var
         self.treatment_var = treatment_var
