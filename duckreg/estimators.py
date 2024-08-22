@@ -413,6 +413,7 @@ class DuckMundlakEventStudy(DuckReg):
         unit_col: str,
         time_col: str,
         cluster_col: str,
+        pre_treat_interactions: bool = True,
         n_bootstraps: int = 100,
         **kwargs,
     ):
@@ -434,6 +435,7 @@ class DuckMundlakEventStudy(DuckReg):
         self.transformed_query = None
         self.compression_query = None
         self.cluster_col = cluster_col
+        self.pre_treat_interactions = pre_treat_interactions
 
     def prepare_data(self):
         #   create_cohort_and_ever_treated_columns
@@ -480,7 +482,10 @@ class DuckMundlakEventStudy(DuckReg):
         for cohort in self.cohorts:
             for i in range(self.num_periods + 1):
                 treatment_dummies.append(
-                    f"CASE WHEN cohort = {cohort} AND {self.time_col} = {i} THEN 1 ELSE 0 END AS treatment_time_{cohort}_{i}"
+                    f"""CASE WHEN cohort = {cohort} AND
+                        {self.time_col} = {i}
+                        {f'AND {self.treatment_col} == 1' if not self.pre_treat_interactions else ""}
+                        THEN 1 ELSE 0 END AS treatment_time_{cohort}_{i}"""
                 )
         self.treatment_dummies = ",\n".join(treatment_dummies)
 
