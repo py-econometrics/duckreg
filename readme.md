@@ -18,9 +18,26 @@ or git clone this repository and install in editable mode.
 ---
 
 Currently supports the following regression specifications:
-+ `DuckRegression`: general linear regression, which compresses the data to y averages stratified by all unique values of the x variables
-+ `DuckMundlak`: Mundlak regression, which compresses the data to y averages stratified by $1, w, \bar{w}_{i, .}, \bar{w}_{., t}$  where $w$ is a covariate (typically treatment)
-+ `DuckDoubleDemeaning`: Double demeaning regression, which compresses the data to y averages by all values of $w$ after demeaning by $\bar{w}_{i, .}, \bar{w}_{., t}, \bar{w}$ .
+1. `DuckRegression`: general linear regression, which compresses the data to y averages stratified by all unique values of the x variables
+2. `DuckMundlak`: One- or Two-Way Mundlak regression, which compresses the data to the following RHS and avoids the need to incorporate unit (and time FEs)
+
+$$
+y \sim 1, w, \bar{w}\_{i, .}, \bar{w}\_{., t}
+$$
+
+3. `DuckDoubleDemeaning`: Double demeaning regression, which compresses the data to y averages by all values of $w$ after demeaning. This also eliminates unit and time FEs
+
+$$
+y \sim (W\_{it} - \bar{w}\_{i, .} - \bar{w}\_{., t} + \bar{w}\_{., .}) 
+$$
+
+4. `DuckMundlakEventStudy`: Two-way mundlak with dynamic treatment effects. This incorporates treatment-cohort FEs ($\psi\_i$), time-period FEs ($\gamma\_t$) and dynamic treatment effects $\tau\_k$ given by cohort X time interactions.
+
+$$
+y \sim \psi\_i + \gamma\_t + \sum\_{k=1}^{T} \tau\_{k} D\_i 1(t = k)
+$$
+
+All the above regressions are run in compressed fashion with `duckdb`. 
 
 ---
 references:
