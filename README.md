@@ -8,7 +8,13 @@ See examples in `notebooks/introduction.ipynb`.
   <img src="https://static.independent.co.uk/s3fs-public/thumbnails/image/2016/02/14/12/duck-rabbit.png" width="350">
 </p>
 
-install (preferably in a `venv`) with
+- install
+
+```
+pip install duckreg
+```
+
+- dev install (preferably in a `venv`) with
 ```
 (uv) pip install git+https://github.com/apoorvalal/duckreg.git
 ```
@@ -28,7 +34,7 @@ $$
 3. `DuckDoubleDemeaning`: Double demeaning regression, which compresses the data to y averages by all values of $w$ after demeaning. This also eliminates unit and time FEs
 
 $$
-y \sim (W\_{it} - \bar{w}\_{i, .} - \bar{w}\_{., t} + \bar{w}\_{., .}) 
+y \sim (W\_{it} - \bar{w}\_{i, .} - \bar{w}\_{., t} + \bar{w}\_{., .})
 $$
 
 4. `DuckMundlakEventStudy`: Two-way mundlak with dynamic treatment effects. This incorporates treatment-cohort FEs ($\psi\_i$), time-period FEs ($\gamma\_t$) and dynamic treatment effects $\tau\_k$ given by cohort X time interactions.
@@ -37,7 +43,7 @@ $$
 y \sim \psi\_i + \gamma\_t + \sum\_{k=1}^{T} \tau\_{k} D\_i 1(t = k)
 $$
 
-All the above regressions are run in compressed fashion with `duckdb`. 
+All the above regressions are run in compressed fashion with `duckdb`.
 
 ---
 references:

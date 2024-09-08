@@ -1,3 +1,4 @@
+dist/*
 *.db
 **/__pycache__/**
 *.egg-info/
