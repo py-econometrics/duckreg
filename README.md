@@ -1,8 +1,6 @@
 # `duckreg` : very fast out-of-memory regressions with `duckdb`
 
-python package to run stratified/saturated regressions out-of-memory with duckdb. The package is a wrapper around the `duckdb` package and provides a simple interface to run regressions on very large datasets that do not fit in memory by reducing the data to a set of summary statistics and runs weighted least squares with frequency weights. Robust standard errors are computed from sufficient statistics, while clustered standard errors are computed using the cluster bootstrap.
-
-See examples in `notebooks/introduction.ipynb`.
+python package to run stratified/saturated regressions out-of-memory with duckdb. The package is a wrapper around the `duckdb` package and provides a simple interface to run regressions on very large datasets that do not fit in memory by reducing the data to a set of summary statistics and runs weighted least squares with frequency weights. Robust standard errors are computed from sufficient statistics, while clustered standard errors are computed using the cluster bootstrap. Methodological details and benchmarks are provided in [this](https://arxiv.org/abs/2410.09952) paper. See examples in `notebooks/introduction.ipynb`.
 
 <p align="center">
   <img src="https://static.independent.co.uk/s3fs-public/thumbnails/image/2016/02/14/12/duck-rabbit.png" width="350">
@@ -44,6 +42,20 @@ y \sim \psi\_i + \gamma\_t + \sum\_{k=1}^{T} \tau\_{k} D\_i 1(t = k)
 $$
 
 All the above regressions are run in compressed fashion with `duckdb`.
+
+Please cite the following paper if you use `duckreg` in your research: 
+
+```
+@misc{lal2024largescalelongitudinalexperiments,
+      title={Large Scale Longitudinal Experiments: Estimation and Inference}, 
+      author={Apoorva Lal and Alexander Fischer and Matthew Wardrop},
+      year={2024},
+      eprint={2410.09952},
+      archivePrefix={arXiv},
+      primaryClass={econ.EM},
+      url={https://arxiv.org/abs/2410.09952}, 
+}
+```
 
 ---
 references:
