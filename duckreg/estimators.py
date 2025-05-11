@@ -1,10 +1,8 @@
 import numpy as np
 import pandas as pd
-import re
 from tqdm import tqdm
 from .demean import demean, _convert_to_int
 from .duckreg import DuckReg, wls
-from pyfixest.estimation.estimation import feols
 
 ################################################################################
 
@@ -61,7 +59,7 @@ class DuckRegression(DuckReg):
         ]
         group_by_cols = ", ".join(self.strata_cols)
         self.agg_query = f"""
-        SELECT {group_by_cols}, {', '.join(agg_expressions)}
+        SELECT {group_by_cols}, {", ".join(agg_expressions)}
         FROM {self.table_name}
         GROUP BY {group_by_cols}
         """
@@ -79,7 +77,7 @@ class DuckRegression(DuckReg):
 
     def collect_data(self, data: pd.DataFrame) -> pd.DataFrame:
         y = data.filter(
-            regex=f"mean_{'(' +  '|'.join(self.outcome_vars) + ')'}", axis=1
+            regex=f"mean_{'(' + '|'.join(self.outcome_vars) + ')'}", axis=1
         ).values
         X = data[self.covars].values
         n = data["count"].values
@@ -124,22 +122,6 @@ class DuckRegression(DuckReg):
         n_nk = n.sum() / (n.sum() - X.shape[1])
         self.vcov = n_nk * (bread @ meat @ bread)
 
-    def estimate_feols(self):
-        if self.fevars:
-            fml = f"{'+'.join([f'mean_{x}' for x in self.outcome_vars])} ~ {' + '.join(self.covars)} | {' + '.join(self.fevars)}"
-        else:
-            fml = f"{'+'.join([f'mean_{x}' for x in self.outcome_vars])} ~ {' + '.join(self.covars)}"
-
-        fit = feols(
-            fml=fml,
-            data=self.df_compressed,
-            vcov="iid",  # most performant
-            weights="count",
-            weights_type="fweights",
-        )
-
-        return fit
-
     def bootstrap(self):
         self.se = "bootstrap"
         if self.fevars:
@@ -161,9 +143,9 @@ class DuckRegression(DuckReg):
             ).fetchone()[0]
             unique_rows = total_rows
             self.bootstrap_query = f"""
-            SELECT {', '.join(self.strata_cols)}, {', '.join(["COUNT(*) as count"] + [f"SUM({var}) as sum_{var}" for var in self.outcome_vars])}
+            SELECT {", ".join(self.strata_cols)}, {", ".join(["COUNT(*) as count"] + [f"SUM({var}) as sum_{var}" for var in self.outcome_vars])}
             FROM {self.table_name}
-            GROUP BY {', '.join(self.strata_cols)}
+            GROUP BY {", ".join(self.strata_cols)}
             """
         else:
             # Cluster bootstrap
@@ -173,10 +155,10 @@ class DuckRegression(DuckReg):
             unique_groups = [group[0] for group in unique_groups]
             unique_rows = len(unique_groups)
             self.bootstrap_query = f"""
-            SELECT {', '.join(self.strata_cols)}, {', '.join(["COUNT(*) as count"] + [f"SUM({var}) as sum_{var}" for var in self.outcome_vars])}
+            SELECT {", ".join(self.strata_cols)}, {", ".join(["COUNT(*) as count"] + [f"SUM({var}) as sum_{var}" for var in self.outcome_vars])}
             FROM {self.table_name}
             WHERE {self.cluster_col} IN (SELECT unnest((?)))
-            GROUP BY {', '.join(self.strata_cols)}
+            GROUP BY {", ".join(self.strata_cols)}
             """
 
         for b in tqdm(range(self.n_bootstraps)):
@@ -254,7 +236,7 @@ class DuckMundlak(DuckReg):
         self.unit_avg_query = f"""
         CREATE TEMP TABLE unit_avgs AS
         SELECT {self.unit_col},
-               {', '.join([f'AVG({cov}) AS avg_{cov}_unit' for cov in self.covariates])}
+               {", ".join([f"AVG({cov}) AS avg_{cov}_unit" for cov in self.covariates])}
         FROM {self.table_name}
         GROUP BY {self.unit_col}
         """
@@ -265,7 +247,7 @@ class DuckMundlak(DuckReg):
             self.time_avg_query = f"""
             CREATE TEMP TABLE time_avgs AS
             SELECT {self.time_col},
-                   {', '.join([f'AVG({cov}) AS avg_{cov}_time' for cov in self.covariates])}
+                   {", ".join([f"AVG({cov}) AS avg_{cov}_time" for cov in self.covariates])}
             FROM {self.table_name}
             GROUP BY {self.time_col}
             """
@@ -276,11 +258,11 @@ class DuckMundlak(DuckReg):
         CREATE TEMP TABLE design_matrix AS
         SELECT
             t.{self.unit_col},
-            {f't.{self.time_col},' if self.time_col is not None else ''}
+            {f"t.{self.time_col}," if self.time_col is not None else ""}
             t.{self.outcome_var},
-            {', '.join([f't.{cov}' for cov in self.covariates])},
-            {', '.join([f'u.avg_{cov}_unit' for cov in self.covariates])}
-            {', ' + ', '.join([f'tm.avg_{cov}_time' for cov in self.covariates]) if self.time_col is not None else ''}
+            {", ".join([f"t.{cov}" for cov in self.covariates])},
+            {", ".join([f"u.avg_{cov}_unit" for cov in self.covariates])}
+            {", " + ", ".join([f"tm.avg_{cov}_time" for cov in self.covariates]) if self.time_col is not None else ""}
         FROM {self.table_name} t
         JOIN unit_avgs u ON t.{self.unit_col} = u.{self.unit_col}
         {f"JOIN time_avgs tm ON t.{self.time_col} = tm.{self.time_col}" if self.time_col is not None else ""}
@@ -290,15 +272,15 @@ class DuckMundlak(DuckReg):
     def compress_data(self):
         self.compress_query = f"""
         SELECT
-            {', '.join([f'{cov}' for cov in self.covariates])},
-            {', '.join([f'avg_{cov}_unit' for cov in self.covariates])}
-            {', ' + ', '.join([f'avg_{cov}_time' for cov in self.covariates]) if self.time_col is not None else ''},
+            {", ".join([f"{cov}" for cov in self.covariates])},
+            {", ".join([f"avg_{cov}_unit" for cov in self.covariates])}
+            {", " + ", ".join([f"avg_{cov}_time" for cov in self.covariates]) if self.time_col is not None else ""},
             COUNT(*) as count,
             SUM({self.outcome_var}) as sum_{self.outcome_var}
         FROM design_matrix
-        GROUP BY {', '.join([f'{cov}' for cov in self.covariates])},
-                    {', '.join([f'avg_{cov}_unit' for cov in self.covariates])}
-                    {', ' + ', '.join([f'avg_{cov}_time' for cov in self.covariates]) if self.time_col is not None else ''}
+        GROUP BY {", ".join([f"{cov}" for cov in self.covariates])},
+                    {", ".join([f"avg_{cov}_unit" for cov in self.covariates])}
+                    {", " + ", ".join([f"avg_{cov}_time" for cov in self.covariates]) if self.time_col is not None else ""}
         """
         self.df_compressed = self.conn.execute(self.compress_query).fetchdf()
 
@@ -331,9 +313,6 @@ class DuckMundlak(DuckReg):
         y, X, n = self.collect_data(data=self.df_compressed)
         return wls(X, y, n)
 
-    def estimate_feols(self):
-        raise NotImplementedError("feols solver not implemented for Mundlak estimator")
-
     def bootstrap(self):
         rhs = (
             self.covariates
@@ -353,15 +332,15 @@ class DuckMundlak(DuckReg):
             ).fetchone()[0]
             self.bootstrap_query = f"""
             SELECT
-                {', '.join([f'{cov}' for cov in self.covariates])},
-                {', '.join([f'avg_{cov}_unit' for cov in self.covariates])}
-                {', ' + ', '.join([f'avg_{cov}_time' for cov in self.covariates]) if self.time_col is not None else ''},
+                {", ".join([f"{cov}" for cov in self.covariates])},
+                {", ".join([f"avg_{cov}_unit" for cov in self.covariates])}
+                {", " + ", ".join([f"avg_{cov}_time" for cov in self.covariates]) if self.time_col is not None else ""},
                 COUNT(*) as count,
                 SUM({self.outcome_var}) as sum_{self.outcome_var}
             FROM design_matrix
-            GROUP BY {', '.join([f'{cov}' for cov in self.covariates])},
-                        {', '.join([f'avg_{cov}_unit' for cov in self.covariates])}
-                        {', ' + ', '.join([f'avg_{cov}_time' for cov in self.covariates]) if self.time_col is not None else ''}
+            GROUP BY {", ".join([f"{cov}" for cov in self.covariates])},
+                        {", ".join([f"avg_{cov}_unit" for cov in self.covariates])}
+                        {", " + ", ".join([f"avg_{cov}_time" for cov in self.covariates]) if self.time_col is not None else ""}
             """
             total_samples = total_units
         else:
@@ -371,16 +350,16 @@ class DuckMundlak(DuckReg):
             ).fetchone()[0]
             self.bootstrap_query = f"""
             SELECT
-                {', '.join([f'{cov}' for cov in self.covariates])},
-                {', '.join([f'avg_{cov}_unit' for cov in self.covariates])}
-                {', ' + ', '.join([f'avg_{cov}_time' for cov in self.covariates]) if self.time_col is not None else ''},
+                {", ".join([f"{cov}" for cov in self.covariates])},
+                {", ".join([f"avg_{cov}_unit" for cov in self.covariates])}
+                {", " + ", ".join([f"avg_{cov}_time" for cov in self.covariates]) if self.time_col is not None else ""},
                 COUNT(*) as count,
                 SUM({self.outcome_var}) as sum_{self.outcome_var}
             FROM design_matrix
             WHERE {self.cluster_col} IN (SELECT unnest((?)))
-            GROUP BY {', '.join([f'{cov}' for cov in self.covariates])},
-                        {', '.join([f'avg_{cov}_unit' for cov in self.covariates])}
-                        {', ' + ', '.join([f'avg_{cov}_time' for cov in self.covariates]) if self.time_col is not None else ''}
+            GROUP BY {", ".join([f"{cov}" for cov in self.covariates])},
+                        {", ".join([f"avg_{cov}_unit" for cov in self.covariates])}
+                        {", " + ", ".join([f"avg_{cov}_time" for cov in self.covariates]) if self.time_col is not None else ""}
             """
             total_samples = total_clusters
 
@@ -483,7 +462,7 @@ class DuckMundlakEventStudy(DuckReg):
                 treatment_dummies.append(
                     f"""CASE WHEN cohort = {cohort} AND
                         {self.time_col} = {i}
-                        {f'AND {self.treatment_col} == 1' if not self.pre_treat_interactions else ""}
+                        {f"AND {self.treatment_col} == 1" if not self.pre_treat_interactions else ""}
                         THEN 1 ELSE 0 END AS treatment_time_{cohort}_{i}"""
                 )
         self.treatment_dummies = ",\n".join(treatment_dummies)
@@ -585,7 +564,7 @@ class DuckMundlakEventStudy(DuckReg):
                 f"""
                 CREATE TEMP TABLE resampled_transformed_panel_data AS
                 SELECT * FROM transformed_panel_data
-                WHERE {self.cluster_col} IN ({', '.join(map(str, resampled_clusters))})
+                WHERE {self.cluster_col} IN ({", ".join(map(str, resampled_clusters))})
             """
             )
 
@@ -633,11 +612,6 @@ class DuckMundlakEventStudy(DuckReg):
             cohort: np.cov(np.array(coefs).T) for cohort, coefs in boot_coefs.items()
         }
         return bootstrap_cov_matrix
-
-    def estimate_feols(self):
-        raise NotImplementedError(
-            "feols solver not implemented for Mundlak event study estimator"
-        )
 
     def summary(self) -> dict:
         """Summary of event study regression (overrides the parent class method)
