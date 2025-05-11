@@ -3,5 +3,4 @@ pandas
 tqdm
 duckdb
 numba
-pyfixest
 pdoc

@@ -40,15 +40,10 @@ class DuckReg(ABC):
         pass
 
     @abstractmethod
-    def estimate_feols(self):
-        pass
-
-    @abstractmethod
     def bootstrap(self):
         pass
 
     def fit(self):
-
         self.prepare_data()
         self.compress_data()
 
