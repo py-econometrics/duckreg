@@ -19,7 +19,7 @@ def read_long_description():
 
 setup(
     name="duckreg",
-    version="0.1.1",  # Use semantic versioning
+    version="0.2",  # Use semantic versioning
     packages=find_packages(),
     install_requires=read_requirements(),
     author="Apoorva Lal",
