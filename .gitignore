@@ -36,3 +36,5 @@ dist/*
 debug.py
 pyvenv.cfg
 intro.ipynb
+OPTIMIZATIONS.md
+.claude/settings.local.json
