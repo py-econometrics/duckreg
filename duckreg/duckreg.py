@@ -47,30 +47,12 @@ class DuckReg(ABC):
         self.prepare_data()
         self.compress_data()
 
-        if self.fitter == "numpy":
-            self.point_estimate = self.estimate()
-            if self.n_bootstraps > 0:
-                self.vcov = self.bootstrap()
-            self.conn.close() if not self.keep_connection_open else None
-            return None
-        elif self.fitter == "feols":
-            fit = self.estimate_feols()
-            self.point_estimate = fit.coef().values
-            if self.n_bootstraps > 0:
-                self.vcov = self.bootstrap()
-            fit._vcov = self.vcov
-            fit.get_inference()
-            fit._vcov_type = "NP-Bootstrap"
-            fit._vcov_type_detail = "NP-Bootstrap"
-            self.conn.close() if not self.keep_connection_open else None
-            return fit
+        self.point_estimate = self.estimate()
+        if self.n_bootstraps > 0:
+            self.vcov = self.bootstrap()
+        self.conn.close() if not self.keep_connection_open else None
+        return None
 
-        else:
-            raise ValueError(
-                "Argument 'fitter' must be 'numpy' or 'feols', got {}".format(
-                    self.fitter
-                )
-            )
 
     def summary(self) -> dict:
         """Summary of regression
