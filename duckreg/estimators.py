@@ -16,7 +16,6 @@ class DuckRegression(DuckReg):
         cluster_col: str,
         seed: int,
         n_bootstraps: int = 100,
-        event_study: bool = False,
         rowid_col: str = "rowid",
         fitter: str = "numpy",
         **kwargs,
@@ -52,28 +51,41 @@ class DuckRegression(DuckReg):
         pass
 
     def compress_data(self):
-        agg_expressions = ["COUNT(*) as count"]
-        agg_expressions += [f"SUM({var}) as sum_{var}" for var in self.outcome_vars]
-        agg_expressions += [
-            f"SUM(POW({var}, 2)) as sum_{var}_sq" for var in self.outcome_vars
-        ]
+        # Pre-compute expressions once to avoid repeated string operations
         group_by_cols = ", ".join(self.strata_cols)
+        
+        # Build aggregation expressions more efficiently
+        agg_parts = ["COUNT(*) as count"]
+        sum_expressions = []
+        sum_sq_expressions = []
+        
+        for var in self.outcome_vars:
+            sum_expr = f"SUM({var}) as sum_{var}"
+            sum_sq_expr = f"SUM(POW({var}, 2)) as sum_{var}_sq"
+            sum_expressions.append(sum_expr)
+            sum_sq_expressions.append(sum_sq_expr)
+        
+        # Single join operation instead of multiple concatenations
+        all_agg_expressions = ", ".join(agg_parts + sum_expressions + sum_sq_expressions)
+        
         self.agg_query = f"""
-        SELECT {group_by_cols}, {", ".join(agg_expressions)}
+        SELECT {group_by_cols}, {all_agg_expressions}
         FROM {self.table_name}
         GROUP BY {group_by_cols}
         """
-        self.df_compressed = pd.DataFrame(self.conn.execute(self.agg_query).fetchall())
-        self.df_compressed.columns = (
-            self.strata_cols
-            + ["count"]
-            + [f"sum_{var}" for var in self.outcome_vars]
-            + [f"sum_{var}_sq" for var in self.outcome_vars]
-        )
-        create_means = "\n".join(
-            [f"mean_{var} = sum_{var}/count" for var in self.outcome_vars]
-        )
-        self.df_compressed.eval(create_means, inplace=True)
+        
+        self.df_compressed = self.conn.execute(self.agg_query).fetchdf()
+        
+        # Pre-compute column lists
+        sum_cols = [f"sum_{var}" for var in self.outcome_vars]
+        sum_sq_cols = [f"sum_{var}_sq" for var in self.outcome_vars]
+        
+        self.df_compressed.columns = self.strata_cols + ["count"] + sum_cols + sum_sq_cols
+        
+        # Single eval operation for all means
+        mean_expressions = [f"mean_{var} = sum_{var}/count" for var in self.outcome_vars]
+        if mean_expressions:
+            self.df_compressed.eval("\n".join(mean_expressions), inplace=True)
 
     def collect_data(self, data: pd.DataFrame) -> pd.DataFrame:
         y = data.filter(
@@ -270,17 +282,23 @@ class DuckMundlak(DuckReg):
         self.conn.execute(self.design_matrix_query)
 
     def compress_data(self):
+        # Pre-compute column lists to avoid repeated operations
+        cov_cols = [f"{cov}" for cov in self.covariates]
+        unit_avg_cols = [f"avg_{cov}_unit" for cov in self.covariates]
+        time_avg_cols = [f"avg_{cov}_time" for cov in self.covariates] if self.time_col is not None else []
+        
+        # Build SELECT and GROUP BY columns once
+        select_cols = cov_cols + unit_avg_cols + time_avg_cols
+        select_clause = ", ".join(select_cols)
+        group_by_clause = ", ".join(select_cols)
+        
         self.compress_query = f"""
         SELECT
-            {", ".join([f"{cov}" for cov in self.covariates])},
-            {", ".join([f"avg_{cov}_unit" for cov in self.covariates])}
-            {", " + ", ".join([f"avg_{cov}_time" for cov in self.covariates]) if self.time_col is not None else ""},
+            {select_clause},
             COUNT(*) as count,
             SUM({self.outcome_var}) as sum_{self.outcome_var}
         FROM design_matrix
-        GROUP BY {", ".join([f"{cov}" for cov in self.covariates])},
-                    {", ".join([f"avg_{cov}_unit" for cov in self.covariates])}
-                    {", " + ", ".join([f"avg_{cov}_time" for cov in self.covariates]) if self.time_col is not None else ""}
+        GROUP BY {group_by_clause}
         """
         self.df_compressed = self.conn.execute(self.compress_query).fetchdf()
 
@@ -417,27 +435,28 @@ class DuckMundlakEventStudy(DuckReg):
         self.pre_treat_interactions = pre_treat_interactions
 
     def prepare_data(self):
-        #   create_cohort_and_ever_treated_columns
-        self.temp_table_query = f"""
-            CREATE TEMP TABLE temp_{self.table_name} AS
-            SELECT *, NULL::INTEGER AS cohort, NULL::INTEGER AS ever_treated
-            FROM {self.table_name};
-            UPDATE temp_{self.table_name} SET cohort = (
-                SELECT MIN({self.time_col})
-                FROM {self.table_name} AS p2
-                WHERE p2.{self.unit_col} = temp_{self.table_name}.{self.unit_col} AND
-                p2.{self.treatment_col} = 1
-            );
-            UPDATE temp_{self.table_name} SET cohort = NULL WHERE cohort = 2147483647;
-            UPDATE temp_{self.table_name} SET ever_treated = CASE WHEN cohort IS NOT NULL THEN 1 ELSE 0 END;
+        # Create cohort data using CTE instead of temp table
+        self.cohort_cte = f"""
+        WITH cohort_data AS (
+            SELECT *,
+                   CASE WHEN cohort_min = 2147483647 THEN NULL ELSE cohort_min END as cohort,
+                   CASE WHEN cohort_min IS NOT NULL AND cohort_min != 2147483647 THEN 1 ELSE 0 END as ever_treated
+            FROM (
+                SELECT *,
+                       (SELECT MIN({self.time_col})
+                        FROM {self.table_name} AS p2
+                        WHERE p2.{self.unit_col} = p1.{self.unit_col} AND p2.{self.treatment_col} = 1
+                       ) as cohort_min
+                FROM {self.table_name} p1
+            )
+        )
         """
-        self.conn.execute(self.temp_table_query)
-        #  retrieve_num_periods_and_cohorts
+        #  retrieve_num_periods_and_cohorts using CTE
         self.num_periods = self.conn.execute(
-            f"SELECT MAX({self.time_col}) FROM temp_{self.table_name}"
+            f"{self.cohort_cte} SELECT MAX({self.time_col}) FROM cohort_data"
         ).fetchone()[0]
         cohorts = self.conn.execute(
-            f"SELECT DISTINCT cohort FROM temp_{self.table_name} WHERE cohort IS NOT NULL"
+            f"{self.cohort_cte} SELECT DISTINCT cohort FROM cohort_data WHERE cohort IS NOT NULL"
         ).fetchall()
         self.cohorts = [row[0] for row in cohorts]
         # generate_time_dummies
@@ -467,55 +486,57 @@ class DuckMundlakEventStudy(DuckReg):
                 )
         self.treatment_dummies = ",\n".join(treatment_dummies)
 
-        #  create_transformed_query
-        self.design_matrix_query = f"""
-        CREATE TEMP TABLE transformed_panel_data AS
-        SELECT
-            p.{self.unit_col},
-            p.{self.time_col},
-            p.{self.treatment_col},
-            p.{self.outcome_var},
-            -- Intercept (constant term)
-            1 AS intercept,
-            -- cohort intercepts
-            {self.cohort_intercepts},
-            -- Time dummies for each period
-            {self.time_dummies},
-            -- Treated group interacted with treatment time dummies
-            {self.treatment_dummies}
-        FROM
-            temp_{self.table_name} p;
+        #  create_transformed_query using CTE instead of temp table
+        self.design_matrix_cte = f"""
+        {self.cohort_cte},
+        transformed_panel_data AS (
+            SELECT
+                p.{self.unit_col},
+                p.{self.time_col},
+                p.{self.treatment_col},
+                p.{self.outcome_var},
+                -- Intercept (constant term)
+                1 AS intercept,
+                -- cohort intercepts
+                {self.cohort_intercepts},
+                -- Time dummies for each period
+                {self.time_dummies},
+                -- Treated group interacted with treatment time dummies
+                {self.treatment_dummies}
+            FROM cohort_data p
+        )
         """
-        self.conn.execute(self.design_matrix_query)
 
     def compress_data(self):
-        self.rhs = f"""
-        intercept,
-        {", ".join([f"cohort_{cohort}" for cohort in self.cohorts])},
-        {", ".join([f"time_{i}" for i in range(self.num_periods + 1)])},
-        {", ".join([f"treatment_time_{cohort}_{i}" for cohort in self.cohorts for i in range(self.num_periods + 1)])};
-        """
+        # Pre-compute RHS columns to avoid repeated string operations
+        cohort_cols = [f"cohort_{cohort}" for cohort in self.cohorts]
+        time_cols = [f"time_{i}" for i in range(self.num_periods + 1)]
+        treatment_cols = [f"treatment_time_{cohort}_{i}" for cohort in self.cohorts for i in range(self.num_periods + 1)]
+        
+        rhs_cols = ["intercept"] + cohort_cols + time_cols + treatment_cols
+        rhs_clause = ", ".join(rhs_cols)
+        
+        # Use single query with CTE instead of temp table
         self.compression_query = f"""
-        CREATE TEMP TABLE compressed_panel_data AS
+        {self.design_matrix_cte}
         SELECT
-            {self.rhs.replace(";", "")},
+            {rhs_clause},
             COUNT(*) AS count,
             SUM({self.outcome_var}) AS sum_{self.outcome_var}
-        FROM
-            transformed_panel_data
-        GROUP BY
-        {self.rhs}
+        FROM transformed_panel_data
+        GROUP BY {rhs_clause}
         """
-        self.conn.execute(self.compression_query)
-        self.df_compressed = self.conn.execute(
-            "SELECT * FROM compressed_panel_data"
-        ).fetchdf()
+        
+        self.df_compressed = self.conn.execute(self.compression_query).fetchdf()
         self.df_compressed[f"mean_{self.outcome_var}"] = (
             self.df_compressed[f"sum_{self.outcome_var}"] / self.df_compressed["count"]
         )
+        
+        # Store for later use
+        self.rhs_cols = rhs_cols
 
     def collect_data(self, data):
-        self._rhs_list = [x.strip().replace(";", "") for x in self.rhs.split(",")]
+        self._rhs_list = self.rhs_cols
         X = data[self._rhs_list].values
         y = data[f"mean_{self.outcome_var}"].values
         n = data["count"].values
@@ -730,9 +751,6 @@ class DuckDoubleDemeaning(DuckReg):
     def estimate(self):
         y, X, n = self.collect_data(data=self.df_compressed)
         return wls(X, y, n)
-
-    def estimate_feols(self):
-        raise NotImplementedError("feols solver not implemented for double-demeaning")
 
     def bootstrap(self):
         boot_coefs = np.zeros((self.n_bootstraps, 2))  # Intercept and treatment effect
