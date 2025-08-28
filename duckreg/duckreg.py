@@ -53,7 +53,6 @@ class DuckReg(ABC):
         self.conn.close() if not self.keep_connection_open else None
         return None
 
-
     def summary(self) -> dict:
         """Summary of regression
 
@@ -89,3 +88,73 @@ def wls(X: np.ndarray, y: np.ndarray, n: np.ndarray) -> np.ndarray:
     yn = y * N
     betahat = np.linalg.lstsq(Xn, yn, rcond=None)[0]
     return betahat
+
+
+def ridge_closed_form(
+    X: np.ndarray, y: np.ndarray, n: np.ndarray, lam: float
+) -> np.ndarray:
+    """Ridge regression with data augmented representation
+    Trad ridge: (X'X + lam I)^{-1} X' y
+    Augmentation: Xtilde = [X; sqrt(lam) I], ytilde = [y; 0]
+    this lets us use lstsq solver, which is more optimized than using normal equations
+
+    Args:
+        X (np.ndarray): Design matrix
+        y (np.ndarray): Outcome vector
+        n (np.ndarray): Frequency weights
+        lam (float): Regularization parameter
+
+    Returns:
+        np.ndarray: Coefficient estimates
+    """
+    k = X.shape[1]
+    N = np.sqrt(n)
+    Xn = X * N
+    yn = y * N
+    Xtilde = np.r_[Xn, np.diag(np.repeat(np.sqrt(lam), k))]
+    ytilde = np.concatenate([yn, np.zeros(shape=(k, 1))])
+    betahat = np.linalg.lstsq(Xtilde, ytilde, rcond=None)[0]
+    return betahat
+
+
+def ridge_closed_form_batch(
+    X: np.ndarray, y: np.ndarray, n: np.ndarray, lambda_grid: np.ndarray
+) -> np.ndarray:
+    """Optimized ridge regression for multiple lambda values
+    Pre-computes reusable components to avoid repeated work in lambda grid search
+
+    Args:
+        X (np.ndarray): Design matrix
+        y (np.ndarray): Outcome vector
+        n (np.ndarray): Frequency weights
+        lambda_grid (np.ndarray): Array of regularization parameters
+
+    Returns:
+        np.ndarray: Coefficient estimates, shape (n_lambdas, n_features)
+    """
+    k = X.shape[1]
+    n_lambdas = len(lambda_grid)
+
+    # Pre-compute weight matrix (done once)
+    N = np.sqrt(n)
+    # Pre-compute weighted X and y (done once)
+    Xn = X * N
+    yn = y * N
+
+    # Pre-allocate identity matrix and zero vector (done once)
+    I_k = np.eye(k)
+    zeros_k = np.zeros((k, 1))
+
+    # Pre-allocate result array
+    coefs = np.zeros((n_lambdas, k))
+
+    # Loop over lambda values (only lambda-dependent operations)
+    for i, lam in enumerate(lambda_grid):
+        # Only lambda-dependent work: scale identity and concatenate
+        sqrt_lam_I = np.sqrt(lam) * I_k
+        Xtilde = np.vstack([Xn, sqrt_lam_I])
+        ytilde = np.vstack([yn, zeros_k])
+
+        coefs[i, :] = np.linalg.lstsq(Xtilde, ytilde, rcond=None)[0].flatten()
+
+    return coefs

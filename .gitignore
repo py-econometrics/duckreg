@@ -38,3 +38,4 @@ pyvenv.cfg
 intro.ipynb
 OPTIMIZATIONS.md
 .claude/settings.local.json
+devlog/*
