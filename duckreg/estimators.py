@@ -236,6 +236,103 @@ class DuckRegression(DuckReg):
 ################################################################################
 
 
+class DuckDML(DuckReg):
+    def __init__(
+        self,
+        db_name: str,
+        table_name: str,
+        outcome_var: str,
+        treatment_var: str,
+        discrete_covars: list[str],
+        seed: int,
+        n_bootstraps: int = 200,
+        **kwargs,
+    ):
+        super().__init__(
+            db_name=db_name,
+            table_name=table_name,
+            seed=seed,
+            n_bootstraps=n_bootstraps,
+            **kwargs,
+        )
+        self.outcome_var = outcome_var
+        self.treatment_var = treatment_var
+        self.discrete_covars = discrete_covars
+
+    def prepare_data(self):
+        pass
+
+    def collect_data(self):
+        pass
+
+    def compress_data(self):
+        y, x = self.outcome_var, self.treatment_var
+        group_by_cols = ", ".join(self.discrete_covars)
+
+        self.agg_query = f"""
+        SELECT
+            {group_by_cols},
+            COUNT(*) as n_g,
+            SUM({y}) as sum_y,
+            SUM({x}) as sum_x,
+            SUM(POW({x}, 2)) as sum_xx,
+            SUM({y} * {x}) as sum_xy
+        FROM {self.table_name}
+        GROUP BY {group_by_cols}
+        HAVING COUNT(*) > 1
+        """
+        self.df_compressed = self.conn.execute(self.agg_query).fetchdf()
+
+    def _calculate_beta_from_compressed(self, data: pd.DataFrame) -> np.ndarray:
+        if data.empty:
+            return np.array([np.nan])
+
+        df = data
+
+        # Apply the N_g / (N_g - 1)^2 scaling factor from the LOO formula
+        weight_g = df["n_g"] / (df["n_g"] - 1) ** 2
+
+        # Numerator: Sum over g of weight_g * [N_g * S_xy - S_x * S_y]
+        numerator_g = weight_g * (df["n_g"] * df["sum_xy"] - df["sum_x"] * df["sum_y"])
+
+        # Denominator: Sum over g of weight_g * [N_g * S_xx - S_x^2]
+        denominator_g = weight_g * (df["n_g"] * df["sum_xx"] - df["sum_x"] ** 2)
+
+        total_numerator = numerator_g.sum()
+        total_denominator = denominator_g.sum()
+
+        if total_denominator == 0:
+            return np.array([np.nan])
+
+        beta_hat = total_numerator / total_denominator
+        return np.array([beta_hat])
+
+    def estimate(self):
+        return self._calculate_beta_from_compressed(self.df_compressed)
+
+    def bootstrap(self):
+        """
+        Performs a cluster bootstrap by resampling the compressed groups.
+        This is equivalent to resampling clusters defined by unique combinations
+        of the discrete covariates.
+        """
+        n_groups = len(self.df_compressed)
+        boot_coefs = np.zeros((self.n_bootstraps, 1))
+
+        for b in tqdm(range(self.n_bootstraps), desc="Bootstrapping"):
+            resampled_indices = self.rng.choice(n_groups, size=n_groups, replace=True)
+            df_boot = self.df_compressed.iloc[resampled_indices]
+            boot_coefs[b, :] = self._calculate_beta_from_compressed(df_boot)
+
+        self.vcov = np.cov(boot_coefs, rowvar=False)
+        # ensure vcov is 2D
+        if self.vcov.ndim == 0:
+            self.vcov = np.expand_dims(self.vcov, axis=0)
+        return self.vcov
+
+
+
+################################################################################
 class DuckMundlak(DuckReg):
     def __init__(
         self,
