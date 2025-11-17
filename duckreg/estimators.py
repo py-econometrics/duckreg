@@ -53,37 +53,43 @@ class DuckRegression(DuckReg):
     def compress_data(self):
         # Pre-compute expressions once to avoid repeated string operations
         group_by_cols = ", ".join(self.strata_cols)
-        
+
         # Build aggregation expressions more efficiently
         agg_parts = ["COUNT(*) as count"]
         sum_expressions = []
         sum_sq_expressions = []
-        
+
         for var in self.outcome_vars:
             sum_expr = f"SUM({var}) as sum_{var}"
             sum_sq_expr = f"SUM(POW({var}, 2)) as sum_{var}_sq"
             sum_expressions.append(sum_expr)
             sum_sq_expressions.append(sum_sq_expr)
-        
+
         # Single join operation instead of multiple concatenations
-        all_agg_expressions = ", ".join(agg_parts + sum_expressions + sum_sq_expressions)
-        
+        all_agg_expressions = ", ".join(
+            agg_parts + sum_expressions + sum_sq_expressions
+        )
+
         self.agg_query = f"""
         SELECT {group_by_cols}, {all_agg_expressions}
         FROM {self.table_name}
         GROUP BY {group_by_cols}
         """
-        
+
         self.df_compressed = self.conn.execute(self.agg_query).fetchdf()
-        
+
         # Pre-compute column lists
         sum_cols = [f"sum_{var}" for var in self.outcome_vars]
         sum_sq_cols = [f"sum_{var}_sq" for var in self.outcome_vars]
-        
-        self.df_compressed.columns = self.strata_cols + ["count"] + sum_cols + sum_sq_cols
-        
+
+        self.df_compressed.columns = (
+            self.strata_cols + ["count"] + sum_cols + sum_sq_cols
+        )
+
         # Single eval operation for all means
-        mean_expressions = [f"mean_{var} = sum_{var}/count" for var in self.outcome_vars]
+        mean_expressions = [
+            f"mean_{var} = sum_{var}/count" for var in self.outcome_vars
+        ]
         if mean_expressions:
             self.df_compressed.eval("\n".join(mean_expressions), inplace=True)
 
@@ -153,29 +159,43 @@ class DuckRegression(DuckReg):
             total_rows = self.conn.execute(
                 f"SELECT COUNT(DISTINCT {self.rowid_col}) FROM {self.table_name}"
             ).fetchone()[0]
-            unique_rows = total_rows
+            # unique_rows = total_rows
+            unique_groups = np.arange(total_rows)  # Add this line
             self.bootstrap_query = f"""
             SELECT {", ".join(self.strata_cols)}, {", ".join(["COUNT(*) as count"] + [f"SUM({var}) as sum_{var}" for var in self.outcome_vars])}
             FROM {self.table_name}
             GROUP BY {", ".join(self.strata_cols)}
             """
         else:
-            # Cluster bootstrap
+            # Cluster bootstrap - FIX
             unique_groups = self.conn.execute(
                 f"SELECT DISTINCT {self.cluster_col} FROM {self.table_name}"
             ).fetchall()
             unique_groups = [group[0] for group in unique_groups]
-            unique_rows = len(unique_groups)
             self.bootstrap_query = f"""
-            SELECT {", ".join(self.strata_cols)}, {", ".join(["COUNT(*) as count"] + [f"SUM({var}) as sum_{var}" for var in self.outcome_vars])}
-            FROM {self.table_name}
-            WHERE {self.cluster_col} IN (SELECT unnest((?)))
+            WITH resampled AS (
+                SELECT cluster_id, COUNT(*) as mult
+                FROM (SELECT unnest(?) as cluster_id)
+                GROUP BY cluster_id
+            ),
+            grouped_data AS (
+                SELECT {", ".join(self.strata_cols)}, {self.cluster_col},
+                    COUNT(*) as count,
+                    {", ".join([f"SUM({var}) as sum_{var}" for var in self.outcome_vars])}
+                FROM {self.table_name}
+                GROUP BY {", ".join(self.strata_cols)}, {self.cluster_col}
+            )
+            SELECT {", ".join(self.strata_cols)},
+                SUM(gd.count * r.mult) as count,
+                {", ".join([f"SUM(gd.sum_{var} * r.mult) as sum_{var}" for var in self.outcome_vars])}
+            FROM grouped_data gd
+            JOIN resampled r ON gd.{self.cluster_col} = r.cluster_id
             GROUP BY {", ".join(self.strata_cols)}
             """
 
         for b in tqdm(range(self.n_bootstraps)):
             resampled_rows = self.rng.choice(
-                unique_rows, size=unique_rows, replace=True
+                unique_groups, size=len(unique_groups), replace=True
             )
             df_boot = pd.DataFrame(
                 self.conn.execute(
@@ -285,13 +305,17 @@ class DuckMundlak(DuckReg):
         # Pre-compute column lists to avoid repeated operations
         cov_cols = [f"{cov}" for cov in self.covariates]
         unit_avg_cols = [f"avg_{cov}_unit" for cov in self.covariates]
-        time_avg_cols = [f"avg_{cov}_time" for cov in self.covariates] if self.time_col is not None else []
-        
+        time_avg_cols = (
+            [f"avg_{cov}_time" for cov in self.covariates]
+            if self.time_col is not None
+            else []
+        )
+
         # Build SELECT and GROUP BY columns once
         select_cols = cov_cols + unit_avg_cols + time_avg_cols
         select_clause = ", ".join(select_cols)
         group_by_clause = ", ".join(select_cols)
-        
+
         self.compress_query = f"""
         SELECT
             {select_clause},
@@ -511,11 +535,15 @@ class DuckMundlakEventStudy(DuckReg):
         # Pre-compute RHS columns to avoid repeated string operations
         cohort_cols = [f"cohort_{cohort}" for cohort in self.cohorts]
         time_cols = [f"time_{i}" for i in range(self.num_periods + 1)]
-        treatment_cols = [f"treatment_time_{cohort}_{i}" for cohort in self.cohorts for i in range(self.num_periods + 1)]
-        
+        treatment_cols = [
+            f"treatment_time_{cohort}_{i}"
+            for cohort in self.cohorts
+            for i in range(self.num_periods + 1)
+        ]
+
         rhs_cols = ["intercept"] + cohort_cols + time_cols + treatment_cols
         rhs_clause = ", ".join(rhs_cols)
-        
+
         # Use single query with CTE instead of temp table
         self.compression_query = f"""
         {self.design_matrix_cte}
@@ -526,12 +554,12 @@ class DuckMundlakEventStudy(DuckReg):
         FROM transformed_panel_data
         GROUP BY {rhs_clause}
         """
-        
+
         self.df_compressed = self.conn.execute(self.compression_query).fetchdf()
         self.df_compressed[f"mean_{self.outcome_var}"] = (
             self.df_compressed[f"sum_{self.outcome_var}"] / self.df_compressed["count"]
         )
-        
+
         # Store for later use
         self.rhs_cols = rhs_cols
 
