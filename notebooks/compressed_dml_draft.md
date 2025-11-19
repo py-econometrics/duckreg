@@ -97,9 +97,21 @@ These are exactly the statistics computable via a standard SQL `GROUP BY` query.
 2.  **In-Memory Estimation:** The result of step 1 (size $G \ll N$) is loaded into memory (e.g., Python/Pandas).
 3.  **Solution:** We solve the linear system for $\hat{\beta}$ using the derived formulas.
 
-### 3.2 Inference via Cluster Bootstrap
+### 3.2 Inference: Cluster Bootstrap vs. Analytic SEs
 
-Since the data is compressed to groups $g$, and groups effectively form the clusters of independence, we implement the bootstrap by resampling the *compressed rows* (weighted by their counts). This provides valid cluster-robust inference without re-accessing the raw data.
+Inference for the parameter $\beta$ can be conducted in two primary ways, depending on the assumptions about the error structure.
+
+**Cluster Bootstrap:**
+Since the data is compressed to groups $g$, and groups effectively form the clusters of independence, we can implement the bootstrap by resampling the *compressed rows* (weighted by their counts).
+*   **Advantages:** Provides valid cluster-robust standard errors (CRSE) without re-accessing the raw data. Robust to heteroskedasticity and within-group correlation.
+*   **Procedure:** In each bootstrap iteration, sample groups $g^*$ with replacement from $\mathcal{G}$. Re-compute $\hat{\beta}^*$ using the compressed statistics of the sampled groups.
+
+**Analytic HC1 Standard Errors:**
+If one is willing to assume independent errors (or relies on the asymptotic equivalence of the LOO estimator to the standard OLS estimator with dummy variables), standard heteroskedasticity-robust (HC1) errors can be computed.
+*   **Equivalence:** This corresponds to the variance estimate one would obtain from a vanilla IID bootstrap or the standard White's estimator.
+*   **Calculation:** The "bread" $(X'X)^{-1}$ is already computed during estimation. The "meat" $\sum \tilde{W}_i \tilde{W}_i' \hat{\varepsilon}_i^2$ can also be approximated or bounded using group-level sufficient statistics, though exact calculation typically requires higher-order moments (e.g., $\sum Y^2$, which we also compute).
+
+We primarily advocate for the **Cluster Bootstrap** as it is computationally inexpensive on the compressed data ($G$ is small) and provides a more conservative inference strategy that respects the grouped nature of the data generation process.
 
 ## 4. Performance
 
@@ -107,7 +119,13 @@ Since the data is compressed to groups $g$, and groups effectively form the clus
 *   **Storage:** Only requires storing the compressed summary statistics.
 *   **Scalability:** Demonstrated on datasets with $N=10^7$ rows, reducing estimation time from minutes (using standard packages) to seconds.
 
-## 5. Conclusion
+## 5. Discussion and Extensions
+
+*   **Multivariate Treatments:** The algebraic compression naturally extends to vector $W_i$ by computing the full scatter matrix $S_{WW}^{(g)}$.
+*   **Comparison to Fixed Effects:** While similar to Fixed Effects (FE), the LOO approach avoids the "incidental parameter bias" in non-linear extensions and provides a rigorous motivation for partialling out controls in a DML context.
+*   **Limitations:** Requires $X_i$ to be discrete or discretized. Continuous controls must be binned.
+
+## 6. Conclusion
 
 Compressed DML bridges the gap between rigorous econometric theory and modern data engineering. By pushing the heavy lifting to the database engine via sufficient statistics, we enable sophisticated causal inference on massive datasets with minimal infrastructure overhead.
 

@@ -223,15 +223,14 @@ class DuckRegression(DuckReg):
 
         return vcov
 
-    def summary(
-        self,
-    ):  # ovveride the summary method to include the heteroskedasticity-robust variance covariance matrix when available
+    def summary(self):
         if self.n_bootstraps > 0 or (hasattr(self, "se") and self.se == "hc1"):
             return {
                 "point_estimate": self.point_estimate,
                 "standard_error": np.sqrt(np.diag(self.vcov)),
             }
         return {"point_estimate": self.point_estimate}
+
 
 
 ################################################################################
@@ -357,6 +356,102 @@ class DuckDML(DuckReg):
 
         return beta_hat
 
+    def fit_vcov(self):
+        """
+        Compute analytic cluster-robust standard errors (CRSE) from compressed data.
+        The groups (strata) are treated as the clusters.
+        """
+        self.se = "hc1"
+        df = self.df_compressed
+        if df.empty:
+            self.vcov = np.full((len(self.treatment_vars), len(self.treatment_vars)), np.nan)
+            return
+
+        n_treat = len(self.treatment_vars)
+        n_g = df["n_g"].values
+        weight = n_g / (n_g - 1) ** 2
+        w_reshaped = weight.reshape(-1, 1, 1)
+        n_g_reshaped = n_g.reshape(-1, 1, 1)
+
+        # --- 1. Reconstruct S matrices ---
+        S_X = np.stack([df[f"sum_{x}"] for x in self.treatment_vars], axis=1)  # (G, K)
+        S_Y = df[f"sum_y"].values.reshape(-1, 1)  # (G, 1)
+        
+        # S_XX (G, K, K)
+        S_XX = np.zeros((len(df), n_treat, n_treat))
+        for i, x1 in enumerate(self.treatment_vars):
+            for j, x2 in enumerate(self.treatment_vars):
+                if j >= i:
+                    col = f"sum_{x1}_{x2}"
+                    S_XX[:, i, j] = df[col]
+                    S_XX[:, j, i] = df[col]
+
+        # S_XY (G, K, 1)
+        S_XY = np.zeros((len(df), n_treat, 1))
+        for i, x in enumerate(self.treatment_vars):
+            col = f"sum_{self.outcome_var}_{x}"
+            S_XY[:, i, 0] = df[col]
+
+        # --- 2. Compute Bread: (X'X)^-1 ---
+        # M_XX^(g) = w_g * (N_g * S_XX - S_X * S_X')
+        S_X_outer = np.einsum("bi,bj->bij", S_X, S_X)
+        M_XX_g = w_reshaped * (n_g_reshaped * S_XX - S_X_outer)
+        
+        total_XTX = M_XX_g.sum(axis=0)
+        try:
+            bread = np.linalg.inv(total_XTX)
+        except np.linalg.LinAlgError:
+            self.vcov = np.full((n_treat, n_treat), np.nan)
+            return
+
+        # --- 3. Compute Point Estimate ---
+        # M_XY^(g) = w_g * (N_g * S_XY - S_X * S_Y)
+        S_X_expanded = S_X.reshape(len(df), n_treat, 1)
+        S_Y_expanded = S_Y.reshape(len(df), 1, 1)
+        S_X_S_Y = S_X_expanded * S_Y_expanded
+        
+        M_XY_g = w_reshaped * (n_g_reshaped * S_XY - S_X_S_Y)
+        total_XTY = M_XY_g.sum(axis=0)
+        
+        beta_hat = bread @ total_XTY # (K, 1)
+        # Ensure beta_hat matches what estimate() would return
+        # self.point_estimate should ideally be set by estimate(), but fit_vcov might be called independently
+        # or we might want to reuse this beta.
+        # Usually fit() calls estimate(), then fit_vcov().
+        # If fit_vcov is called, we use this beta for residuals.
+        
+        # --- 4. Compute Meat: sum U_g * U_g' ---
+        # U_g = M_XY^(g) - M_XX^(g) @ beta
+        # M_XY_g is (G, K, 1)
+        # M_XX_g is (G, K, K)
+        # beta_hat is (K, 1)
+        # U_g = M_XY_g - np.matmul(M_XX_g, beta_hat)
+        
+        # Broadcast beta for batch matmul
+        beta_broadcast = beta_hat.reshape(1, n_treat, 1)
+        predicted_g = np.matmul(M_XX_g, beta_broadcast) # (G, K, 1)
+        U_g = M_XY_g - predicted_g # (G, K, 1)
+        
+        # Meat = sum(U_g @ U_g.T)
+        # U_g is (G, K, 1). Outer product is (G, K, K)
+        # einsum 'gki,gji->gkj'
+        U_g_outer = np.einsum("gki,gji->gkj", U_g, U_g)
+        meat = U_g_outer.sum(axis=0)
+        
+        # --- 5. Sandwich ---
+        self.vcov = bread @ meat @ bread
+        
+        # Correction factor for finite clusters? 
+        # G / (G-1) * (N-1)/(N-K)?
+        # Standard Stata cluster robust usually applies G/(G-1) * (N-1)/(N-K).
+        # Here G is number of strata. N is total observations.
+        N = n_g.sum()
+        G = len(df)
+        K = n_treat
+        if G > 1 and N > K:
+             c = (G / (G - 1)) * ((N - 1) / (N - K))
+             self.vcov *= c
+
     def estimate(self):
         return self._calculate_beta_from_compressed(self.df_compressed)
 
@@ -380,6 +475,15 @@ class DuckDML(DuckReg):
         if self.vcov.ndim == 0:
             self.vcov = np.expand_dims(self.vcov, axis=0)
         return self.vcov
+
+    def summary(self):
+        if self.n_bootstraps > 0 or (hasattr(self, "se") and self.se == "hc1"):
+            return {
+                "point_estimate": self.point_estimate,
+                "standard_error": np.sqrt(np.diag(self.vcov)),
+            }
+        return {"point_estimate": self.point_estimate}
+
 
 
 
