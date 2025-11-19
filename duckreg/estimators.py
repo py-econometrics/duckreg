@@ -242,7 +242,7 @@ class DuckDML(DuckReg):
         db_name: str,
         table_name: str,
         outcome_var: str,
-        treatment_var: str,
+        treatment_var: str | list[str],
         discrete_covars: list[str],
         seed: int,
         n_bootstraps: int = 200,
@@ -256,7 +256,10 @@ class DuckDML(DuckReg):
             **kwargs,
         )
         self.outcome_var = outcome_var
-        self.treatment_var = treatment_var
+        if isinstance(treatment_var, str):
+            self.treatment_vars = [treatment_var]
+        else:
+            self.treatment_vars = treatment_var
         self.discrete_covars = discrete_covars
 
     def prepare_data(self):
@@ -266,17 +269,29 @@ class DuckDML(DuckReg):
         pass
 
     def compress_data(self):
-        y, x = self.outcome_var, self.treatment_var
+        y = self.outcome_var
+        x_vars = self.treatment_vars
         group_by_cols = ", ".join(self.discrete_covars)
+
+        # Aggregations
+        aggs = [
+            f"COUNT(*) as n_g",
+            f"SUM({y}) as sum_y",
+        ]
+        # Sums of X and XY
+        for x in x_vars:
+            aggs.append(f"SUM({x}) as sum_{x}")
+            aggs.append(f"SUM({y} * {x}) as sum_{self.outcome_var}_{x}")
+
+        # Sums of Cross-products XX
+        for i, x1 in enumerate(x_vars):
+            for x2 in x_vars[i:]:
+                aggs.append(f"SUM({x1} * {x2}) as sum_{x1}_{x2}")
 
         self.agg_query = f"""
         SELECT
             {group_by_cols},
-            COUNT(*) as n_g,
-            SUM({y}) as sum_y,
-            SUM({x}) as sum_x,
-            SUM(POW({x}, 2)) as sum_xx,
-            SUM({y} * {x}) as sum_xy
+            {", ".join(aggs)}
         FROM {self.table_name}
         GROUP BY {group_by_cols}
         HAVING COUNT(*) > 1
@@ -285,27 +300,61 @@ class DuckDML(DuckReg):
 
     def _calculate_beta_from_compressed(self, data: pd.DataFrame) -> np.ndarray:
         if data.empty:
-            return np.array([np.nan])
+            return np.full(len(self.treatment_vars), np.nan)
 
         df = data
+        n_treat = len(self.treatment_vars)
 
+        n_g = df["n_g"].values
         # Apply the N_g / (N_g - 1)^2 scaling factor from the LOO formula
-        weight_g = df["n_g"] / (df["n_g"] - 1) ** 2
+        weight = n_g / (n_g - 1) ** 2
 
-        # Numerator: Sum over g of weight_g * [N_g * S_xy - S_x * S_y]
-        numerator_g = weight_g * (df["n_g"] * df["sum_xy"] - df["sum_x"] * df["sum_y"])
+        # Construct S_X (n_groups x n_treat)
+        S_X = np.stack([df[f"sum_{x}"] for x in self.treatment_vars], axis=1)
 
-        # Denominator: Sum over g of weight_g * [N_g * S_xx - S_x^2]
-        denominator_g = weight_g * (df["n_g"] * df["sum_xx"] - df["sum_x"] ** 2)
+        # Construct S_Y (n_groups x 1)
+        S_Y = df[f"sum_y"].values.reshape(-1, 1)
 
-        total_numerator = numerator_g.sum()
-        total_denominator = denominator_g.sum()
+        # Construct S_XX (n_groups x n_treat x n_treat)
+        S_XX = np.zeros((len(df), n_treat, n_treat))
+        for i, x1 in enumerate(self.treatment_vars):
+            for j, x2 in enumerate(self.treatment_vars):
+                if j >= i:
+                    col = f"sum_{x1}_{x2}"
+                    # If we computed only upper triangular, we assume we can find it.
+                    S_XX[:, i, j] = df[col]
+                    S_XX[:, j, i] = df[col]
 
-        if total_denominator == 0:
-            return np.array([np.nan])
+        # Construct S_XY (n_groups x n_treat x 1)
+        S_XY = np.zeros((len(df), n_treat, 1))
+        for i, x in enumerate(self.treatment_vars):
+            col = f"sum_{self.outcome_var}_{x}"
+            S_XY[:, i, 0] = df[col]
 
-        beta_hat = total_numerator / total_denominator
-        return np.array([beta_hat])
+        # Broadcasting weights and n_g
+        w_reshaped = weight.reshape(-1, 1, 1)
+        n_g_reshaped = n_g.reshape(-1, 1, 1)
+
+        # Numerator (Total XTY): Sum over g of w * [n_g * S_XY - S_X * S_Y]
+        S_X_expanded = S_X.reshape(len(df), n_treat, 1)
+        S_Y_expanded = S_Y.reshape(len(df), 1, 1)
+        S_X_S_Y = S_X_expanded * S_Y_expanded
+
+        XTY_g = w_reshaped * (n_g_reshaped * S_XY - S_X_S_Y)
+        total_XTY = XTY_g.sum(axis=0)  # (n_treat, 1)
+
+        # Denominator (Total XTX): Sum over g of w * [n_g * S_XX - S_X * S_X^T]
+        S_X_outer = np.einsum("bi,bj->bij", S_X, S_X)
+
+        XTX_g = w_reshaped * (n_g_reshaped * S_XX - S_X_outer)
+        total_XTX = XTX_g.sum(axis=0)  # (n_treat, n_treat)
+
+        try:
+            beta_hat = np.linalg.solve(total_XTX, total_XTY).flatten()
+        except np.linalg.LinAlgError:
+            beta_hat = np.full(n_treat, np.nan)
+
+        return beta_hat
 
     def estimate(self):
         return self._calculate_beta_from_compressed(self.df_compressed)
@@ -317,7 +366,8 @@ class DuckDML(DuckReg):
         of the discrete covariates.
         """
         n_groups = len(self.df_compressed)
-        boot_coefs = np.zeros((self.n_bootstraps, 1))
+        n_treat = len(self.treatment_vars)
+        boot_coefs = np.zeros((self.n_bootstraps, n_treat))
 
         for b in tqdm(range(self.n_bootstraps), desc="Bootstrapping"):
             resampled_indices = self.rng.choice(n_groups, size=n_groups, replace=True)
