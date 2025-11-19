@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from typing import Union
 from tqdm import tqdm
 from .demean import demean, _convert_to_int
 from .duckreg import DuckReg, wls
@@ -242,7 +243,7 @@ class DuckDML(DuckReg):
         db_name: str,
         table_name: str,
         outcome_var: str,
-        treatment_var: str | list[str],
+        treatment_var: Union[str, list[str]],
         discrete_covars: list[str],
         seed: int,
         n_bootstraps: int = 200,
