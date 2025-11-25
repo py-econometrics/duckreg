@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from typing import Union
 from tqdm import tqdm
 from .demean import demean, _convert_to_int
 from .duckreg import DuckReg, wls
@@ -222,9 +223,7 @@ class DuckRegression(DuckReg):
 
         return vcov
 
-    def summary(
-        self,
-    ):  # ovveride the summary method to include the heteroskedasticity-robust variance covariance matrix when available
+    def summary(self):
         if self.n_bootstraps > 0 or (hasattr(self, "se") and self.se == "hc1"):
             return {
                 "point_estimate": self.point_estimate,
@@ -233,9 +232,275 @@ class DuckRegression(DuckReg):
         return {"point_estimate": self.point_estimate}
 
 
+
 ################################################################################
 
 
+class DuckDML(DuckReg):
+    def __init__(
+        self,
+        db_name: str,
+        table_name: str,
+        outcome_var: str,
+        treatment_var: Union[str, list[str]],
+        discrete_covars: list[str],
+        seed: int,
+        n_bootstraps: int = 200,
+        **kwargs,
+    ):
+        super().__init__(
+            db_name=db_name,
+            table_name=table_name,
+            seed=seed,
+            n_bootstraps=n_bootstraps,
+            **kwargs,
+        )
+        self.outcome_var = outcome_var
+        if isinstance(treatment_var, str):
+            self.treatment_vars = [treatment_var]
+        else:
+            self.treatment_vars = treatment_var
+        self.discrete_covars = discrete_covars
+
+    def prepare_data(self):
+        pass
+
+    def collect_data(self):
+        pass
+
+    def compress_data(self):
+        y = self.outcome_var
+        x_vars = self.treatment_vars
+        group_by_cols = ", ".join(self.discrete_covars)
+
+        # Aggregations
+        aggs = [
+            f"COUNT(*) as n_g",
+            f"SUM({y}) as sum_y",
+            f"SUM(POW({y}, 2)) as sum_y_sq",
+        ]
+        # Sums of X and XY
+        for x in x_vars:
+            aggs.append(f"SUM({x}) as sum_{x}")
+            aggs.append(f"SUM({y} * {x}) as sum_{self.outcome_var}_{x}")
+
+        # Sums of Cross-products XX
+        for i, x1 in enumerate(x_vars):
+            for x2 in x_vars[i:]:
+                aggs.append(f"SUM({x1} * {x2}) as sum_{x1}_{x2}")
+
+        self.agg_query = f"""
+        SELECT
+            {group_by_cols},
+            {", ".join(aggs)}
+        FROM {self.table_name}
+        GROUP BY {group_by_cols}
+        HAVING COUNT(*) > 1
+        """
+        self.df_compressed = self.conn.execute(self.agg_query).fetchdf()
+
+    def _calculate_beta_from_compressed(self, data: pd.DataFrame) -> np.ndarray:
+        if data.empty:
+            return np.full(len(self.treatment_vars), np.nan)
+
+        df = data
+        n_treat = len(self.treatment_vars)
+
+        n_g = df["n_g"].values
+        # Apply the N_g / (N_g - 1)^2 scaling factor from the LOO formula
+        weight = n_g / (n_g - 1) ** 2
+
+        # Construct S_X (n_groups x n_treat)
+        S_X = np.stack([df[f"sum_{x}"] for x in self.treatment_vars], axis=1)
+
+        # Construct S_Y (n_groups x 1)
+        S_Y = df[f"sum_y"].values.reshape(-1, 1)
+
+        # Construct S_XX (n_groups x n_treat x n_treat)
+        S_XX = np.zeros((len(df), n_treat, n_treat))
+        for i, x1 in enumerate(self.treatment_vars):
+            for j, x2 in enumerate(self.treatment_vars):
+                if j >= i:
+                    col = f"sum_{x1}_{x2}"
+                    # If we computed only upper triangular, we assume we can find it.
+                    S_XX[:, i, j] = df[col]
+                    S_XX[:, j, i] = df[col]
+
+        # Construct S_XY (n_groups x n_treat x 1)
+        S_XY = np.zeros((len(df), n_treat, 1))
+        for i, x in enumerate(self.treatment_vars):
+            col = f"sum_{self.outcome_var}_{x}"
+            S_XY[:, i, 0] = df[col]
+
+        # Broadcasting weights and n_g
+        w_reshaped = weight.reshape(-1, 1, 1)
+        n_g_reshaped = n_g.reshape(-1, 1, 1)
+
+        # Numerator (Total XTY): Sum over g of w * [n_g * S_XY - S_X * S_Y]
+        S_X_expanded = S_X.reshape(len(df), n_treat, 1)
+        S_Y_expanded = S_Y.reshape(len(df), 1, 1)
+        S_X_S_Y = S_X_expanded * S_Y_expanded
+
+        XTY_g = w_reshaped * (n_g_reshaped * S_XY - S_X_S_Y)
+        total_XTY = XTY_g.sum(axis=0)  # (n_treat, 1)
+
+        # Denominator (Total XTX): Sum over g of w * [n_g * S_XX - S_X * S_X^T]
+        S_X_outer = np.einsum("bi,bj->bij", S_X, S_X)
+
+        XTX_g = w_reshaped * (n_g_reshaped * S_XX - S_X_outer)
+        total_XTX = XTX_g.sum(axis=0)  # (n_treat, n_treat)
+
+        try:
+            beta_hat = np.linalg.solve(total_XTX, total_XTY).flatten()
+        except np.linalg.LinAlgError:
+            beta_hat = np.full(n_treat, np.nan)
+
+        return beta_hat
+
+    def fit_vcov(self):
+        """
+        Compute analytic HC1 standard errors using compressed data.
+        Assumes homoskedasticity within strata to approximate the meat matrix.
+        """
+        self.se = "hc1"
+        df = self.df_compressed
+        if df.empty:
+            self.vcov = np.full((len(self.treatment_vars), len(self.treatment_vars)), np.nan)
+            return
+
+        n_treat = len(self.treatment_vars)
+        n_g = df["n_g"].values
+        
+        # --- 1. Reconstruct S matrices ---
+        S_X = np.stack([df[f"sum_{x}"] for x in self.treatment_vars], axis=1)
+        S_Y = df[f"sum_y"].values.reshape(-1, 1)
+        S_Y_sq = df["sum_y_sq"].values.reshape(-1, 1)
+        
+        S_XX = np.zeros((len(df), n_treat, n_treat))
+        for i, x1 in enumerate(self.treatment_vars):
+            for j, x2 in enumerate(self.treatment_vars):
+                if j >= i:
+                    col = f"sum_{x1}_{x2}"
+                    S_XX[:, i, j] = df[col]
+                    S_XX[:, j, i] = df[col]
+
+        S_XY = np.zeros((len(df), n_treat, 1))
+        for i, x in enumerate(self.treatment_vars):
+            col = f"sum_{self.outcome_var}_{x}"
+            S_XY[:, i, 0] = df[col]
+
+        # --- 2. Compute Residual Cross-Products Q ---
+        # Factor from LOO derivation: N_g / (N_g - 1)^2
+        # Note: Q_WW is what we called M_XX_g before, but without the weight w_g?
+        # No, previously M_XX_g = w * (N * S_XX - S_X S_X'). 
+        # w = N / (N-1)^2.
+        # So Q_WW^(g) = sum_{i in g} tilde_W_i tilde_W_i' IS exactly M_XX_g.
+        
+        weight = n_g / (n_g - 1) ** 2
+        w_reshaped = weight.reshape(-1, 1, 1)
+        n_g_reshaped = n_g.reshape(-1, 1, 1)
+
+        # Q_WW (G, K, K) = sum tilde_W tilde_W'
+        S_X_outer = np.einsum("bi,bj->bij", S_X, S_X)
+        Q_WW = w_reshaped * (n_g_reshaped * S_XX - S_X_outer)
+        
+        # Q_XY (G, K, 1) = sum tilde_W tilde_Y
+        S_X_expanded = S_X.reshape(len(df), n_treat, 1)
+        S_Y_expanded = S_Y.reshape(len(df), 1, 1)
+        Q_XY = w_reshaped * (n_g_reshaped * S_XY - S_X_expanded * S_Y_expanded)
+        
+        # Q_YY (G, 1, 1) = sum tilde_Y^2
+        # Formula: w * (N * S_YY - S_Y^2)
+        S_Y_sq_expanded = S_Y_sq.reshape(len(df), 1, 1)
+        Q_YY = w_reshaped * (n_g_reshaped * S_Y_sq_expanded - S_Y_expanded**2)
+        
+        # --- 3. Point Estimate ---
+        total_XTX = Q_WW.sum(axis=0)
+        total_XTY = Q_XY.sum(axis=0)
+        
+        try:
+            bread = np.linalg.inv(total_XTX)
+            beta_hat = bread @ total_XTY
+        except np.linalg.LinAlgError:
+            self.vcov = np.full((n_treat, n_treat), np.nan)
+            return
+        
+        self.point_estimate = beta_hat.flatten()
+
+        # --- 4. Compute Meat (Approximation) ---
+        # SSR_g = sum_{i in g} (tilde_Y_i - beta' tilde_W_i)^2
+        #       = Q_YY - 2 beta' Q_WY + beta' Q_WW beta
+        
+        beta_reshaped = beta_hat.reshape(1, n_treat, 1) # (1, K, 1)
+        
+        # Term 2: 2 * beta' * Q_XY
+        # Q_XY is (G, K, 1). beta is (1, K, 1).
+        # dot: (G, 1, K) @ (G, K, 1) -> (G, 1, 1) ?
+        # transpose Q_XY to (G, 1, K)
+        term2 = 2 * np.matmul(np.transpose(Q_XY, (0, 2, 1)), beta_reshaped) # (G, 1, 1)
+        
+        # Term 3: beta' * Q_WW * beta
+        # Q_WW is (G, K, K)
+        # beta' Q_WW -> (G, 1, K)
+        temp = np.matmul(np.transpose(beta_reshaped, (0, 2, 1)), Q_WW)
+        term3 = np.matmul(temp, beta_reshaped) # (G, 1, 1)
+        
+        SSR_g = Q_YY - term2 + term3 # (G, 1, 1)
+        
+        # Estimate sigma_g^2 = SSR_g / N_g
+        # (assuming homoskedasticity within group)
+        # Avoid division by zero if N_g=0 (unlikely due to having count>1)
+        sigma_sq_g = SSR_g / n_g_reshaped
+        
+        # Meat = sum_g (sigma_g^2 * Q_WW)
+        # Broadcast sigma_sq_g (G, 1, 1) against Q_WW (G, K, K)
+        weighted_Q_WW = sigma_sq_g * Q_WW
+        meat = weighted_Q_WW.sum(axis=0)
+        
+        # --- 5. Sandwich ---
+        self.vcov = bread @ meat @ bread
+        
+        # Finite sample correction n / (n-k)
+        N = n_g.sum()
+        K = n_treat
+        self.vcov *= (N / (N - K))
+
+    def estimate(self):
+        return self._calculate_beta_from_compressed(self.df_compressed)
+
+    def bootstrap(self):
+        """
+        Performs a cluster bootstrap by resampling the compressed groups.
+        This is equivalent to resampling clusters defined by unique combinations
+        of the discrete covariates.
+        """
+        n_groups = len(self.df_compressed)
+        n_treat = len(self.treatment_vars)
+        boot_coefs = np.zeros((self.n_bootstraps, n_treat))
+
+        for b in tqdm(range(self.n_bootstraps), desc="Bootstrapping"):
+            resampled_indices = self.rng.choice(n_groups, size=n_groups, replace=True)
+            df_boot = self.df_compressed.iloc[resampled_indices]
+            boot_coefs[b, :] = self._calculate_beta_from_compressed(df_boot)
+
+        self.vcov = np.cov(boot_coefs, rowvar=False)
+        # ensure vcov is 2D
+        if self.vcov.ndim == 0:
+            self.vcov = np.expand_dims(self.vcov, axis=0)
+        return self.vcov
+
+    def summary(self):
+        if self.n_bootstraps > 0 or (hasattr(self, "se") and self.se == "hc1"):
+            return {
+                "point_estimate": self.point_estimate,
+                "standard_error": np.sqrt(np.diag(self.vcov)),
+            }
+        return {"point_estimate": self.point_estimate}
+
+
+
+
+################################################################################
 class DuckMundlak(DuckReg):
     def __init__(
         self,
