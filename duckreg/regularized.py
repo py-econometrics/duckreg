@@ -209,9 +209,7 @@ class DuckRidge(DuckReg):
             single_lambda = self.lambda_grid[0] if hasattr(self, "lambda_grid") else 0.1
             self.point_estimate = self.estimate(single_lambda)
 
-        # Close connection if not keeping open
-        if not self.keep_connection_open:
-            self.conn.close()
+        self._close_connection()
 
         return None
 

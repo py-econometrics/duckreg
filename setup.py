@@ -24,7 +24,7 @@ setup(
     install_requires=read_requirements(),
     author="Apoorva Lal",
     author_email="lal.apoorva@gmail.com",
-    description="A package for Regression in compressed representation powered by DuckDB",
+    description="Compressed regression estimators for Ibis-compatible database backends",
     long_description=read_long_description(),
     long_description_content_type="text/markdown",
     license="MIT",
@@ -40,6 +40,12 @@ setup(
         "Programming Language :: Python :: 3.13",
     ],
     python_requires='>=3.10',
+    extras_require={
+        "databricks": ["ibis-framework[databricks]"],
+        "duckdb": ["ibis-framework[duckdb]"],
+        "postgres": ["ibis-framework[postgres]"],
+        "snowflake": ["ibis-framework[snowflake]"],
+    },
     include_package_data=True,
     package_data={
         'duckreg': ['*.py'],
