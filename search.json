@@ -1,0 +1,739 @@
+[
+  {
+    "objectID": "compression.html",
+    "href": "compression.html",
+    "title": "Compression and Estimator Lifecycle",
+    "section": "",
+    "text": "The package is built around a simple observation: if an estimator only needs sums over repeated covariate patterns, the raw data can stay in DuckDB. Python only sees a compressed table whose number of rows is the number of unique strata.",
+    "crumbs": [
+      "Home",
+      "Compression and Estimator Lifecycle"
+    ]
+  },
+  {
+    "objectID": "compression.html#the-duckreg-contract",
+    "href": "compression.html#the-duckreg-contract",
+    "title": "Compression and Estimator Lifecycle",
+    "section": "The DuckReg Contract",
+    "text": "The DuckReg Contract\nEvery estimator subclasses DuckReg and implements four methods:\n\n\nShow code\n\nclass DuckReg:\n    def fit(self):\n        self.prepare_data()\n        self.compress_data()\n        self.point_estimate = self.estimate()\n        if self.n_bootstraps &gt; 0:\n            self.vcov = self.bootstrap()\n        self.conn.close()\n\nThis makes the public workflow uniform:\n\n\nShow code\n\nmodel.fit()\nresults = model.summary()\n\nClasses that support analytic covariance add a method such as:\n\n\nShow code\n\nmodel.fit_vcov()\nresults = model.summary()\n\nThe important object created during fitting is usually model.df_compressed. It is the in-memory table passed to NumPy for the final solve.",
+    "crumbs": [
+      "Home",
+      "Compression and Estimator Lifecycle"
+    ]
+  },
+  {
+    "objectID": "compression.html#weighted-least-squares-after-compression",
+    "href": "compression.html#weighted-least-squares-after-compression",
+    "title": "Compression and Estimator Lifecycle",
+    "section": "Weighted Least Squares After Compression",
+    "text": "Weighted Least Squares After Compression\nSuppose the raw linear model is\n\\[\ny_i = x_i'\\beta + \\varepsilon_i,\n\\]\nand rows are grouped by identical covariates. For group \\(g\\):\n\\[\nn_g = \\#\\{i:x_i=x_g\\},\n\\qquad\n\\bar{y}_g = \\frac{1}{n_g}\\sum_{i:x_i=x_g} y_i.\n\\]\nThe full-sample least-squares objective can be written as\n\\[\n\\sum_i (y_i - x_i'\\beta)^2\n=\n\\sum_g \\sum_{i \\in g} (y_i - x_g'\\beta)^2.\n\\]\nThe first-order condition depends on the raw data only through \\(n_g\\) and \\(\\bar{y}_g\\):\n\\[\n\\sum_i x_i(y_i - x_i'\\beta)\n=\n\\sum_g n_g x_g(\\bar{y}_g - x_g'\\beta).\n\\]\nSo the compressed estimator is weighted least squares:\n\\[\n\\hat{\\beta}\n=\n\\left(\\sum_g n_g x_g x_g'\\right)^{-1}\n\\left(\\sum_g n_g x_g \\bar{y}_g\\right).\n\\]\nThe implementation uses frequency weights:\n\n\nShow code\n\ndef wls(X, y, n):\n    N = sqrt(n)\n    Xn = X * N\n    yn = y * N\n    return np.linalg.lstsq(Xn, yn, rcond=None)[0]",
+    "crumbs": [
+      "Home",
+      "Compression and Estimator Lifecycle"
+    ]
+  },
+  {
+    "objectID": "compression.html#what-the-sql-aggregation-stores",
+    "href": "compression.html#what-the-sql-aggregation-stores",
+    "title": "Compression and Estimator Lifecycle",
+    "section": "What The SQL Aggregation Stores",
+    "text": "What The SQL Aggregation Stores\nFor DuckRegression, compress_data() groups by the right-hand-side covariates and fixed-effect columns:\n\n\nShow code\n\nSELECT\n  x1, x2, fe1,\n  COUNT(*) AS count,\n  SUM(y) AS sum_y,\n  SUM(POW(y, 2)) AS sum_y_sq\nFROM data\nGROUP BY x1, x2, fe1\n\nThe compressed table is then augmented with\n\\[\n\\bar{y}_g = \\frac{\\text{sum\\_y}_g}{\\text{count}_g}.\n\\]\nFor multiple outcomes, the same pattern is repeated for every outcome variable.",
+    "crumbs": [
+      "Home",
+      "Compression and Estimator Lifecycle"
+    ]
+  },
+  {
+    "objectID": "compression.html#fixed-effects",
+    "href": "compression.html#fixed-effects",
+    "title": "Compression and Estimator Lifecycle",
+    "section": "Fixed Effects",
+    "text": "Fixed Effects\nThe formula parser supports a fixed-effect separator:\n\n\nShow code\n\nmodel = DuckRegression(\n    db_name=\"large_dataset.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 | unit + time\",\n    cluster_col=\"unit\",\n    seed=42,\n)\n\nIf fixed effects are present, collect_data() converts the fixed-effect columns to integer ids, then calls demean() on both \\(y\\) and \\(X\\) using the compressed-cell frequency weights. The demeaning routine uses alternating projections:\n\\[\nz \\leftarrow z - E_w[z \\mid \\text{fixed effect}]\n\\]\ncycling over each fixed-effect dimension until convergence.",
+    "crumbs": [
+      "Home",
+      "Compression and Estimator Lifecycle"
+    ]
+  },
+  {
+    "objectID": "compression.html#compression-is-a-contract",
+    "href": "compression.html#compression-is-a-contract",
+    "title": "Compression and Estimator Lifecycle",
+    "section": "Compression Is A Contract",
+    "text": "Compression Is A Contract\nCompression is exact when the grouped statistics preserve the quantities that enter the estimator. For ordinary least squares with discrete covariates, that contract is exact. For cluster-robust inference, the grouping must also preserve cluster membership if one wants exact analytic cluster scores. Otherwise, bootstrap resampling has to return to the raw table or to a cluster-preserving compressed table.",
+    "crumbs": [
+      "Home",
+      "Compression and Estimator Lifecycle"
+    ]
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "duckreg Documentation",
+    "section": "",
+    "text": "duckreg estimates regressions by pushing the large part of the problem into DuckDB. The library compresses raw rows into sufficient statistics, loads the much smaller grouped table into memory, and then solves weighted linear, generalized linear, panel, DML, or ridge problems.\nThe shared estimator lifecycle is:",
+    "crumbs": [
+      "Home",
+      "duckreg Documentation"
+    ]
+  },
+  {
+    "objectID": "index.html#api-map",
+    "href": "index.html#api-map",
+    "title": "duckreg Documentation",
+    "section": "API Map",
+    "text": "API Map\n\n\n\n\n\n\n\n\nObject\nModule\nUse\n\n\n\n\nDuckReg\nduckreg.duckreg\nAbstract lifecycle and common database connection handling.\n\n\nDuckRegression\nduckreg.estimators\nCompressed OLS over discrete covariate cells, with optional fixed-effect demeaning.\n\n\nDuckMundlak\nduckreg.estimators\nOne-way or two-way Mundlak panel regression using generated unit and time means.\n\n\nDuckMundlakEventStudy\nduckreg.estimators\nCohort-by-time event-study design compressed before weighted least squares.\n\n\nDuckDoubleDemeaning\nduckreg.estimators\nTwo-way double-demeaned treatment estimator.\n\n\nDuckDML\nduckreg.estimators\nCompressed leave-one-out partial linear estimator for discrete controls.\n\n\nDuckLogisticRegression\nduckreg.estimators\nCompressed canonical logit via grouped Fisher scoring.\n\n\nDuckPoissonRegression\nduckreg.estimators\nCompressed canonical Poisson via grouped Fisher scoring.\n\n\nDuckMultinomialLogisticRegression\nduckreg.estimators\nExact baseline-category multinomial logit for moderate label counts.\n\n\nDuckPoissonMultinomialRegression\nduckreg.estimators\nLabel-wise Poisson decomposition for many count labels.\n\n\nDuckRidge\nduckreg.regularized\nCompressed ridge regression, lambda paths, and cross-validation.\n\n\ndemean\nduckreg.demean\nNumba alternating-projection demeaning for fixed effects.",
+    "crumbs": [
+      "Home",
+      "duckreg Documentation"
+    ]
+  },
+  {
+    "objectID": "index.html#when-to-use-which-estimator",
+    "href": "index.html#when-to-use-which-estimator",
+    "title": "duckreg Documentation",
+    "section": "When To Use Which Estimator",
+    "text": "When To Use Which Estimator\n\n\n\n\n\n\n\nProblem\nPreferred class\n\n\n\n\nSaturated linear regression with discrete regressors\nDuckRegression\n\n\nLinear regression with fixed effects in the formula\nDuckRegression with Y ~ X | fe1 + fe2\n\n\nPanel treatment effects with unit and time means\nDuckMundlak\n\n\nEvent-study coefficients by cohort and calendar time\nDuckMundlakEventStudy\n\n\nTwo-way fixed-effect style residualized treatment\nDuckDoubleDemeaning\n\n\nPartial linear model with high-dimensional discrete controls\nDuckDML\n\n\nBinary outcome\nDuckLogisticRegression\n\n\nCount outcome\nDuckPoissonRegression\n\n\nModerate number of unordered labels\nDuckMultinomialLogisticRegression\n\n\nMany count labels, such as token counts\nDuckPoissonMultinomialRegression\n\n\nRegularized linear model over compressed covariate cells\nDuckRidge",
+    "crumbs": [
+      "Home",
+      "duckreg Documentation"
+    ]
+  },
+  {
+    "objectID": "index.html#core-constraint",
+    "href": "index.html#core-constraint",
+    "title": "duckreg Documentation",
+    "section": "Core Constraint",
+    "text": "Core Constraint\nCompression is exact when the variables needed by the estimator are constant or aggregable inside the grouping cells. The canonical example is OLS with discrete covariates. If all rows in cell \\(g\\) have covariates \\(x_g\\), then the estimator only needs\n\\[\nn_g,\\qquad\n\\sum_{i \\in g} y_i,\\qquad\n\\sum_{i \\in g} y_i^2\n\\]\nfor point estimates and analytic HC1-style inference.\nFor GLMs, the same idea works because grouped binomial, Poisson, and multinomial likelihoods are functions of counts and sums. For panel and DML estimators, prepare_data() creates generated regressors or cross-products before compression.",
+    "crumbs": [
+      "Home",
+      "duckreg Documentation"
+    ]
+  },
+  {
+    "objectID": "index.html#repository-examples",
+    "href": "index.html#repository-examples",
+    "title": "duckreg Documentation",
+    "section": "Repository Examples",
+    "text": "Repository Examples\nThe examples page condenses the existing notebooks:\n\n\n\n\n\n\n\nNotebook\nCovered material\n\n\n\n\nnotebooks/introduction.ipynb\nBasic DuckRegression, HC1 standard errors, cluster bootstrap, multiple outcomes, Mundlak, double demeaning.\n\n\nnotebooks/event_study.ipynb\nStatic Mundlak specifications and dynamic event studies.\n\n\nnotebooks/duckdml.ipynb\nCompressed leave-one-out DML.\n\n\nnotebooks/regularized.ipynb\nRidge compression, lambda paths, and cross-validation.\n\n\nnotebooks/glm.ipynb\nLogistic, Poisson, multinomial logit, and many-label Poisson decomposition.",
+    "crumbs": [
+      "Home",
+      "duckreg Documentation"
+    ]
+  },
+  {
+    "objectID": "index.html#current-caveats",
+    "href": "index.html#current-caveats",
+    "title": "duckreg Documentation",
+    "section": "Current Caveats",
+    "text": "Current Caveats\nSome APIs are newer than the original linear-regression core. In the current branch, GLM bootstrap methods return empty arrays rather than implemented resampling estimators, so use fit_vcov() for GLM model-based covariance and keep n_bootstraps=0 unless the bootstrap path is updated.\nDuckRidge intentionally leaves bootstrap standard errors unimplemented. Ridge inference needs a separate bias and regularization-aware treatment.",
+    "crumbs": [
+      "Home",
+      "duckreg Documentation"
+    ]
+  },
+  {
+    "objectID": "panel.html",
+    "href": "panel.html",
+    "title": "Panel Estimators",
+    "section": "",
+    "text": "The panel estimators encode common fixed-effect designs as generated regressors before compression. The central theme is the same as the base estimator: create the relevant design matrix in DuckDB, group identical design rows, and solve weighted least squares in memory.",
+    "crumbs": [
+      "Home",
+      "Panel Estimators"
+    ]
+  },
+  {
+    "objectID": "panel.html#duckmundlak",
+    "href": "panel.html#duckmundlak",
+    "title": "Panel Estimators",
+    "section": "DuckMundlak",
+    "text": "DuckMundlak\nDuckMundlak augments each row with unit-level and, optionally, time-level averages of the covariates. For covariate \\(W_{it}\\), the two-way Mundlak design contains\n\\[\nW_{it},\\qquad\n\\bar{W}_{i \\cdot},\\qquad\n\\bar{W}_{\\cdot t}.\n\\]\nThe corresponding model is\n\\[\nY_{it}\n=\n\\alpha\n+ W_{it}'\\beta\n+ \\bar{W}_{i \\cdot}'\\gamma\n+ \\bar{W}_{\\cdot t}'\\delta\n+ u_{it}.\n\\]\nConstructor:\n\n\nShow code\n\nDuckMundlak(\n    db_name: str,\n    table_name: str,\n    outcome_var: str,\n    covariates: list,\n    seed: int,\n    unit_col: str,\n    time_col: str | None = None,\n    n_bootstraps: int = 100,\n    cluster_col: str | None = None,\n)\n\nExample from notebooks/introduction.ipynb:\n\n\nShow code\n\nfrom duckreg.estimators import DuckMundlak\n\nmundlak = DuckMundlak(\n    db_name=\"panel_data.db\",\n    table_name=\"panel_data\",\n    outcome_var=\"Y\",\n    covariates=[\"W\"],\n    unit_col=\"unit\",\n    time_col=\"time\",\n    cluster_col=\"unit\",\n    n_bootstraps=50,\n    seed=929,\n)\nmundlak.fit()\nmundlak.summary()\n\n\nData Preparation\nprepare_data() creates temporary tables of unit and time averages, then joins them back to the raw table:\n\n\nShow code\n\nCREATE TEMP TABLE unit_avgs AS\nSELECT unit, AVG(W) AS avg_W_unit\nFROM panel_data\nGROUP BY unit\n\nIf time_col is provided, it also creates time_avgs. The compressed design groups by original covariates and generated averages.",
+    "crumbs": [
+      "Home",
+      "Panel Estimators"
+    ]
+  },
+  {
+    "objectID": "panel.html#duckdoubledemeaning",
+    "href": "panel.html#duckdoubledemeaning",
+    "title": "Panel Estimators",
+    "section": "DuckDoubleDemeaning",
+    "text": "DuckDoubleDemeaning\nDuckDoubleDemeaning constructs the two-way residualized treatment\n\\[\n\\ddot{W}_{it}\n=\nW_{it}\n- \\bar{W}_{i \\cdot}\n- \\bar{W}_{\\cdot t}\n+ \\bar{W}_{\\cdot \\cdot}.\n\\]\nThen it estimates\n\\[\nY_{it} = \\alpha + \\tau \\ddot{W}_{it} + u_{it}\n\\]\non compressed values of \\(\\ddot{W}_{it}\\).\nConstructor:\n\n\nShow code\n\nDuckDoubleDemeaning(\n    db_name: str,\n    table_name: str,\n    outcome_var: str,\n    treatment_var: str,\n    unit_col: str,\n    time_col: str,\n    seed: int,\n    n_bootstraps: int = 100,\n    cluster_col: str | None = None,\n)\n\nNotebook example:\n\n\nShow code\n\nfrom duckreg.estimators import DuckDoubleDemeaning\n\ndouble_demean = DuckDoubleDemeaning(\n    db_name=\"panel_data.db\",\n    table_name=\"panel_data\",\n    outcome_var=\"Y\",\n    treatment_var=\"W\",\n    unit_col=\"unit\",\n    time_col=\"time\",\n    cluster_col=\"unit\",\n    n_bootstraps=100,\n    seed=828,\n)\ndouble_demean.fit()\ndouble_demean.summary()",
+    "crumbs": [
+      "Home",
+      "Panel Estimators"
+    ]
+  },
+  {
+    "objectID": "panel.html#duckmundlakeventstudy",
+    "href": "panel.html#duckmundlakeventstudy",
+    "title": "Panel Estimators",
+    "section": "DuckMundlakEventStudy",
+    "text": "DuckMundlakEventStudy\nDuckMundlakEventStudy builds a cohort-by-time event-study design in DuckDB. It first computes the treatment cohort\n\\[\nG_i = \\min\\{t : D_{it}=1\\},\n\\]\nthen creates:\n\ncohort intercepts,\ncalendar-time dummies,\ncohort-by-time treatment dummies.\n\nConstructor:\n\n\nShow code\n\nDuckMundlakEventStudy(\n    db_name: str,\n    table_name: str,\n    outcome_var: str,\n    treatment_col: str,\n    unit_col: str,\n    time_col: str,\n    cluster_col: str,\n    pre_treat_interactions: bool = True,\n    n_bootstraps: int = 100,\n)\n\nThe event-study regression is solved as compressed WLS on this expanded design. The point estimate is returned as a dictionary keyed by cohort. Each value is a table of the cohort-specific event-study path.\nSingle-cohort example from notebooks/event_study.ipynb:\n\n\nShow code\n\nfrom duckreg.estimators import DuckMundlakEventStudy\n\nmundlak = DuckMundlakEventStudy(\n    db_name=\"event_study_data.db\",\n    table_name=\"panel_data\",\n    outcome_var=\"Y_it\",\n    treatment_col=\"W_it\",\n    unit_col=\"unit_id\",\n    time_col=\"time_id\",\n    cluster_col=\"unit_id\",\n    n_bootstraps=0,\n    seed=42,\n    pre_treat_interactions=True,\n)\nmundlak.fit()\nevsum = mundlak.summary()\n\nStaggered-adoption example:\n\n\nShow code\n\nmundlak = DuckMundlakEventStudy(\n    db_name=\"stagg_event_study_data.db\",\n    table_name=\"panel_data\",\n    outcome_var=\"Y_it\",\n    treatment_col=\"W_it\",\n    unit_col=\"unit_id\",\n    time_col=\"time_id\",\n    cluster_col=\"unit_id\",\n    n_bootstraps=0,\n    seed=42,\n    pre_treat_interactions=False,\n)\nmundlak.fit()\nevsum = mundlak.summary()",
+    "crumbs": [
+      "Home",
+      "Panel Estimators"
+    ]
+  },
+  {
+    "objectID": "panel.html#bootstrap-behavior",
+    "href": "panel.html#bootstrap-behavior",
+    "title": "Panel Estimators",
+    "section": "Bootstrap Behavior",
+    "text": "Bootstrap Behavior\nAll three panel estimators support bootstrap covariance paths. With a cluster column, the bootstrap resamples clusters and recompresses the generated design. For event studies, covariance matrices are returned separately for each cohort-specific coefficient path.",
+    "crumbs": [
+      "Home",
+      "Panel Estimators"
+    ]
+  },
+  {
+    "objectID": "examples.html",
+    "href": "examples.html",
+    "title": "Executed Examples",
+    "section": "",
+    "text": "This page runs small versions of the examples from the repository notebooks. The original notebooks use larger data to demonstrate scale; these examples use compact synthetic tables so the documentation renders quickly while still showing real estimator output.",
+    "crumbs": [
+      "Home",
+      "Executed Examples"
+    ]
+  },
+  {
+    "objectID": "examples.html#setup",
+    "href": "examples.html#setup",
+    "title": "Executed Examples",
+    "section": "Setup",
+    "text": "Setup\n\n\nShow code\nimport os\nimport tempfile\n\nimport duckdb\nimport numpy as np\nimport pandas as pd\n\nimport duckreg.estimators as estimators_module\nfrom duckreg.estimators import (\n    DuckDML,\n    DuckDoubleDemeaning,\n    DuckLogisticRegression,\n    DuckMultinomialLogisticRegression,\n    DuckMundlak,\n    DuckMundlakEventStudy,\n    DuckPoissonMultinomialRegression,\n    DuckPoissonRegression,\n    DuckRegression,\n)\nfrom duckreg.regularized import DuckRidge\n\npd.set_option(\"display.precision\", 4)\nrng = np.random.default_rng(2026)\ntmpdir = tempfile.mkdtemp(prefix=\"duckreg_docs_\")\n\n# Keep bootstrap examples readable in rendered docs.\nestimators_module.tqdm = lambda iterable, *args, **kwargs: iterable\n\n\ndef write_table(db_path, table_name, df):\n    conn = duckdb.connect(db_path)\n    conn.register(\"df\", df)\n    conn.execute(f\"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM df\")\n    conn.close()\n\n\n\nSynthetic Tables\n\n\nShow code\nn = 6_000\nlinear = pd.DataFrame(\n    {\n        \"rowid\": np.arange(n),\n        \"D\": rng.integers(0, 2, n),\n        \"f1\": rng.integers(0, 18, n),\n        \"f2\": rng.integers(0, 8, n),\n        \"f3\": rng.integers(0, 5, n),\n    }\n)\nlinear[\"Y\"] = (\n    1.0\n    + 2.0 * linear[\"D\"]\n    + 0.12 * linear[\"f1\"]\n    - 0.08 * linear[\"f2\"]\n    + rng.normal(0, 1, n)\n)\nlinear[\"Y2\"] = (\n    -0.5\n    + 1.4 * linear[\"D\"]\n    - 0.04 * linear[\"f1\"]\n    + 0.03 * linear[\"f2\"]\n    + rng.normal(0, 1, n)\n)\nlinear_db = os.path.join(tmpdir, \"linear.db\")\nwrite_table(linear_db, \"data\", linear)\n\nunits, periods = 120, 6\nunit_ids = np.repeat(np.arange(units), periods)\ntime_ids = np.tile(np.arange(periods), units)\nunit_fe = rng.normal(0, 1, units)\ntime_fe = rng.normal(0, 0.4, periods)\nW = (\n    rng.normal(0, 1, units * periods)\n    + 0.4 * unit_fe[unit_ids]\n    + 0.2 * time_fe[time_ids]\n)\nY = 0.8 * W + unit_fe[unit_ids] + time_fe[time_ids] + rng.normal(\n    0, 1, units * periods\n)\npanel = pd.DataFrame({\"unit\": unit_ids, \"time\": time_ids, \"W\": W, \"Y\": Y})\npanel_db = os.path.join(tmpdir, \"panel.db\")\nwrite_table(panel_db, \"panel_data\", panel)\n\ncohorts = rng.choice([2, 3, 4, 99], size=units, p=[0.25, 0.25, 0.25, 0.25])\nD_it = np.array(\n    [\n        1\n        if time_ids[i] &gt;= cohorts[unit_ids[i]] and cohorts[unit_ids[i]] &lt; 99\n        else 0\n        for i in range(len(unit_ids))\n    ]\n)\nY_it = unit_fe[unit_ids] + time_fe[time_ids] + 1.2 * D_it + rng.normal(\n    0, 1, len(D_it)\n)\nevent = pd.DataFrame(\n    {\"unit_id\": unit_ids, \"time_id\": time_ids, \"W_it\": D_it, \"Y_it\": Y_it}\n)\nevent_db = os.path.join(tmpdir, \"event.db\")\nwrite_table(event_db, \"panel_data\", event)\n\ndata_inventory = pd.DataFrame(\n    {\n        \"table\": [\"linear data\", \"panel data\", \"event-study panel\"],\n        \"rows\": [len(linear), len(panel), len(event)],\n        \"database\": [os.path.basename(linear_db), os.path.basename(panel_db), os.path.basename(event_db)],\n    }\n)\ndata_inventory\n\n\n\n\n\n\n\n\n\ntable\nrows\ndatabase\n\n\n\n\n0\nlinear data\n6000\nlinear.db\n\n\n1\npanel data\n720\npanel.db\n\n\n2\nevent-study panel\n720\nevent.db",
+    "crumbs": [
+      "Home",
+      "Executed Examples"
+    ]
+  },
+  {
+    "objectID": "examples.html#compressed-ols",
+    "href": "examples.html#compressed-ols",
+    "title": "Executed Examples",
+    "section": "Compressed OLS",
+    "text": "Compressed OLS\nThis is the core DuckRegression workflow from notebooks/introduction.ipynb: fit on compressed covariate cells, then compute analytic HC1-style standard errors.\n\n\nShow code\nm = DuckRegression(\n    db_name=linear_db,\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2\",\n    cluster_col=\"\",\n    n_bootstraps=0,\n    seed=42,\n)\nm.fit()\nm.fit_vcov()\n\nresults = m.summary()\npd.DataFrame(\n    {\n        \"point_estimate\": results[\"point_estimate\"],\n        \"standard_error\": results[\"standard_error\"],\n    },\n    index=[\"Intercept\", \"D\", \"f1\", \"f2\"],\n)\n\n\n\n\n\n\n\n\n\npoint_estimate\nstandard_error\n\n\n\n\nIntercept\n0.9488\n0.0340\n\n\nD\n2.0143\n0.0257\n\n\nf1\n0.1240\n0.0025\n\n\nf2\n-0.0765\n0.0056\n\n\n\n\n\n\n\nThe compressed table is much smaller than the raw table because the regressors are discrete.\n\n\nShow code\npd.DataFrame(\n    {\n        \"raw_rows\": [len(linear)],\n        \"compressed_rows\": [len(m.df_compressed)],\n        \"compression_ratio\": [len(linear) / len(m.df_compressed)],\n    }\n)\n\n\n\n\n\n\n\n\n\nraw_rows\ncompressed_rows\ncompression_ratio\n\n\n\n\n0\n6000\n288\n20.8333",
+    "crumbs": [
+      "Home",
+      "Executed Examples"
+    ]
+  },
+  {
+    "objectID": "examples.html#cluster-bootstrap",
+    "href": "examples.html#cluster-bootstrap",
+    "title": "Executed Examples",
+    "section": "Cluster Bootstrap",
+    "text": "Cluster Bootstrap\nWhen cluster_col is set and n_bootstraps &gt; 0, DuckRegression resamples clusters and recompresses the bootstrap draw.\n\n\nShow code\nm_boot = DuckRegression(\n    db_name=linear_db,\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2\",\n    cluster_col=\"f1\",\n    n_bootstraps=20,\n    seed=42,\n)\nm_boot.fit()\nboot_results = m_boot.summary()\npd.DataFrame(\n    {\n        \"point_estimate\": boot_results[\"point_estimate\"],\n        \"bootstrap_se\": boot_results[\"standard_error\"],\n    },\n    index=[\"Intercept\", \"D\", \"f1\", \"f2\"],\n)\n\n\n\n\n\n\n\n\n\npoint_estimate\nbootstrap_se\n\n\n\n\nIntercept\n0.9488\n0.0273\n\n\nD\n2.0143\n0.0211\n\n\nf1\n0.1240\n0.0018\n\n\nf2\n-0.0765\n0.0053",
+    "crumbs": [
+      "Home",
+      "Executed Examples"
+    ]
+  },
+  {
+    "objectID": "examples.html#multiple-outcomes",
+    "href": "examples.html#multiple-outcomes",
+    "title": "Executed Examples",
+    "section": "Multiple Outcomes",
+    "text": "Multiple Outcomes\nDuckRegression can compress several outcomes in one pass.\n\n\nShow code\nm_multi = DuckRegression(\n    db_name=linear_db,\n    table_name=\"data\",\n    formula=\"Y + Y2 ~ D + f1 + f2\",\n    cluster_col=\"\",\n    n_bootstraps=0,\n    seed=232,\n)\nm_multi.fit()\n\ncoef_index = pd.MultiIndex.from_product(\n    [[\"Intercept\", \"D\", \"f1\", \"f2\"], [\"Y\", \"Y2\"]],\n    names=[\"term\", \"outcome\"],\n)\npd.DataFrame(\n    {\"point_estimate\": m_multi.summary()[\"point_estimate\"]},\n    index=coef_index,\n)\n\n\n\n\n\n\n\n\n\n\npoint_estimate\n\n\nterm\noutcome\n\n\n\n\n\nIntercept\nY\n0.9488\n\n\nY2\n-0.5056\n\n\nD\nY\n2.0143\n\n\nY2\n1.4497\n\n\nf1\nY\n0.1240\n\n\nY2\n-0.0380\n\n\nf2\nY\n-0.0765\n\n\nY2\n0.0239",
+    "crumbs": [
+      "Home",
+      "Executed Examples"
+    ]
+  },
+  {
+    "objectID": "examples.html#mundlak-panel-regression",
+    "href": "examples.html#mundlak-panel-regression",
+    "title": "Executed Examples",
+    "section": "Mundlak Panel Regression",
+    "text": "Mundlak Panel Regression\nDuckMundlak augments the design with unit and time averages of the covariates.\n\n\nShow code\nmundlak = DuckMundlak(\n    db_name=panel_db,\n    table_name=\"panel_data\",\n    outcome_var=\"Y\",\n    covariates=[\"W\"],\n    unit_col=\"unit\",\n    time_col=\"time\",\n    cluster_col=\"unit\",\n    n_bootstraps=0,\n    seed=929,\n)\nmundlak.fit()\n\npd.DataFrame(\n    {\"point_estimate\": mundlak.summary()[\"point_estimate\"].flatten()},\n    index=[\"Intercept\", \"W\", \"avg_W_unit\", \"avg_W_time\"],\n)\n\n\n\n\n\n\n\n\n\npoint_estimate\n\n\n\n\nIntercept\n-0.0839\n\n\nW\n0.8496\n\n\navg_W_unit\n1.4997\n\n\navg_W_time\n3.3764",
+    "crumbs": [
+      "Home",
+      "Executed Examples"
+    ]
+  },
+  {
+    "objectID": "examples.html#double-demeaning",
+    "href": "examples.html#double-demeaning",
+    "title": "Executed Examples",
+    "section": "Double Demeaning",
+    "text": "Double Demeaning\nDuckDoubleDemeaning constructs the residualized treatment\n\\[\n\\ddot{W}_{it}\n=\nW_{it}\n- \\bar{W}_{i \\cdot}\n- \\bar{W}_{\\cdot t}\n+ \\bar{W}_{\\cdot \\cdot}.\n\\]\n\n\nShow code\ndouble_demean = DuckDoubleDemeaning(\n    db_name=panel_db,\n    table_name=\"panel_data\",\n    outcome_var=\"Y\",\n    treatment_var=\"W\",\n    unit_col=\"unit\",\n    time_col=\"time\",\n    cluster_col=\"unit\",\n    n_bootstraps=0,\n    seed=828,\n)\ndouble_demean.fit()\n\npd.DataFrame(\n    {\"point_estimate\": double_demean.summary()[\"point_estimate\"].flatten()},\n    index=[\"Intercept\", \"ddot_W\"],\n)\n\n\n\n\n\n\n\n\n\npoint_estimate\n\n\n\n\nIntercept\n-0.3937\n\n\nddot_W\n0.8496",
+    "crumbs": [
+      "Home",
+      "Executed Examples"
+    ]
+  },
+  {
+    "objectID": "examples.html#event-study",
+    "href": "examples.html#event-study",
+    "title": "Executed Examples",
+    "section": "Event Study",
+    "text": "Event Study\nDuckMundlakEventStudy creates cohort-by-time interactions and returns one coefficient path per cohort.\n\n\nShow code\nevent_model = DuckMundlakEventStudy(\n    db_name=event_db,\n    table_name=\"panel_data\",\n    outcome_var=\"Y_it\",\n    treatment_col=\"W_it\",\n    unit_col=\"unit_id\",\n    time_col=\"time_id\",\n    cluster_col=\"unit_id\",\n    n_bootstraps=0,\n    seed=42,\n    pre_treat_interactions=False,\n)\nevent_model.fit()\nevent_results = event_model.summary()[\"point_estimate\"]\n\nfirst_cohort = sorted(event_results.keys())[0]\nevent_results[first_cohort].rename(columns={\"est\": f\"cohort_{first_cohort}_estimate\"})\n\n\n\n\n\n\n\n\n\ncohort_2_estimate\n\n\n\n\ntreatment_time_2_0\n0.4327\n\n\ntreatment_time_2_1\n0.4327\n\n\ntreatment_time_2_2\n1.6324\n\n\ntreatment_time_2_3\n1.4136\n\n\ntreatment_time_2_4\n1.5538\n\n\ntreatment_time_2_5\n1.3262",
+    "crumbs": [
+      "Home",
+      "Executed Examples"
+    ]
+  },
+  {
+    "objectID": "examples.html#compressed-dml",
+    "href": "examples.html#compressed-dml",
+    "title": "Executed Examples",
+    "section": "Compressed DML",
+    "text": "Compressed DML\nThis mirrors notebooks/duckdml.ipynb: residualize a partial linear model using leave-one-out means inside discrete covariate cells.\n\n\nShow code\nnd = 6_000\ndml_df = pd.DataFrame(\n    {\n        \"town_id\": rng.integers(0, 40, nd),\n        \"day_id\": rng.integers(0, 12, nd),\n    }\n)\ng = 0.25 * dml_df[\"town_id\"] + np.sin(dml_df[\"day_id\"])\ndml_df[\"X1\"] = (\n    0.15 * dml_df[\"town_id\"] + 0.08 * dml_df[\"day_id\"] + rng.normal(0, 1, nd)\n)\ndml_df[\"X2\"] = -0.08 * dml_df[\"town_id\"] + 0.4 * dml_df[\"X1\"] + rng.normal(\n    0, 1, nd\n)\ndml_df[\"Y\"] = 1.5 * dml_df[\"X1\"] - 0.8 * dml_df[\"X2\"] + g + rng.normal(0, 1.5, nd)\ndml_db = os.path.join(tmpdir, \"dml.db\")\nwrite_table(dml_db, \"data\", dml_df)\n\ndml_model = DuckDML(\n    db_name=dml_db,\n    table_name=\"data\",\n    outcome_var=\"Y\",\n    treatment_var=[\"X1\", \"X2\"],\n    discrete_covars=[\"town_id\", \"day_id\"],\n    seed=42,\n    n_bootstraps=20,\n)\ndml_model.fit()\ndml_results = dml_model.summary()\npd.DataFrame(\n    {\n        \"point_estimate\": dml_results[\"point_estimate\"],\n        \"bootstrap_se\": dml_results[\"standard_error\"],\n        \"truth\": [1.5, -0.8],\n    },\n    index=[\"X1\", \"X2\"],\n)\n\n\n\n\n\n\n\n\n\npoint_estimate\nbootstrap_se\ntruth\n\n\n\n\nX1\n1.4991\n0.0161\n1.5\n\n\nX2\n-0.8053\n0.0153\n-0.8",
+    "crumbs": [
+      "Home",
+      "Executed Examples"
+    ]
+  },
+  {
+    "objectID": "examples.html#ridge-cross-validation",
+    "href": "examples.html#ridge-cross-validation",
+    "title": "Executed Examples",
+    "section": "Ridge Cross-Validation",
+    "text": "Ridge Cross-Validation\nDuckRidge compresses the table once, then evaluates ridge penalties over compressed folds.\n\n\nShow code\nduck_ridge_cv = DuckRidge(\n    db_name=linear_db,\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2 + f3\",\n    lambda_grid=np.logspace(-3, 0, 6),\n    cv_folds=3,\n    seed=42,\n)\nduck_ridge_cv.fit(lambda_selection=\"cv\")\n\npd.DataFrame(\n    {\n        \"point_estimate\": duck_ridge_cv.point_estimate,\n    },\n    index=[\"Intercept\", \"D\", \"f1\", \"f2\", \"f3\"],\n).assign(best_lambda=duck_ridge_cv.best_lambda)\n\n\n\n\n\n\n\n\n\npoint_estimate\nbest_lambda\n\n\n\n\nIntercept\n0.9686\n1.0\n\n\nD\n2.0130\n1.0\n\n\nf1\n0.1240\n1.0\n\n\nf2\n-0.0764\n1.0\n\n\nf3\n-0.0097\n1.0",
+    "crumbs": [
+      "Home",
+      "Executed Examples"
+    ]
+  },
+  {
+    "objectID": "examples.html#logistic-regression",
+    "href": "examples.html#logistic-regression",
+    "title": "Executed Examples",
+    "section": "Logistic Regression",
+    "text": "Logistic Regression\nThe GLM examples are smaller versions of notebooks/glm.ipynb.\n\n\nShow code\nng = 7_000\nx1 = rng.integers(0, 6, ng)\nx2 = rng.integers(0, 4, ng)\nglm_db = os.path.join(tmpdir, \"glm.db\")\n\np = 1 / (1 + np.exp(-(-0.8 + 0.35 * x1 - 0.2 * x2)))\ny_binary = rng.binomial(1, p)\nwrite_table(\n    glm_db,\n    \"binary_data\",\n    pd.DataFrame({\"y\": y_binary, \"x1\": x1, \"x2\": x2}),\n)\n\nlogit = DuckLogisticRegression(\n    glm_db,\n    \"binary_data\",\n    \"y ~ x1 + x2\",\n    seed=1,\n    method=\"irls\",\n    n_bootstraps=0,\n)\nlogit.fit()\nlogit.fit_vcov()\n\npd.DataFrame(\n    {\n        \"point_estimate\": logit.summary()[\"point_estimate\"],\n        \"standard_error\": logit.summary()[\"standard_error\"],\n        \"truth\": [-0.8, 0.35, -0.2],\n    },\n    index=[\"Intercept\", \"x1\", \"x2\"],\n)\n\n\n\n\n\n\n\n\n\npoint_estimate\nstandard_error\ntruth\n\n\n\n\nIntercept\n-0.8019\n0.0564\n-0.80\n\n\nx1\n0.3412\n0.0152\n0.35\n\n\nx2\n-0.2117\n0.0226\n-0.20",
+    "crumbs": [
+      "Home",
+      "Executed Examples"
+    ]
+  },
+  {
+    "objectID": "examples.html#poisson-regression",
+    "href": "examples.html#poisson-regression",
+    "title": "Executed Examples",
+    "section": "Poisson Regression",
+    "text": "Poisson Regression\n\n\nShow code\nmu = np.exp(0.3 + 0.12 * x1 - 0.08 * x2)\ny_count = rng.poisson(mu)\nwrite_table(\n    glm_db,\n    \"count_data\",\n    pd.DataFrame({\"y\": y_count, \"x1\": x1, \"x2\": x2}),\n)\n\npois = DuckPoissonRegression(\n    glm_db,\n    \"count_data\",\n    \"y ~ x1 + x2\",\n    seed=1,\n    method=\"irls\",\n    n_bootstraps=0,\n)\npois.fit()\npois.fit_vcov()\n\npd.DataFrame(\n    {\n        \"point_estimate\": pois.summary()[\"point_estimate\"],\n        \"standard_error\": pois.summary()[\"standard_error\"],\n        \"truth\": [0.3, 0.12, -0.08],\n    },\n    index=[\"Intercept\", \"x1\", \"x2\"],\n)\n\n\n\n\n\n\n\n\n\npoint_estimate\nstandard_error\ntruth\n\n\n\n\nIntercept\n0.2985\n0.0217\n0.30\n\n\nx1\n0.1260\n0.0055\n0.12\n\n\nx2\n-0.0893\n0.0083\n-0.08",
+    "crumbs": [
+      "Home",
+      "Executed Examples"
+    ]
+  },
+  {
+    "objectID": "examples.html#multinomial-logit",
+    "href": "examples.html#multinomial-logit",
+    "title": "Executed Examples",
+    "section": "Multinomial Logit",
+    "text": "Multinomial Logit\n\n\nShow code\nX = np.c_[np.ones(ng), x1, x2]\nbeta = np.array([[0.2, 0.18, -0.1], [-0.3, -0.08, 0.2]])\neta = np.c_[X @ beta.T, np.zeros(ng)]\nprob = np.exp(eta - eta.max(axis=1, keepdims=True))\nprob = prob / prob.sum(axis=1, keepdims=True)\ny_class = np.array([rng.choice([\"a\", \"b\", \"c\"], p=row) for row in prob])\nwrite_table(\n    glm_db,\n    \"class_data\",\n    pd.DataFrame({\"y\": y_class, \"x1\": x1, \"x2\": x2}),\n)\n\nmn = DuckMultinomialLogisticRegression(\n    glm_db,\n    \"class_data\",\n    \"y ~ x1 + x2\",\n    seed=1,\n    labels=[\"a\", \"b\", \"c\"],\n    baseline=\"c\",\n    n_bootstraps=0,\n)\nmn.fit()\nmn.fit_vcov()\n\npd.DataFrame(\n    mn.summary()[\"point_estimate\"],\n    index=mn.summary()[\"labels\"],\n    columns=[\"Intercept\", \"x1\", \"x2\"],\n)\n\n\n\n\n\n\n\n\n\nIntercept\nx1\nx2\n\n\n\n\na\n0.2913\n0.1616\n-0.1252\n\n\nb\n-0.2591\n-0.0889\n0.1984",
+    "crumbs": [
+      "Home",
+      "Executed Examples"
+    ]
+  },
+  {
+    "objectID": "examples.html#many-label-poisson-decomposition",
+    "href": "examples.html#many-label-poisson-decomposition",
+    "title": "Executed Examples",
+    "section": "Many-Label Poisson Decomposition",
+    "text": "Many-Label Poisson Decomposition\n\n\nShow code\nlabels = [f\"token_{j:02d}\" for j in range(6)]\nrows = []\nfor doc_id in range(250):\n    xi1 = rng.integers(0, 5)\n    xi2 = rng.integers(0, 3)\n    for j, label in enumerate(labels):\n        mu = np.exp(-1.2 + 0.05 * j + 0.1 * xi1 - 0.06 * xi2)\n        rows.append((doc_id, label, rng.poisson(mu), xi1, xi2))\n\ntoken_counts = pd.DataFrame(rows, columns=[\"doc_id\", \"label\", \"count\", \"x1\", \"x2\"])\nwrite_table(glm_db, \"token_counts\", token_counts)\n\npm = DuckPoissonMultinomialRegression(\n    glm_db,\n    \"token_counts\",\n    count_col=\"count\",\n    label_col=\"label\",\n    covars=[\"x1\", \"x2\"],\n    seed=1,\n    n_bootstraps=0,\n)\npm.fit()\npm.summary()[\"point_estimate\"].head()\n\n\n\n\n\n\n\n\n\nIntercept\nx1\nx2\n\n\n\n\ntoken_00\n-0.6929\n0.0129\n-0.3181\n\n\ntoken_01\n-1.2683\n0.0784\n-0.0147\n\n\ntoken_02\n-0.8115\n-0.0181\n-0.2068\n\n\ntoken_03\n-0.8701\n0.0055\n0.0744\n\n\ntoken_04\n-0.6878\n-0.0720\n-0.0455",
+    "crumbs": [
+      "Home",
+      "Executed Examples"
+    ]
+  },
+  {
+    "objectID": "glm.html",
+    "href": "glm.html",
+    "title": "Generalized Linear Models",
+    "section": "",
+    "text": "The GLM API extends the compression idea to canonical-link likelihoods. Logistic, Poisson, and multinomial models are fitted from grouped sufficient statistics using Fisher scoring.",
+    "crumbs": [
+      "Home",
+      "Generalized Linear Models"
+    ]
+  },
+  {
+    "objectID": "glm.html#fisher-scoring",
+    "href": "glm.html#fisher-scoring",
+    "title": "Generalized Linear Models",
+    "section": "Fisher Scoring",
+    "text": "Fisher Scoring\nAll canonical GLM paths use the update\n\\[\n\\beta^{(t+1)}\n=\n\\beta^{(t)}\n+\nI(\\beta^{(t)})^{-1} U(\\beta^{(t)}),\n\\]\nwhere \\(U(\\beta)\\) is the score and \\(I(\\beta)\\) is expected Fisher information.\nThe implementation solves\n\n\nShow code\n\nstep = np.linalg.solve(info, score)\nbeta_new = beta + step\n\nwith a small ridge fallback if the solve fails.",
+    "crumbs": [
+      "Home",
+      "Generalized Linear Models"
+    ]
+  },
+  {
+    "objectID": "glm.html#binary-logit",
+    "href": "glm.html#binary-logit",
+    "title": "Generalized Linear Models",
+    "section": "Binary Logit",
+    "text": "Binary Logit\nFor each compressed covariate cell \\(g\\), let \\(s_g\\) be successes and \\(n_g\\) be total rows. With\n\\[\np_g = \\Lambda(x_g'\\beta),\n\\]\nthe grouped log likelihood is\n\\[\n\\ell(\\beta)\n=\n\\sum_g\n\\left[\ns_g x_g'\\beta\n-\nn_g\\log\\{1+\\exp(x_g'\\beta)\\}\n\\right].\n\\]\nThe score and information are\n\\[\nU(\\beta)\n=\n\\sum_g x_g(s_g - n_g p_g),\n\\]\n\\[\nI(\\beta)\n=\n\\sum_g n_g p_g(1-p_g)x_gx_g'.\n\\]\nUsage from notebooks/glm.ipynb:\n\n\nShow code\n\nfrom duckreg.estimators import DuckLogisticRegression\n\nlogit = DuckLogisticRegression(\n    db_path,\n    \"binary_data\",\n    \"y ~ x1 + x2\",\n    seed=1,\n    method=\"irls\",\n    n_bootstraps=0,\n)\nlogit.fit()\nlogit.fit_vcov()\nlogit.summary()",
+    "crumbs": [
+      "Home",
+      "Generalized Linear Models"
+    ]
+  },
+  {
+    "objectID": "glm.html#poisson-regression",
+    "href": "glm.html#poisson-regression",
+    "title": "Generalized Linear Models",
+    "section": "Poisson Regression",
+    "text": "Poisson Regression\nFor Poisson,\n\\[\n\\mu_g = \\exp(x_g'\\beta).\n\\]\nThe grouped log likelihood is\n\\[\n\\ell(\\beta)\n=\n\\sum_g\n\\left[\ny_g^+x_g'\\beta\n-\nn_g\\exp(x_g'\\beta)\n\\right].\n\\]\nThe score and information are\n\\[\nU(\\beta)\n=\n\\sum_g x_g(y_g^+ - n_g\\mu_g),\n\\]\n\\[\nI(\\beta)\n=\n\\sum_g n_g\\mu_g x_gx_g'.\n\\]\n\n\nShow code\n\nfrom duckreg.estimators import DuckPoissonRegression\n\npois = DuckPoissonRegression(\n    db_path,\n    \"count_data\",\n    \"y ~ x1 + x2\",\n    seed=1,\n    method=\"irls\",\n    n_bootstraps=0,\n)\npois.fit()\npois.fit_vcov()\npois.summary()",
+    "crumbs": [
+      "Home",
+      "Generalized Linear Models"
+    ]
+  },
+  {
+    "objectID": "glm.html#exact-irls-vs-one-step",
+    "href": "glm.html#exact-irls-vs-one-step",
+    "title": "Generalized Linear Models",
+    "section": "Exact IRLS vs One-Step",
+    "text": "Exact IRLS vs One-Step\nThe canonical binary and Poisson classes accept:\n\n\nShow code\n\nmethod=\"irls\"\nmethod=\"one_step\"\n\nmethod=\"irls\" iterates Fisher scoring on the compressed full data until the maximum absolute step is below tolerance.\nmethod=\"one_step\" fits a pilot model on a reservoir sample, then takes one full-data Fisher step:\n\\[\n\\hat{\\beta}_{\\mathrm{one}}\n=\n\\hat{\\beta}_0\n+\nI_N(\\hat{\\beta}_0)^{-1}U_N(\\hat{\\beta}_0).\n\\]\nThis is faster for very large tables, but it is approximate relative to the full compressed IRLS solution.",
+    "crumbs": [
+      "Home",
+      "Generalized Linear Models"
+    ]
+  },
+  {
+    "objectID": "glm.html#multinomial-logit",
+    "href": "glm.html#multinomial-logit",
+    "title": "Generalized Linear Models",
+    "section": "Multinomial Logit",
+    "text": "Multinomial Logit\nDuckMultinomialLogisticRegression fits a baseline-category softmax for moderate numbers of labels. If label \\(K\\) is the baseline, the estimated labels are \\(1,\\ldots,K-1\\) and\n\\[\n\\pi_{gk}\n=\n\\frac{\\exp(x_g'\\beta_k)}\n{1+\\sum_{j=1}^{K-1}\\exp(x_g'\\beta_j)}.\n\\]\nThe score block for label \\(k\\) is\n\\[\nU_k(\\beta)\n=\n\\sum_g x_g(c_{gk} - n_g\\pi_{gk}),\n\\]\nand the Fisher information block for labels \\(k,l\\) is\n\\[\nI_{kl}(\\beta)\n=\n\\sum_g\nn_g\\pi_{gk}\n\\{1[k=l]-\\pi_{gl}\\}\nx_gx_g'.\n\\]\nThe computational cost is the block information matrix of size \\(((K-1)p)\\times((K-1)p)\\).\n\n\nShow code\n\nfrom duckreg.estimators import DuckMultinomialLogisticRegression\n\nmn = DuckMultinomialLogisticRegression(\n    db_path,\n    \"class_data\",\n    \"y ~ x1 + x2\",\n    seed=1,\n    labels=[\"a\", \"b\", \"c\"],\n    baseline=\"c\",\n    n_bootstraps=0,\n)\nmn.fit()\nmn.fit_vcov()\nmn.summary()",
+    "crumbs": [
+      "Home",
+      "Generalized Linear Models"
+    ]
+  },
+  {
+    "objectID": "glm.html#many-label-poisson-decomposition",
+    "href": "glm.html#many-label-poisson-decomposition",
+    "title": "Generalized Linear Models",
+    "section": "Many-Label Poisson Decomposition",
+    "text": "Many-Label Poisson Decomposition\nDuckPoissonMultinomialRegression is for many count labels. It fits one Poisson regression per label:\n\\[\n\\log \\mu_{ij} = x_i'\\gamma_j.\n\\]\nThis replaces one coupled softmax Hessian with \\(K\\) independent \\(p \\times p\\) Poisson systems.\n\n\nShow code\n\nfrom duckreg.estimators import DuckPoissonMultinomialRegression\n\npm = DuckPoissonMultinomialRegression(\n    db_path,\n    \"token_counts\",\n    count_col=\"count\",\n    label_col=\"label\",\n    covars=[\"x1\", \"x2\"],\n    seed=1,\n    n_bootstraps=0,\n)\npm.fit()\npm.summary()\n\nThe Poisson decomposition is scalable and naturally parallelizable across labels. In the current code it is a separable count model, not an exact joint multinomial MLE with unit fixed effects or conditioning on document totals.",
+    "crumbs": [
+      "Home",
+      "Generalized Linear Models"
+    ]
+  },
+  {
+    "objectID": "glm.html#current-glm-inference-caveat",
+    "href": "glm.html#current-glm-inference-caveat",
+    "title": "Generalized Linear Models",
+    "section": "Current GLM Inference Caveat",
+    "text": "Current GLM Inference Caveat\nfit_vcov() is implemented for canonical binary, Poisson, and moderate-\\(K\\) multinomial models. The GLM bootstrap methods currently return empty arrays, so do not rely on n_bootstraps &gt; 0 for GLM standard errors without first implementing real resampling.",
+    "crumbs": [
+      "Home",
+      "Generalized Linear Models"
+    ]
+  },
+  {
+    "objectID": "linear.html",
+    "href": "linear.html",
+    "title": "Linear Regression API",
+    "section": "",
+    "text": "DuckRegression is the original estimator in the package. It handles compressed ordinary least squares with optional fixed-effect demeaning, analytic HC1-style standard errors for a single outcome, and bootstrap covariance when n_bootstraps &gt; 0.",
+    "crumbs": [
+      "Home",
+      "Linear Regression API"
+    ]
+  },
+  {
+    "objectID": "linear.html#constructor",
+    "href": "linear.html#constructor",
+    "title": "Linear Regression API",
+    "section": "Constructor",
+    "text": "Constructor\n\n\nShow code\n\nDuckRegression(\n    db_name: str,\n    table_name: str,\n    formula: str,\n    cluster_col: str,\n    seed: int,\n    n_bootstraps: int = 100,\n    rowid_col: str = \"rowid\",\n    fitter: str = \"numpy\",\n)\n\nThe formula has the form\n\n\nShow code\n\nY ~ X1 + X2 + X3\n\nor, with fixed effects,\n\n\nShow code\n\nY ~ X1 + X2 | unit + time\n\nMultiple outcomes are allowed:\n\n\nShow code\n\nY1 + Y2 ~ D + f1 + f2",
+    "crumbs": [
+      "Home",
+      "Linear Regression API"
+    ]
+  },
+  {
+    "objectID": "linear.html#point-estimation",
+    "href": "linear.html#point-estimation",
+    "title": "Linear Regression API",
+    "section": "Point Estimation",
+    "text": "Point Estimation\nWithout fixed effects, DuckRegression adds an intercept and solves weighted least squares on the compressed rows:\n\\[\n\\hat{\\beta}\n=\n\\left(X_c' W X_c\\right)^{-1} X_c' W \\bar{y}_c,\n\\]\nwhere \\(W=\\operatorname{diag}(n_g)\\). With fixed effects, the compressed \\(y\\) and \\(X\\) are weighted-demeaned first.\n\n\nShow code\n\nfrom duckreg.estimators import DuckRegression\n\nm = DuckRegression(\n    db_name=\"large_dataset.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2\",\n    cluster_col=\"\",\n    n_bootstraps=0,\n    seed=42,\n)\nm.fit()\nm.fit_vcov()\nm.summary()\n\nThe test suite checks that compressed estimates match direct NumPy OLS coefficients on the uncompressed table for formulas such as Y ~ D, Y ~ D + f1, and Y ~ D + f1 + f2.",
+    "crumbs": [
+      "Home",
+      "Linear Regression API"
+    ]
+  },
+  {
+    "objectID": "linear.html#analytic-hc1-covariance",
+    "href": "linear.html#analytic-hc1-covariance",
+    "title": "Linear Regression API",
+    "section": "Analytic HC1 Covariance",
+    "text": "Analytic HC1 Covariance\nfit_vcov() computes a compressed version of HC1 for a single outcome. It uses\n\\[\n\\hat{V}\n=\n\\frac{N}{N-k}\n(X'WX)^{-1}\n\\left(\\sum_g \\operatorname{RSS}_g x_g x_g'\\right)\n(X'WX)^{-1},\n\\]\nwhere the within-cell residual sum of squares is reconstructed from sufficient statistics:\n\\[\n\\operatorname{RSS}_g\n=\nn_g \\hat{y}_g^2\n- 2\\hat{y}_g \\sum_{i \\in g} y_i\n+ \\sum_{i \\in g} y_i^2.\n\\]\nThis is why the compression step stores sum_y_sq.",
+    "crumbs": [
+      "Home",
+      "Linear Regression API"
+    ]
+  },
+  {
+    "objectID": "linear.html#bootstrap-covariance",
+    "href": "linear.html#bootstrap-covariance",
+    "title": "Linear Regression API",
+    "section": "Bootstrap Covariance",
+    "text": "Bootstrap Covariance\nIf n_bootstraps &gt; 0, DuckReg.fit() calls bootstrap(). For DuckRegression, the bootstrap has two paths:\n\n\n\n\n\n\n\n\nSetting\nResampling unit\nData path\n\n\n\n\ncluster_col=\"\" or false-like\nrow ids\nrecompress selected rows\n\n\ncluster_col=\"cluster\"\nclusters\njoin cluster multiplicities to grouped data\n\n\n\nCluster bootstrap logic uses a resampled cluster table:\n\n\nShow code\n\nWITH resampled AS (\n  SELECT cluster_id, COUNT(*) AS mult\n  FROM (SELECT unnest(?) AS cluster_id)\n  GROUP BY cluster_id\n)\n\nand then multiplies grouped counts and sums by mult.",
+    "crumbs": [
+      "Home",
+      "Linear Regression API"
+    ]
+  },
+  {
+    "objectID": "linear.html#multiple-outcomes",
+    "href": "linear.html#multiple-outcomes",
+    "title": "Linear Regression API",
+    "section": "Multiple Outcomes",
+    "text": "Multiple Outcomes\nThe parser allows\n\n\nShow code\n\nm = DuckRegression(\n    db_name=\"large_dataset.db\",\n    table_name=\"data\",\n    formula=\"Y + Y2 ~ D + f1 + f2\",\n    cluster_col=\"f1\",\n    n_bootstraps=100,\n    seed=232,\n)\nm.fit()\nm.summary()\n\nCompression stores sum_Y, sum_Y_sq, mean_Y, sum_Y2, sum_Y2_sq, and mean_Y2. The output concatenates the coefficient vectors.",
+    "crumbs": [
+      "Home",
+      "Linear Regression API"
+    ]
+  },
+  {
+    "objectID": "linear.html#what-to-check-in-practice",
+    "href": "linear.html#what-to-check-in-practice",
+    "title": "Linear Regression API",
+    "section": "What To Check In Practice",
+    "text": "What To Check In Practice\nFor a linear fit, check:\n\n\nShow code\n\nm.df_compressed[\"count\"].sum()\nlen(m.df_compressed)\nm.summary()\n\nThe first should equal the raw observation count. The second is the compression payoff. The third reports standard_error only if covariance was computed either by fit_vcov() or by bootstrap.",
+    "crumbs": [
+      "Home",
+      "Linear Regression API"
+    ]
+  },
+  {
+    "objectID": "inference.html",
+    "href": "inference.html",
+    "title": "Inference and Variance Estimation",
+    "section": "",
+    "text": "Inference in duckreg depends on whether the compressed table preserves the score contributions needed for the target covariance estimator.",
+    "crumbs": [
+      "Home",
+      "Inference and Variance Estimation"
+    ]
+  },
+  {
+    "objectID": "inference.html#analytic-hc1-for-linear-models",
+    "href": "inference.html#analytic-hc1-for-linear-models",
+    "title": "Inference and Variance Estimation",
+    "section": "Analytic HC1 For Linear Models",
+    "text": "Analytic HC1 For Linear Models\nFor DuckRegression.fit_vcov(), the covariance has sandwich form:\n\\[\n\\hat{V}\n=\n\\frac{N}{N-k}\n(X'WX)^{-1}\n\\left(\\sum_g \\operatorname{RSS}_g x_gx_g'\\right)\n(X'WX)^{-1}.\n\\]\nThe grouped residual sum of squares is exact from compressed sufficient statistics:\n\\[\n\\operatorname{RSS}_g\n=\nn_g \\hat{y}_g^2\n- 2\\hat{y}_g \\sum_{i \\in g} y_i\n+ \\sum_{i \\in g} y_i^2.\n\\]\nThis requires sum_y_sq, which the compression query stores.",
+    "crumbs": [
+      "Home",
+      "Inference and Variance Estimation"
+    ]
+  },
+  {
+    "objectID": "inference.html#cluster-bootstrap",
+    "href": "inference.html#cluster-bootstrap",
+    "title": "Inference and Variance Estimation",
+    "section": "Cluster Bootstrap",
+    "text": "Cluster Bootstrap\nThe implemented cluster bootstrap resamples clusters, recompresses, and refits. The cluster path is natural when the point-estimation compression does not preserve all cluster-level score contributions.\nFor a cluster column \\(c\\), the bootstrap creates multiplicities:\n\n\nShow code\n\nWITH resampled AS (\n  SELECT cluster_id, COUNT(*) AS mult\n  FROM (SELECT unnest(?) AS cluster_id)\n  GROUP BY cluster_id\n)\n\nand then joins those multiplicities against grouped data.",
+    "crumbs": [
+      "Home",
+      "Inference and Variance Estimation"
+    ]
+  },
+  {
+    "objectID": "inference.html#analytic-cluster-robust-scores",
+    "href": "inference.html#analytic-cluster-robust-scores",
+    "title": "Inference and Variance Estimation",
+    "section": "Analytic Cluster-Robust Scores",
+    "text": "Analytic Cluster-Robust Scores\nIf the compressed rows preserve cluster identity, analytic cluster-robust covariance can be computed from compressed scores. The standard cluster-robust variance is\n\\[\n\\hat{V}_{CR}\n=\n(X'X)^{-1}\n\\left(\n\\sum_{c=1}^C u_cu_c'\n\\right)\n(X'X)^{-1},\n\\]\nwhere\n\\[\nu_c\n=\n\\sum_{i \\in c} x_i \\hat{\\varepsilon}_i.\n\\]\nIf each compressed stratum \\(g\\) belongs to exactly one cluster \\(c\\), then\n\\[\nu_c\n=\n\\sum_{g \\in c}\nx_g\n\\left(\n\\sum_{i \\in g} y_i\n-\nn_gx_g'\\hat{\\beta}\n\\right).\n\\]\nSo exact analytic cluster scores require grouping by both covariate cell and cluster:\n\n\nShow code\n\nSELECT\n  x1,\n  x2,\n  cluster,\n  COUNT(*) AS count,\n  SUM(y) AS sum_y\nFROM data\nGROUP BY x1, x2, cluster\n\nThis is faster than bootstrap when cluster cardinality is modest and adding cluster to the group-by does not destroy compression.",
+    "crumbs": [
+      "Home",
+      "Inference and Variance Estimation"
+    ]
+  },
+  {
+    "objectID": "inference.html#tradeoff",
+    "href": "inference.html#tradeoff",
+    "title": "Inference and Variance Estimation",
+    "section": "Tradeoff",
+    "text": "Tradeoff\n\n\n\n\n\n\n\n\nScenario\nStrategy\nReason\n\n\n\n\nIID or HC1-style robust errors\nfit_vcov()\nSufficient statistics are already stored.\n\n\nFew or moderate clusters\nanalytic cluster scores, if implemented\nGrouping by cluster preserves scores and remains compact.\n\n\nMany high-cardinality clusters\ncluster bootstrap\nGrouping by cluster may approach the raw data size.\n\n\nGLMs\nfit_vcov()\nModel-based Fisher covariance is implemented.\n\n\nRidge\nno built-in SEs\nRegularization-aware inference is separate.",
+    "crumbs": [
+      "Home",
+      "Inference and Variance Estimation"
+    ]
+  },
+  {
+    "objectID": "inference.html#current-api-details",
+    "href": "inference.html#current-api-details",
+    "title": "Inference and Variance Estimation",
+    "section": "Current API Details",
+    "text": "Current API Details\nDuckRegression.fit_vcov() computes analytic HC1-style covariance for a single outcome.\nDuckDML.fit_vcov() computes an analytic covariance from compressed leave-one-out residual cross-products.\nDuckMundlak, DuckDoubleDemeaning, and DuckMundlakEventStudy use bootstrap covariance when n_bootstraps &gt; 0.\nGLM classes have fit_vcov() methods but currently stub out bootstrap. Use n_bootstraps=0 for those classes until a real bootstrap implementation is added.",
+    "crumbs": [
+      "Home",
+      "Inference and Variance Estimation"
+    ]
+  },
+  {
+    "objectID": "dml.html",
+    "href": "dml.html",
+    "title": "Compressed Double Machine Learning",
+    "section": "",
+    "text": "DuckDML implements a compressed leave-one-out estimator for a partially linear model with discrete controls:\n\\[\nY_i = W_i'\\beta + g(X_i) + \\varepsilon_i.\n\\]\nHere \\(W_i\\) is one or more treatment variables and \\(X_i\\) is a vector of discrete controls. The controls define groups \\(g \\in \\mathcal{G}\\).",
+    "crumbs": [
+      "Home",
+      "Compressed Double Machine Learning"
+    ]
+  },
+  {
+    "objectID": "dml.html#constructor",
+    "href": "dml.html#constructor",
+    "title": "Compressed Double Machine Learning",
+    "section": "Constructor",
+    "text": "Constructor\n\n\nShow code\n\nDuckDML(\n    db_name: str,\n    table_name: str,\n    outcome_var: str,\n    treatment_var: str | list[str],\n    discrete_covars: list[str],\n    seed: int,\n    n_bootstraps: int = 200,\n)\n\nThe implementation accepts either a single treatment name or a list of treatment names. Internally it stores self.treatment_vars as a list.",
+    "crumbs": [
+      "Home",
+      "Compressed Double Machine Learning"
+    ]
+  },
+  {
+    "objectID": "dml.html#leave-one-out-residualization",
+    "href": "dml.html#leave-one-out-residualization",
+    "title": "Compressed Double Machine Learning",
+    "section": "Leave-One-Out Residualization",
+    "text": "Leave-One-Out Residualization\nFor a variable \\(V_i\\), define the leave-one-out group mean\n\\[\n\\hat{m}_{v,-i}(X_i)\n=\n\\frac{1}{N_g - 1}\n\\sum_{\\substack{j \\in g\\\\j \\ne i}} V_j.\n\\]\nThe residual is\n\\[\n\\tilde{V}_i\n=\nV_i - \\hat{m}_{v,-i}(X_i)\n=\n\\frac{N_g V_i - S_V^{(g)}}{N_g - 1},\n\\]\nwhere \\(S_V^{(g)} = \\sum_{j \\in g} V_j\\).\nThe target estimator is the OLS regression of leave-one-out residualized \\(Y\\) on leave-one-out residualized \\(W\\):\n\\[\n\\hat{\\beta}\n=\n\\left(\\sum_i \\tilde{W}_i\\tilde{W}_i'\\right)^{-1}\n\\left(\\sum_i \\tilde{W}_i\\tilde{Y}_i\\right).\n\\]",
+    "crumbs": [
+      "Home",
+      "Compressed Double Machine Learning"
+    ]
+  },
+  {
+    "objectID": "dml.html#compressed-algebra",
+    "href": "dml.html#compressed-algebra",
+    "title": "Compressed Double Machine Learning",
+    "section": "Compressed Algebra",
+    "text": "Compressed Algebra\nFor group \\(g\\), define\n\\[\nS_W^{(g)} = \\sum_{i \\in g} W_i,\\qquad\nS_Y^{(g)} = \\sum_{i \\in g} Y_i,\n\\]\n\\[\nS_{WW}^{(g)} = \\sum_{i \\in g} W_i W_i',\n\\qquad\nS_{WY}^{(g)} = \\sum_{i \\in g} W_i Y_i.\n\\]\nThen\n\\[\n\\sum_{i \\in g} \\tilde{W}_i\\tilde{W}_i'\n=\n\\frac{N_g}{(N_g - 1)^2}\n\\left[\nN_g S_{WW}^{(g)}\n- S_W^{(g)}S_W^{(g)'}\n\\right],\n\\]\nand\n\\[\n\\sum_{i \\in g} \\tilde{W}_i\\tilde{Y}_i\n=\n\\frac{N_g}{(N_g - 1)^2}\n\\left[\nN_g S_{WY}^{(g)}\n- S_W^{(g)}S_Y^{(g)}\n\\right].\n\\]\nSo DuckDML.compress_data() only needs grouped counts, sums, and cross-products. The final estimator sums these matrices over groups and solves one small linear system.",
+    "crumbs": [
+      "Home",
+      "Compressed Double Machine Learning"
+    ]
+  },
+  {
+    "objectID": "dml.html#sql-sufficient-statistics",
+    "href": "dml.html#sql-sufficient-statistics",
+    "title": "Compressed Double Machine Learning",
+    "section": "SQL Sufficient Statistics",
+    "text": "SQL Sufficient Statistics\nFor treatment variables X1, X2 and outcome Y, grouped by town_id and day_id, the aggregation includes:\n\n\nShow code\n\nSELECT\n  town_id,\n  day_id,\n  COUNT(*) AS n_g,\n  SUM(Y) AS sum_y,\n  SUM(POW(Y, 2)) AS sum_y_sq,\n  SUM(X1) AS sum_X1,\n  SUM(Y * X1) AS sum_Y_X1,\n  SUM(X2) AS sum_X2,\n  SUM(Y * X2) AS sum_Y_X2,\n  SUM(X1 * X1) AS sum_X1_X1,\n  SUM(X1 * X2) AS sum_X1_X2,\n  SUM(X2 * X2) AS sum_X2_X2\nFROM data\nGROUP BY town_id, day_id\nHAVING COUNT(*) &gt; 1\n\nSingleton groups are dropped because leave-one-out residualization is undefined when \\(N_g = 1\\).",
+    "crumbs": [
+      "Home",
+      "Compressed Double Machine Learning"
+    ]
+  },
+  {
+    "objectID": "dml.html#usage",
+    "href": "dml.html#usage",
+    "title": "Compressed Double Machine Learning",
+    "section": "Usage",
+    "text": "Usage\nExample from notebooks/duckdml.ipynb:\n\n\nShow code\n\nfrom duckreg.estimators import DuckDML\n\ndml_model = DuckDML(\n    db_name=\"dml_example.db\",\n    table_name=\"data\",\n    outcome_var=\"Y\",\n    treatment_var=\"X\",\n    discrete_covars=[\"town_id\", \"day_id\"],\n    seed=42,\n    n_bootstraps=500,\n)\ndml_model.fit()\nresults = dml_model.summary()\n\nMultivariate treatment example from the tests:\n\n\nShow code\n\ndml = DuckDML(\n    db_name=\"test_dml_pytest.db\",\n    table_name=\"data\",\n    outcome_var=\"Y\",\n    treatment_var=[\"X1\", \"X2\"],\n    discrete_covars=[\"town_id\", \"day_id\"],\n    seed=42,\n    n_bootstraps=10,\n)\ndml.fit()\ndml.summary()",
+    "crumbs": [
+      "Home",
+      "Compressed Double Machine Learning"
+    ]
+  },
+  {
+    "objectID": "dml.html#inference",
+    "href": "dml.html#inference",
+    "title": "Compressed Double Machine Learning",
+    "section": "Inference",
+    "text": "Inference\nfit_vcov() computes an analytic HC1-style sandwich using compressed residual cross-products. The default bootstrap() resamples compressed groups, which treats the discrete-control cells as the resampling clusters.\nUse the bootstrap when the grouped structure is the natural independent sampling level. Use the analytic covariance when the compressed moments are an acceptable approximation to the desired robust variance.",
+    "crumbs": [
+      "Home",
+      "Compressed Double Machine Learning"
+    ]
+  },
+  {
+    "objectID": "ridge.html",
+    "href": "ridge.html",
+    "title": "Compressed Ridge Regression",
+    "section": "",
+    "text": "DuckRidge adds ridge regression to the compressed linear-regression workflow. It supports a single penalty value, a full lambda path, and cross-validation over compressed folds.",
+    "crumbs": [
+      "Home",
+      "Compressed Ridge Regression"
+    ]
+  },
+  {
+    "objectID": "ridge.html#constructor",
+    "href": "ridge.html#constructor",
+    "title": "Compressed Ridge Regression",
+    "section": "Constructor",
+    "text": "Constructor\n\n\nShow code\n\nDuckRidge(\n    db_name: str,\n    table_name: str,\n    formula: str,\n    lambda_grid=None,\n    cv_folds: int = 5,\n    seed: int = 42,\n    n_bootstraps: int = 0,\n    rowid_col: str = \"rowid\",\n    fitter: str = \"ridge\",\n)\n\nDuckRidge currently supports one outcome variable and does not support fixed effects.",
+    "crumbs": [
+      "Home",
+      "Compressed Ridge Regression"
+    ]
+  },
+  {
+    "objectID": "ridge.html#ridge-objective",
+    "href": "ridge.html#ridge-objective",
+    "title": "Compressed Ridge Regression",
+    "section": "Ridge Objective",
+    "text": "Ridge Objective\nAfter compression, the estimator solves\n\\[\n\\hat{\\beta}_\\lambda\n=\n\\arg\\min_\\beta\n\\sum_g n_g(\\bar{y}_g - x_g'\\beta)^2\n+ \\lambda \\|\\beta\\|_2^2.\n\\]\nThe closed form is\n\\[\n\\hat{\\beta}_\\lambda\n=\n(X'WX + \\lambda I)^{-1}X'W\\bar{y}.\n\\]\nThe implementation uses an augmented least-squares representation:\n\\[\n\\tilde{X}\n=\n\\begin{bmatrix}\nW^{1/2}X \\\\\n\\sqrt{\\lambda} I\n\\end{bmatrix},\n\\qquad\n\\tilde{y}\n=\n\\begin{bmatrix}\nW^{1/2}\\bar{y} \\\\\n0\n\\end{bmatrix}.\n\\]\nThen it calls np.linalg.lstsq.",
+    "crumbs": [
+      "Home",
+      "Compressed Ridge Regression"
+    ]
+  },
+  {
+    "objectID": "ridge.html#single-lambda",
+    "href": "ridge.html#single-lambda",
+    "title": "Compressed Ridge Regression",
+    "section": "Single Lambda",
+    "text": "Single Lambda\n\n\nShow code\n\nfrom duckreg.regularized import DuckRidge\n\nduck_ridge = DuckRidge(\n    db_name=\"ridge_test.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2 + f3\",\n    lambda_grid=[0.1],\n    cv_folds=1,\n    seed=42,\n)\nduck_ridge.fit(lambda_selection=\"single\")\nduck_ridge.summary()",
+    "crumbs": [
+      "Home",
+      "Compressed Ridge Regression"
+    ]
+  },
+  {
+    "objectID": "ridge.html#lambda-path",
+    "href": "ridge.html#lambda-path",
+    "title": "Compressed Ridge Regression",
+    "section": "Lambda Path",
+    "text": "Lambda Path\nThe batch path precomputes weighted \\(X\\) and \\(y\\), then solves over the full lambda grid:\n\n\nShow code\n\nduck_ridge = DuckRidge(\n    db_name=\"ridge_test.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2 + f3\",\n    lambda_grid=np.logspace(-4, 2, 50),\n    cv_folds=1,\n    seed=42,\n)\nduck_ridge.fit(lambda_selection=\"path\")\nduck_ridge.summary()[\"lambda_path_coefs\"]",
+    "crumbs": [
+      "Home",
+      "Compressed Ridge Regression"
+    ]
+  },
+  {
+    "objectID": "ridge.html#cross-validation",
+    "href": "ridge.html#cross-validation",
+    "title": "Compressed Ridge Regression",
+    "section": "Cross-Validation",
+    "text": "Cross-Validation\nWhen cv_folds &gt; 1, prepare_data() creates a temporary table with fold assignments:\n\n\nShow code\n\nCREATE TEMP TABLE cv_folds AS\nSELECT *,\n       (ROW_NUMBER() OVER (ORDER BY rowid)) % 5 AS fold_id\nFROM data\n\nCompression then includes fold_id in the group-by columns. Cross-validation loops over folds, fits on compressed training rows, predicts on compressed test rows, and computes weighted MSE.\nExample from notebooks/regularized.ipynb:\n\n\nShow code\n\nduck_ridge_cv = DuckRidge(\n    db_name=\"ridge_cv_test.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2 + f3\",\n    lambda_grid=np.logspace(-3, 1, 20),\n    cv_folds=5,\n    seed=42,\n)\nduck_ridge_cv.fit(lambda_selection=\"cv\")\nduck_ridge_cv.best_lambda\nduck_ridge_cv.summary()",
+    "crumbs": [
+      "Home",
+      "Compressed Ridge Regression"
+    ]
+  },
+  {
+    "objectID": "ridge.html#plot-helpers",
+    "href": "ridge.html#plot-helpers",
+    "title": "Compressed Ridge Regression",
+    "section": "Plot Helpers",
+    "text": "Plot Helpers\nDuckRidge includes:\n\n\nShow code\n\nduck_ridge_cv.plot_cv_curve()\nduck_ridge_cv.plot_coefficient_path()\n\nThese require matplotlib.",
+    "crumbs": [
+      "Home",
+      "Compressed Ridge Regression"
+    ]
+  },
+  {
+    "objectID": "ridge.html#inference",
+    "href": "ridge.html#inference",
+    "title": "Compressed Ridge Regression",
+    "section": "Inference",
+    "text": "Inference\nBootstrap standard errors are intentionally not implemented for ridge. Regularization changes the sampling behavior of the estimator, and a naive OLS-style bootstrap would be easy to misinterpret. The API raises NotImplementedError for ridge bootstrap.",
+    "crumbs": [
+      "Home",
+      "Compressed Ridge Regression"
+    ]
+  }
+]
