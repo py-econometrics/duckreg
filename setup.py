@@ -19,8 +19,8 @@ def read_long_description():
 
 setup(
     name="duckreg",
-    version="0.2",  # Use semantic versioning
-    packages=find_packages(),
+    version="0.3",  # Use semantic versioning
+    packages=find_packages(exclude=("tests", "tests.*")),
     install_requires=read_requirements(),
     author="Apoorva Lal",
     author_email="lal.apoorva@gmail.com",
