@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 from typing import Union
 from tqdm import tqdm
-from .demean import demean, _convert_to_int
 from .duckreg import DuckReg, wls
 
 ################################################################################
@@ -36,13 +35,15 @@ class DuckRegression(DuckReg):
 
     def _parse_formula(self):
         lhs, rhs = self.formula.split("~")
-        rhs_deparsed = rhs.split("|")
-        covars, fevars = rhs.split("|") if len(rhs_deparsed) > 1 else (rhs, None)
+        if "|" in rhs:
+            raise NotImplementedError(
+                "Fixed effects in DuckRegression formulas are not supported. "
+                "Use DuckMundlak or DuckDoubleDemeaning for panel fixed-effect designs."
+            )
 
         self.outcome_vars = [x.strip() for x in lhs.split("+")]
-        self.covars = [x.strip() for x in covars.split("+")]
-        self.fevars = [x.strip() for x in fevars.split("+")] if fevars else []
-        self.strata_cols = self.covars + self.fevars
+        self.covars = [x.strip() for x in rhs.split("+")]
+        self.strata_cols = self.covars
 
         if not self.outcome_vars:
             raise ValueError("No outcome variables found in the formula")
@@ -101,20 +102,10 @@ class DuckRegression(DuckReg):
         X = data[self.covars].values
         n = data["count"].values
 
-        # y, X, w need to be two-dimensional for the demean function
+        # y and X need to be two-dimensional for the shared WLS helper.
         y = y.reshape(-1, 1) if y.ndim == 1 else y
         X = X.reshape(-1, 1) if X.ndim == 1 else X
-
-        if self.fevars:
-            # fe needs to contain of only integers for
-            # the demean function to work
-            fe = _convert_to_int(data[self.fevars])
-            fe = fe.reshape(-1, 1) if fe.ndim == 1 else fe
-
-            y, _ = demean(x=y, flist=fe, weights=n)
-            X, _ = demean(x=X, flist=fe, weights=n)
-        else:
-            X = np.c_[np.ones(X.shape[0]), X]
+        X = np.c_[np.ones(X.shape[0]), X]
 
         return y, X, n
 
@@ -143,17 +134,12 @@ class DuckRegression(DuckReg):
 
     def bootstrap(self):
         self.se = "bootstrap"
-        if self.fevars:
-            boot_coefs = np.zeros(
-                (self.n_bootstraps, len(self.covars) * len(self.outcome_vars))
+        boot_coefs = np.zeros(
+            (
+                self.n_bootstraps,
+                (len(self.strata_cols) + 1) * len(self.outcome_vars),
             )
-        else:
-            boot_coefs = np.zeros(
-                (
-                    self.n_bootstraps,
-                    (len(self.strata_cols) + 1) * len(self.outcome_vars),
-                )
-            )
+        )
 
         if not self.cluster_col:
             # IID bootstrap
@@ -485,7 +471,10 @@ class _DuckCanonicalGLM(DuckReg):
         return self.vcov
 
     def bootstrap(self):
-        return np.empty((0, 0))
+        raise NotImplementedError(
+            "Bootstrap is not implemented for compressed GLM estimators yet. "
+            "Use fit_vcov() with n_bootstraps=0."
+        )
 
     def summary(self):
         out = {"point_estimate": self.point_estimate}
@@ -585,7 +574,10 @@ class DuckMultinomialLogisticRegression(DuckReg):
         return self.vcov
 
     def bootstrap(self):
-        return np.empty((0, 0))
+        raise NotImplementedError(
+            "Bootstrap is not implemented for compressed multinomial logit yet. "
+            "Use fit_vcov() with n_bootstraps=0."
+        )
 
     def summary(self):
         out = {
@@ -656,7 +648,9 @@ class DuckPoissonMultinomialRegression(DuckReg):
         return pd.DataFrame(coefs, index=self.labels, columns=["Intercept"] + self.covars)
 
     def bootstrap(self):
-        return np.empty((0, 0))
+        raise NotImplementedError(
+            "Bootstrap is not implemented for the label-wise Poisson decomposition yet."
+        )
 
     def summary(self):
         return {"point_estimate": self.point_estimate}

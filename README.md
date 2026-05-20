@@ -43,7 +43,7 @@ $$
 y \sim \psi\_i + \gamma\_t + \sum\_{k=1}^{T} \tau\_{k} D\_i 1(t = k)
 $$
 
-All the above regressions are run in compressed fashion with `duckdb`.
+All the above regressions are run in compressed fashion with `duckdb`. Formula-level fixed effects are not part of `DuckRegression`; use the panel-specific `DuckMundlak` or `DuckDoubleDemeaning` estimators for fixed-effect style designs.
 
 Please cite the following paper if you use `duckreg` in your research: 
 
