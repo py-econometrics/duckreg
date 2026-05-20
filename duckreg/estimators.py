@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 from typing import Union
 from tqdm import tqdm
-from .demean import demean, _convert_to_int
 from .duckreg import DuckReg, wls
 
 ################################################################################
@@ -36,13 +35,15 @@ class DuckRegression(DuckReg):
 
     def _parse_formula(self):
         lhs, rhs = self.formula.split("~")
-        rhs_deparsed = rhs.split("|")
-        covars, fevars = rhs.split("|") if len(rhs_deparsed) > 1 else (rhs, None)
+        if "|" in rhs:
+            raise NotImplementedError(
+                "Fixed effects in DuckRegression formulas are not supported. "
+                "Use DuckMundlak or DuckDoubleDemeaning for panel fixed-effect designs."
+            )
 
         self.outcome_vars = [x.strip() for x in lhs.split("+")]
-        self.covars = [x.strip() for x in covars.split("+")]
-        self.fevars = [x.strip() for x in fevars.split("+")] if fevars else []
-        self.strata_cols = self.covars + self.fevars
+        self.covars = [x.strip() for x in rhs.split("+")]
+        self.strata_cols = self.covars
 
         if not self.outcome_vars:
             raise ValueError("No outcome variables found in the formula")
@@ -101,20 +102,10 @@ class DuckRegression(DuckReg):
         X = data[self.covars].values
         n = data["count"].values
 
-        # y, X, w need to be two-dimensional for the demean function
+        # y and X need to be two-dimensional for the shared WLS helper.
         y = y.reshape(-1, 1) if y.ndim == 1 else y
         X = X.reshape(-1, 1) if X.ndim == 1 else X
-
-        if self.fevars:
-            # fe needs to contain of only integers for
-            # the demean function to work
-            fe = _convert_to_int(data[self.fevars])
-            fe = fe.reshape(-1, 1) if fe.ndim == 1 else fe
-
-            y, _ = demean(x=y, flist=fe, weights=n)
-            X, _ = demean(x=X, flist=fe, weights=n)
-        else:
-            X = np.c_[np.ones(X.shape[0]), X]
+        X = np.c_[np.ones(X.shape[0]), X]
 
         return y, X, n
 
@@ -143,17 +134,12 @@ class DuckRegression(DuckReg):
 
     def bootstrap(self):
         self.se = "bootstrap"
-        if self.fevars:
-            boot_coefs = np.zeros(
-                (self.n_bootstraps, len(self.covars) * len(self.outcome_vars))
+        boot_coefs = np.zeros(
+            (
+                self.n_bootstraps,
+                (len(self.strata_cols) + 1) * len(self.outcome_vars),
             )
-        else:
-            boot_coefs = np.zeros(
-                (
-                    self.n_bootstraps,
-                    (len(self.strata_cols) + 1) * len(self.outcome_vars),
-                )
-            )
+        )
 
         if not self.cluster_col:
             # IID bootstrap
@@ -229,6 +215,444 @@ class DuckRegression(DuckReg):
                 "point_estimate": self.point_estimate,
                 "standard_error": np.sqrt(np.diag(self.vcov)),
             }
+        return {"point_estimate": self.point_estimate}
+
+
+
+################################################################################
+
+
+def _add_intercept(X: np.ndarray) -> np.ndarray:
+    X = np.asarray(X, dtype=float)
+    X = X.reshape(-1, 1) if X.ndim == 1 else X
+    return np.c_[np.ones(X.shape[0]), X]
+
+
+def _sigmoid(eta: np.ndarray) -> np.ndarray:
+    eta = np.asarray(eta, dtype=float)
+    out = np.empty_like(eta, dtype=float)
+    pos = eta >= 0
+    out[pos] = 1.0 / (1.0 + np.exp(-eta[pos]))
+    exp_eta = np.exp(eta[~pos])
+    out[~pos] = exp_eta / (1.0 + exp_eta)
+    return out
+
+
+def _softmax(eta: np.ndarray) -> np.ndarray:
+    eta = eta - np.max(eta, axis=1, keepdims=True)
+    exp_eta = np.exp(eta)
+    return exp_eta / exp_eta.sum(axis=1, keepdims=True)
+
+
+def _sql_literal(value):
+    if isinstance(value, str):
+        return "'" + value.replace("'", "''") + "'"
+    return repr(value)
+
+
+def _solve_step(info: np.ndarray, score: np.ndarray, ridge: float = 1e-10) -> np.ndarray:
+    """Solve a Newton/Fisher scoring step with a tiny ridge fallback."""
+    try:
+        return np.linalg.solve(info, score)
+    except np.linalg.LinAlgError:
+        return np.linalg.solve(info + ridge * np.eye(info.shape[0]), score)
+
+
+def _weighted_logistic_irls(
+    X: np.ndarray,
+    successes: np.ndarray,
+    totals: np.ndarray,
+    max_iter: int = 100,
+    tol: float = 1e-10,
+) -> np.ndarray:
+    beta = np.zeros(X.shape[1])
+    successes = successes.astype(float)
+    totals = totals.astype(float)
+    for _ in range(max_iter):
+        p = np.clip(_sigmoid(X @ beta), 1e-9, 1 - 1e-9)
+        score = X.T @ (successes - totals * p)
+        info = X.T @ ((totals * p * (1 - p))[:, None] * X)
+        step = _solve_step(info, score)
+        max_step = np.max(np.abs(step))
+        if max_step > 5:
+            step = step * (5 / max_step)
+        beta_new = beta + step
+        if np.max(np.abs(step)) < tol:
+            return beta_new
+        beta = beta_new
+    return beta
+
+
+def _weighted_poisson_irls(
+    X: np.ndarray,
+    y_sum: np.ndarray,
+    totals: np.ndarray,
+    max_iter: int = 100,
+    tol: float = 1e-10,
+) -> np.ndarray:
+    mean_y = np.maximum(y_sum.sum() / max(totals.sum(), 1.0), 1e-8)
+    beta = np.zeros(X.shape[1])
+    beta[0] = np.log(mean_y)
+    y_sum = y_sum.astype(float)
+    totals = totals.astype(float)
+    for _ in range(max_iter):
+        eta = np.clip(X @ beta, -30, 30)
+        mu = np.exp(eta)
+        score = X.T @ (y_sum - totals * mu)
+        info = X.T @ ((totals * mu)[:, None] * X)
+        step = _solve_step(info, score)
+        max_step = np.max(np.abs(step))
+        if max_step > 5:
+            step = step * (5 / max_step)
+        beta_new = beta + step
+        if np.max(np.abs(step)) < tol:
+            return beta_new
+        beta = beta_new
+    return beta
+
+
+def _multinomial_irls(
+    X: np.ndarray,
+    class_counts: np.ndarray,
+    max_iter: int = 100,
+    tol: float = 1e-10,
+) -> np.ndarray:
+    """Baseline-category multinomial logit IRLS on grouped class counts."""
+    G, p = X.shape
+    K = class_counts.shape[1]
+    K1 = K - 1
+    beta = np.zeros((K1, p))
+    totals = class_counts.sum(axis=1)
+
+    for _ in range(max_iter):
+        eta = X @ beta.T
+        probs = _softmax(np.c_[eta, np.zeros(G)])[:, :K1]
+        score = (class_counts[:, :K1] - totals[:, None] * probs).T @ X
+        info = np.zeros((K1 * p, K1 * p))
+        for k in range(K1):
+            for l in range(K1):
+                w = totals * probs[:, k] * ((1.0 if k == l else 0.0) - probs[:, l])
+                block = X.T @ (w[:, None] * X)
+                info[k * p : (k + 1) * p, l * p : (l + 1) * p] = block
+        step = _solve_step(info, score.reshape(-1)).reshape(K1, p)
+        max_step = np.max(np.abs(step))
+        if max_step > 5:
+            step = step * (5 / max_step)
+        beta_new = beta + step
+        if np.max(np.abs(step)) < tol:
+            return beta_new
+        beta = beta_new
+    return beta
+
+
+X_MIN_PILOT = 200
+
+
+class _DuckCanonicalGLM(DuckReg):
+    """Compressed canonical-link GLM base class.
+
+    The exact estimator runs IRLS on grouped sufficient statistics. The
+    `one_step` estimator follows Lumley's large-data trick: fit a pilot model on
+    a subsample and take one full-data Fisher scoring step using compressed
+    score and information.
+    """
+
+    family = None
+
+    def __init__(
+        self,
+        db_name: str,
+        table_name: str,
+        formula: str,
+        seed: int,
+        n_bootstraps: int = 0,
+        method: str = "one_step",
+        subsample_exponent: float = 5 / 9,
+        max_iter: int = 100,
+        tol: float = 1e-10,
+        **kwargs,
+    ):
+        super().__init__(
+            db_name=db_name,
+            table_name=table_name,
+            seed=seed,
+            n_bootstraps=n_bootstraps,
+            **kwargs,
+        )
+        if method not in {"one_step", "irls"}:
+            raise ValueError("method must be 'one_step' or 'irls'")
+        self.formula = formula
+        self.method = method
+        self.subsample_exponent = subsample_exponent
+        self.max_iter = max_iter
+        self.tol = tol
+        self._parse_formula()
+
+    def _parse_formula(self):
+        lhs, rhs = self.formula.split("~")
+        if "|" in rhs:
+            raise NotImplementedError("GLM fixed effects are not implemented yet")
+        self.outcome_var = lhs.strip()
+        self.covars = [x.strip() for x in rhs.split("+") if x.strip()]
+
+    def prepare_data(self):
+        self.n_obs = self.conn.execute(
+            f"SELECT COUNT(*) FROM {self.table_name}"
+        ).fetchone()[0]
+
+    def compress_data(self):
+        group_by_cols = ", ".join(self.covars)
+        self.agg_query = f"""
+        SELECT {group_by_cols}, COUNT(*) AS count, SUM({self.outcome_var}) AS sum_y
+        FROM {self.table_name}
+        GROUP BY {group_by_cols}
+        """
+        self.df_compressed = self.conn.execute(self.agg_query).fetchdf()
+
+    def collect_data(self, data: pd.DataFrame):
+        X = _add_intercept(data[self.covars].values)
+        return X, data["sum_y"].values.astype(float), data["count"].values.astype(float)
+
+    def _pilot_data(self):
+        n = int(np.ceil(self.n_obs ** self.subsample_exponent))
+        n = min(max(n, X_MIN_PILOT), self.n_obs)
+        cols = ", ".join([self.outcome_var] + self.covars)
+        df = self.conn.execute(
+            f"SELECT {cols} FROM {self.table_name} "
+            f"USING SAMPLE reservoir({n} ROWS) REPEATABLE ({self.seed})"
+        ).fetchdf()
+        X = _add_intercept(df[self.covars].values)
+        y = df[self.outcome_var].values.astype(float)
+        return X, y, np.ones(len(df))
+
+    def _score_info(self, beta: np.ndarray, data: pd.DataFrame | None = None):
+        X, y_sum, totals = self.collect_data(data if data is not None else self.df_compressed)
+        if self.family == "logistic":
+            mu = np.clip(_sigmoid(X @ beta), 1e-9, 1 - 1e-9)
+            var = mu * (1 - mu)
+        elif self.family == "poisson":
+            mu = np.exp(np.clip(X @ beta, -30, 30))
+            var = mu
+        else:
+            raise ValueError("unknown family")
+        score = X.T @ (y_sum - totals * mu)
+        info = X.T @ ((totals * var)[:, None] * X)
+        return score, info
+
+    def estimate(self):
+        X, y_sum, totals = self.collect_data(self.df_compressed)
+        if self.method == "irls":
+            if self.family == "logistic":
+                return _weighted_logistic_irls(X, y_sum, totals, self.max_iter, self.tol)
+            return _weighted_poisson_irls(X, y_sum, totals, self.max_iter, self.tol)
+
+        X0, y0, n0 = self._pilot_data()
+        if self.family == "logistic":
+            beta0 = _weighted_logistic_irls(X0, y0, n0, self.max_iter, self.tol)
+        else:
+            beta0 = _weighted_poisson_irls(X0, y0, n0, self.max_iter, self.tol)
+        score, info = self._score_info(beta0)
+        return beta0 + _solve_step(info, score)
+
+    def fit_vcov(self, robust: bool = False):
+        _, info = self._score_info(self.point_estimate)
+        bread = np.linalg.inv(info)
+        if not robust:
+            self.vcov = bread
+        else:
+            X, y_sum, totals = self.collect_data(self.df_compressed)
+            if self.family == "logistic":
+                mu = np.clip(_sigmoid(X @ self.point_estimate), 1e-9, 1 - 1e-9)
+            else:
+                mu = np.exp(np.clip(X @ self.point_estimate, -30, 30))
+            grouped_scores = X * (y_sum - totals * mu)[:, None]
+            meat = grouped_scores.T @ grouped_scores
+            self.vcov = bread @ meat @ bread
+        return self.vcov
+
+    def bootstrap(self):
+        raise NotImplementedError(
+            "Bootstrap is not implemented for compressed GLM estimators yet. "
+            "Use fit_vcov() with n_bootstraps=0."
+        )
+
+    def summary(self):
+        out = {"point_estimate": self.point_estimate}
+        if hasattr(self, "vcov"):
+            out["standard_error"] = np.sqrt(np.diag(self.vcov))
+        return out
+
+
+class DuckLogisticRegression(_DuckCanonicalGLM):
+    family = "logistic"
+
+
+class DuckPoissonRegression(_DuckCanonicalGLM):
+    family = "poisson"
+
+
+class DuckMultinomialLogisticRegression(DuckReg):
+    """Compressed multinomial logit for moderate numbers of labels."""
+
+    def __init__(
+        self,
+        db_name: str,
+        table_name: str,
+        formula: str,
+        seed: int,
+        n_bootstraps: int = 0,
+        labels: list | None = None,
+        baseline=None,
+        max_iter: int = 100,
+        tol: float = 1e-10,
+        **kwargs,
+    ):
+        super().__init__(db_name, table_name, seed, n_bootstraps, **kwargs)
+        self.formula = formula
+        self.labels = labels
+        self.baseline = baseline
+        self.max_iter = max_iter
+        self.tol = tol
+        self._parse_formula()
+
+    def _parse_formula(self):
+        lhs, rhs = self.formula.split("~")
+        if "|" in rhs:
+            raise NotImplementedError("GLM fixed effects are not implemented yet")
+        self.outcome_var = lhs.strip()
+        self.covars = [x.strip() for x in rhs.split("+") if x.strip()]
+
+    def prepare_data(self):
+        if self.labels is None:
+            self.labels = [
+                x[0]
+                for x in self.conn.execute(
+                    f"SELECT DISTINCT {self.outcome_var} FROM {self.table_name} ORDER BY {self.outcome_var}"
+                ).fetchall()
+            ]
+        if self.baseline is None:
+            self.baseline = self.labels[-1]
+        self.labels = [x for x in self.labels if x != self.baseline] + [self.baseline]
+
+    def compress_data(self):
+        group_by_cols = ", ".join(self.covars)
+        count_exprs = ", ".join(
+            [
+                f"SUM(CASE WHEN {self.outcome_var} = {_sql_literal(label)} THEN 1 ELSE 0 END) AS class_{j}"
+                for j, label in enumerate(self.labels)
+            ]
+        )
+        self.agg_query = f"""
+        SELECT {group_by_cols}, COUNT(*) AS count, {count_exprs}
+        FROM {self.table_name}
+        GROUP BY {group_by_cols}
+        """
+        self.df_compressed = self.conn.execute(self.agg_query).fetchdf()
+
+    def collect_data(self, data: pd.DataFrame):
+        X = _add_intercept(data[self.covars].values)
+        counts = data[[f"class_{j}" for j in range(len(self.labels))]].values.astype(float)
+        return X, counts
+
+    def estimate(self):
+        X, counts = self.collect_data(self.df_compressed)
+        return _multinomial_irls(X, counts, self.max_iter, self.tol)
+
+    def fit_vcov(self):
+        X, counts = self.collect_data(self.df_compressed)
+        totals = counts.sum(axis=1)
+        G, p = X.shape
+        K1 = len(self.labels) - 1
+        eta = X @ self.point_estimate.T
+        probs = _softmax(np.c_[eta, np.zeros(G)])[:, :K1]
+        info = np.zeros((K1 * p, K1 * p))
+        for k in range(K1):
+            for l in range(K1):
+                w = totals * probs[:, k] * ((1.0 if k == l else 0.0) - probs[:, l])
+                info[k * p : (k + 1) * p, l * p : (l + 1) * p] = X.T @ (w[:, None] * X)
+        self.vcov = np.linalg.inv(info)
+        return self.vcov
+
+    def bootstrap(self):
+        raise NotImplementedError(
+            "Bootstrap is not implemented for compressed multinomial logit yet. "
+            "Use fit_vcov() with n_bootstraps=0."
+        )
+
+    def summary(self):
+        out = {
+            "labels": self.labels[:-1],
+            "baseline": self.baseline,
+            "point_estimate": self.point_estimate,
+        }
+        if hasattr(self, "vcov"):
+            out["standard_error"] = np.sqrt(np.diag(self.vcov)).reshape(
+                len(self.labels) - 1, -1
+            )
+        return out
+
+
+class DuckPoissonMultinomialRegression(DuckReg):
+    """Many-label multinomial/count model via label-wise Poisson regressions."""
+
+    def __init__(
+        self,
+        db_name: str,
+        table_name: str,
+        count_col: str,
+        label_col: str,
+        covars: list[str],
+        seed: int,
+        n_bootstraps: int = 0,
+        labels: list | None = None,
+        max_iter: int = 100,
+        tol: float = 1e-10,
+        **kwargs,
+    ):
+        super().__init__(db_name, table_name, seed, n_bootstraps, **kwargs)
+        self.count_col = count_col
+        self.label_col = label_col
+        self.covars = covars
+        self.labels = labels
+        self.max_iter = max_iter
+        self.tol = tol
+
+    def prepare_data(self):
+        if self.labels is None:
+            self.labels = [
+                x[0]
+                for x in self.conn.execute(
+                    f"SELECT DISTINCT {self.label_col} FROM {self.table_name} ORDER BY {self.label_col}"
+                ).fetchall()
+            ]
+
+    def compress_data(self):
+        group_by_cols = ", ".join([self.label_col] + self.covars)
+        self.agg_query = f"""
+        SELECT {group_by_cols}, COUNT(*) AS rows, SUM({self.count_col}) AS sum_y
+        FROM {self.table_name}
+        GROUP BY {group_by_cols}
+        """
+        self.df_compressed = self.conn.execute(self.agg_query).fetchdf()
+
+    def collect_data(self, label):
+        data = self.df_compressed[self.df_compressed[self.label_col] == label]
+        X = _add_intercept(data[self.covars].values)
+        return X, data["sum_y"].values.astype(float), data["rows"].values.astype(float)
+
+    def estimate(self):
+        coefs = []
+        for label in self.labels:
+            X, y_sum, totals = self.collect_data(label)
+            coefs.append(_weighted_poisson_irls(X, y_sum, totals, self.max_iter, self.tol))
+        return pd.DataFrame(coefs, index=self.labels, columns=["Intercept"] + self.covars)
+
+    def bootstrap(self):
+        raise NotImplementedError(
+            "Bootstrap is not implemented for the label-wise Poisson decomposition yet."
+        )
+
+    def summary(self):
         return {"point_estimate": self.point_estimate}
 
 
