@@ -16,10 +16,10 @@ pip install duckreg
 
 - dev install (preferably in a `venv`) with
 ```
-(uv) pip install git+https://github.com/apoorvalal/duckreg.git
+uv pip install -e '.[test]'
 ```
 
-or git clone this repository and install in editable mode.
+or install from git with `uv pip install git+https://github.com/apoorvalal/duckreg.git`.
 
 By default, legacy DuckDB paths still work:
 
