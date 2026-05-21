@@ -33,7 +33,7 @@ databricks = ["ibis-framework[databricks]"]
 duckdb = ["ibis-framework[duckdb]"]
 postgres = ["ibis-framework[postgres]"]
 snowflake = ["ibis-framework[snowflake]"]
-test = ["pytest", "pyfixest"]
+test = ["pytest", "pyfixest", "scipy"]
 
 [project.urls]
 Homepage = "https://github.com/py-econometrics/duckreg"

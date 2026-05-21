@@ -630,6 +630,8 @@ snowflake = [
 test = [
     { name = "pyfixest" },
     { name = "pytest" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 
 [package.metadata]
@@ -643,6 +645,7 @@ requires-dist = [
     { name = "pandas" },
     { name = "pyfixest", marker = "extra == 'test'" },
     { name = "pytest", marker = "extra == 'test'" },
+    { name = "scipy", marker = "extra == 'test'" },
     { name = "tqdm" },
 ]
 provides-extras = ["databricks", "duckdb", "postgres", "snowflake", "test"]

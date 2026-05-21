@@ -1,6 +1,8 @@
 import ibis
 import numpy as np
 import pandas as pd
+from scipy.optimize import minimize
+from scipy.special import logsumexp
 
 import duckreg
 from duckreg.dbreg import (
@@ -23,6 +25,70 @@ def _make_con(tmp_path, df, table="data"):
     con = ibis.duckdb.connect(tmp_path / "dbreg_glm_event.db")
     con.create_table(table, df, overwrite=True)
     return con
+
+
+def _add_intercept(values):
+    return np.c_[np.ones(len(values)), values]
+
+
+def _fit_logistic_mle(X, y):
+    def objective(beta):
+        eta = X @ beta
+        value = np.sum(np.logaddexp(0.0, eta) - y * eta)
+        gradient = X.T @ (1 / (1 + np.exp(-eta)) - y)
+        return value, gradient
+
+    result = minimize(
+        lambda beta: objective(beta)[0],
+        np.zeros(X.shape[1]),
+        jac=lambda beta: objective(beta)[1],
+        method="BFGS",
+    )
+    assert result.success
+    return result.x
+
+
+def _fit_poisson_mle(X, y):
+    def objective(beta):
+        eta = X @ beta
+        mu = np.exp(eta)
+        value = np.sum(mu - y * eta)
+        gradient = X.T @ (mu - y)
+        return value, gradient
+
+    result = minimize(
+        lambda beta: objective(beta)[0],
+        np.zeros(X.shape[1]),
+        jac=lambda beta: objective(beta)[1],
+        method="BFGS",
+    )
+    assert result.success
+    return result.x
+
+
+def _fit_multinomial_mle(X, y_codes, n_labels):
+    n_nonbase = n_labels - 1
+    n_features = X.shape[1]
+
+    def objective(flat_beta):
+        beta = flat_beta.reshape(n_nonbase, n_features)
+        eta = X @ beta.T
+        full_eta = np.c_[eta, np.zeros(len(X))]
+        log_denom = logsumexp(full_eta, axis=1)
+        value = np.sum(log_denom - full_eta[np.arange(len(X)), y_codes])
+        probs = np.exp(full_eta - log_denom[:, None])[:, :n_nonbase]
+        indicators = np.column_stack([y_codes == j for j in range(n_nonbase)])
+        gradient = -((indicators - probs).T @ X).reshape(-1)
+        return value, gradient
+
+    result = minimize(
+        lambda beta: objective(beta)[0],
+        np.zeros(n_nonbase * n_features),
+        jac=lambda beta: objective(beta)[1],
+        method="BFGS",
+    )
+    assert result.success
+    return result.x.reshape(n_nonbase, n_features)
 
 
 def test_db_glm_exports():
@@ -60,6 +126,29 @@ def test_db_logistic_matches_duck_logistic(tmp_path):
     np.testing.assert_allclose(new.vcov, old.vcov)
 
 
+def test_db_logistic_matches_scipy_log_likelihood(tmp_path):
+    rng = np.random.default_rng(124)
+    n = 3000
+    x1 = rng.integers(0, 4, n)
+    x2 = rng.integers(0, 3, n)
+    eta = -0.6 + 0.35 * x1 - 0.25 * x2
+    y = rng.binomial(1, 1 / (1 + np.exp(-eta)))
+    df = pd.DataFrame({"y": y, "x1": x1, "x2": x2})
+    con = _make_con(tmp_path, df)
+    model = DBLogisticRegression(
+        db_name=None,
+        connection=con,
+        table_name="data",
+        formula="y ~ x1 + x2",
+        seed=124,
+        method="irls",
+        n_bootstraps=0,
+    )
+    model.fit()
+    expected = _fit_logistic_mle(_add_intercept(df[["x1", "x2"]].values), y)
+    np.testing.assert_allclose(model.point_estimate, expected, rtol=1e-7, atol=1e-7)
+
+
 def test_db_poisson_matches_duck_poisson(tmp_path):
     rng = np.random.default_rng(456)
     n = 5000
@@ -85,6 +174,29 @@ def test_db_poisson_matches_duck_poisson(tmp_path):
     new.fit_vcov()
     np.testing.assert_allclose(new.point_estimate, old.point_estimate)
     np.testing.assert_allclose(new.vcov, old.vcov)
+
+
+def test_db_poisson_matches_scipy_log_likelihood(tmp_path):
+    rng = np.random.default_rng(457)
+    n = 3000
+    x1 = rng.integers(0, 5, n)
+    x2 = rng.integers(0, 2, n)
+    mu = np.exp(0.15 + 0.12 * x1 - 0.22 * x2)
+    y = rng.poisson(mu)
+    df = pd.DataFrame({"y": y, "x1": x1, "x2": x2})
+    con = _make_con(tmp_path, df)
+    model = DBPoissonRegression(
+        db_name=None,
+        connection=con,
+        table_name="data",
+        formula="y ~ x1 + x2",
+        seed=457,
+        method="irls",
+        n_bootstraps=0,
+    )
+    model.fit()
+    expected = _fit_poisson_mle(_add_intercept(df[["x1", "x2"]].values), y)
+    np.testing.assert_allclose(model.point_estimate, expected, rtol=1e-7, atol=1e-7)
 
 
 def test_db_multinomial_logit_matches_duck_multinomial_logit(tmp_path):
@@ -117,6 +229,36 @@ def test_db_multinomial_logit_matches_duck_multinomial_logit(tmp_path):
     new.fit_vcov()
     np.testing.assert_allclose(new.point_estimate, old.point_estimate)
     np.testing.assert_allclose(new.vcov, old.vcov)
+
+
+def test_db_multinomial_logit_matches_scipy_log_likelihood(tmp_path):
+    rng = np.random.default_rng(790)
+    n = 3000
+    labels = ["a", "b", "c"]
+    x1 = rng.integers(0, 4, n)
+    x2 = rng.integers(0, 3, n)
+    X = _add_intercept(np.c_[x1, x2])
+    beta = np.array([[0.25, 0.28, -0.14], [-0.35, -0.1, 0.22]])
+    eta = np.c_[X @ beta.T, np.zeros(n)]
+    probs = np.exp(eta - eta.max(axis=1, keepdims=True))
+    probs = probs / probs.sum(axis=1, keepdims=True)
+    y_codes = np.array([rng.choice(len(labels), p=prob) for prob in probs])
+    y = np.array(labels)[y_codes]
+    df = pd.DataFrame({"y": y, "x1": x1, "x2": x2})
+    con = _make_con(tmp_path, df)
+    model = DBMultinomialLogisticRegression(
+        db_name=None,
+        connection=con,
+        table_name="data",
+        formula="y ~ x1 + x2",
+        seed=790,
+        labels=labels,
+        baseline="c",
+        n_bootstraps=0,
+    )
+    model.fit()
+    expected = _fit_multinomial_mle(X, y_codes, len(labels))
+    np.testing.assert_allclose(model.point_estimate, expected, rtol=1e-7, atol=1e-7)
 
 
 def test_db_poisson_multinomial_matches_duck_poisson_multinomial(tmp_path):
