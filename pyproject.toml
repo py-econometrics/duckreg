@@ -30,15 +30,14 @@ dependencies = [
 
 [project.optional-dependencies]
 databricks = ["ibis-framework[databricks]"]
-docs = ["pdoc"]
 duckdb = ["ibis-framework[duckdb]"]
 postgres = ["ibis-framework[postgres]"]
 snowflake = ["ibis-framework[snowflake]"]
 test = ["pytest", "pyfixest"]
 
 [project.urls]
-Homepage = "https://github.com/apoorvalal/duckreg"
-Repository = "https://github.com/apoorvalal/duckreg"
+Homepage = "https://github.com/py-econometrics/duckreg"
+Repository = "https://github.com/py-econometrics/duckreg"
 
 [tool.setuptools.packages.find]
 include = ["duckreg", "duckreg.*"]

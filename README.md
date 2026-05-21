@@ -19,7 +19,7 @@ pip install duckreg
 uv pip install -e '.[test]'
 ```
 
-or install from git with `uv pip install git+https://github.com/apoorvalal/duckreg.git`.
+or install from git with `uv pip install git+https://github.com/py-econometrics/duckreg.git`.
 
 By default, legacy DuckDB paths still work:
 
