@@ -1,0 +1,122 @@
+---
+title: "Compression and Estimator Lifecycle"
+---
+
+The basic `duckreg` trick is to identify the sufficient statistics that an estimator needs, compute them in the database, and solve the remaining small problem in Python. The raw data can have millions or billions of rows; the collected table has one row per unique covariate or design cell.
+
+## Lifecycle
+
+Every estimator follows the same public lifecycle:
+
+```{python}
+model.prepare_data()
+model.compress_data()
+model.point_estimate = model.estimate()
+if model.n_bootstraps > 0:
+    model.vcov = model.bootstrap()
+```
+
+The user-facing call is simply:
+
+```{python}
+model.fit()
+model.summary()
+```
+
+Estimators with analytic covariance expose `fit_vcov()`:
+
+```{python}
+model.fit()
+model.fit_vcov()
+model.summary()
+```
+
+## Weighted Least Squares
+
+For a linear model
+
+$$
+y_i = x_i'\beta + \varepsilon_i,
+$$
+
+suppose rows are grouped by identical right-hand-side covariates. For cell $g$, define
+
+$$
+n_g = \#\{i:x_i=x_g\},
+\qquad
+\bar{y}_g = \frac{1}{n_g}\sum_{i:x_i=x_g} y_i.
+$$
+
+The least-squares normal equations become
+
+$$
+\sum_i x_i(y_i - x_i'\beta)
+=
+\sum_g n_g x_g(\bar{y}_g - x_g'\beta).
+$$
+
+So the full-data OLS coefficient is exactly the weighted least-squares coefficient on compressed cells:
+
+$$
+\hat{\beta}
+=
+\left(\sum_g n_g x_gx_g'\right)^{-1}
+\left(\sum_g n_g x_g\bar{y}_g\right).
+$$
+
+The shared numerical helper applies frequency weights by premultiplying by $\sqrt{n_g}$:
+
+```{python}
+def wls(X, y, n):
+    weights = np.sqrt(n).reshape(-1, 1)
+    return np.linalg.lstsq(X * weights, y * weights, rcond=None)[0]
+```
+
+## Sufficient Statistics
+
+For a regression `Y ~ D + f1 + f2`, the compressed table stores:
+
+```{sql}
+SELECT
+  D,
+  f1,
+  f2,
+  COUNT(*) AS count,
+  SUM(Y) AS sum_Y,
+  SUM(Y * Y) AS sum_Y_sq
+FROM data
+GROUP BY D, f1, f2
+```
+
+The point estimate needs `count` and `sum_Y`. HC1 covariance also needs `sum_Y_sq`, because the within-cell residual sum of squares can be reconstructed without expanding the raw rows:
+
+$$
+RSS_g
+=
+n_g \hat{y}_g^2
+- 2\hat{y}_g \sum_{i \in g} y_i
++ \sum_{i \in g} y_i^2.
+$$
+
+## Why Compression Works Best With Discrete Designs
+
+Compression is most powerful when the design has repeated rows. This is common in saturated designs, discretized covariates, experiments with treatment arms and strata, panel designs with generated averages, and text/count designs where features are categorical.
+
+If every row has a unique continuous covariate vector, the compressed table can be nearly as large as the raw table. In that case `duckreg` still gives a uniform API, but the performance gains are smaller.
+
+## Estimator-Specific Compression
+
+Different estimators define different design cells:
+
+| Estimator | Compression cell |
+|---|---|
+| `DBRegression` | Unique RHS covariate values. |
+| `DBMundlak` | Unique original covariates plus generated unit/time means. |
+| `DBDoubleDemeaning` | Unique values of the residualized treatment. |
+| `DBMundlakEventStudy` | Unique cohort, time, and cohort-by-time indicator rows. |
+| `DBDML` | Discrete control groups with sums and cross-products. |
+| `DBLogisticRegression` | Unique RHS covariate values with success counts. |
+| `DBPoissonRegression` | Unique RHS covariate values with outcome-count sums. |
+| `DBMultinomialLogisticRegression` | Unique RHS covariate values with class-count vectors. |
+
+Formula-level fixed effects are not part of `DBRegression`; panel estimators construct their fixed-effect style designs explicitly before compression.

@@ -4882,22 +4882,20 @@ window.Quarto = {
 <style type="text/css">body {
 font-size: 16px;
 }
-.content {
+.navbar-title {
+font-weight: 650;
+}
+main.content {
 max-width: 1180px;
 }
-pre code {
-font-size: 0.88rem;
-}
 table {
-width: 100%;
+font-size: 0.94rem;
 }
-.callout-note,
-.callout-warning,
-.callout-tip {
+code {
+white-space: pre-wrap;
+}
+.callout {
 border-radius: 6px;
-}
-.api-table td:first-child {
-white-space: nowrap;
 }
 </style>
 </head>
@@ -4924,12 +4922,16 @@ white-space: nowrap;
 <span class="menu-text">Home</span></a>
   </li>  
   <li class="nav-item">
+    <a class="nav-link" href="./ibis.html"> 
+<span class="menu-text">Ibis</span></a>
+  </li>  
+  <li class="nav-item">
     <a class="nav-link" href="./compression.html"> 
 <span class="menu-text">Compression</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./linear.html"> 
-<span class="menu-text">Linear Models</span></a>
+<span class="menu-text">Linear</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./panel.html"> 
@@ -4944,6 +4946,10 @@ white-space: nowrap;
 <span class="menu-text">GLMs</span></a>
   </li>  
   <li class="nav-item">
+    <a class="nav-link" href="./fisher-scoring.html"> 
+<span class="menu-text">Fisher Scoring</span></a>
+  </li>  
+  <li class="nav-item">
     <a class="nav-link" href="./ridge.html"> 
 <span class="menu-text">Ridge</span></a>
   </li>  
@@ -4954,6 +4960,10 @@ white-space: nowrap;
   <li class="nav-item">
     <a class="nav-link" href="./examples.html"> 
 <span class="menu-text">Examples</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="./performance.html"> 
+<span class="menu-text">Performance</span></a>
   </li>  
 </ul>
           </div> <!-- /navcollapse -->
@@ -4989,7 +4999,13 @@ white-space: nowrap;
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./index.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">duckreg Documentation</span></a>
+ <span class="menu-text">duckreg</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./ibis.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Ibis Backends</span></a>
   </div>
 </li>
         <li class="sidebar-item">
@@ -5024,6 +5040,12 @@ white-space: nowrap;
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="./fisher-scoring.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Fisher Scoring and Multinomial GLMs</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="./ridge.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Compressed Ridge Regression</span></a>
   </div>
@@ -5040,6 +5062,12 @@ white-space: nowrap;
  <span class="menu-text">Executed Examples</span></a>
   </div>
 </li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./performance.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Performance Comparisons</span></a>
+  </div>
+</li>
     </ul>
     </div>
 </nav>
@@ -5050,13 +5078,13 @@ white-space: nowrap;
     <h2 id="toc-title">On this page</h2>
    
   <ul>
-  <li><a href="#fisher-scoring" id="toc-fisher-scoring" class="nav-link active" data-scroll-target="#fisher-scoring">Fisher Scoring</a></li>
+  <li><a href="#api" id="toc-api" class="nav-link active" data-scroll-target="#api">API</a></li>
+  <li><a href="#methods" id="toc-methods" class="nav-link" data-scroll-target="#methods">Methods</a></li>
   <li><a href="#binary-logit" id="toc-binary-logit" class="nav-link" data-scroll-target="#binary-logit">Binary Logit</a></li>
-  <li><a href="#poisson-regression" id="toc-poisson-regression" class="nav-link" data-scroll-target="#poisson-regression">Poisson Regression</a></li>
-  <li><a href="#exact-irls-vs-one-step" id="toc-exact-irls-vs-one-step" class="nav-link" data-scroll-target="#exact-irls-vs-one-step">Exact IRLS vs One-Step</a></li>
+  <li><a href="#poisson" id="toc-poisson" class="nav-link" data-scroll-target="#poisson">Poisson</a></li>
   <li><a href="#multinomial-logit" id="toc-multinomial-logit" class="nav-link" data-scroll-target="#multinomial-logit">Multinomial Logit</a></li>
-  <li><a href="#many-label-poisson-decomposition" id="toc-many-label-poisson-decomposition" class="nav-link" data-scroll-target="#many-label-poisson-decomposition">Many-Label Poisson Decomposition</a></li>
-  <li><a href="#current-glm-inference-caveat" id="toc-current-glm-inference-caveat" class="nav-link" data-scroll-target="#current-glm-inference-caveat">Current GLM Inference Caveat</a></li>
+  <li><a href="#many-label-count-decomposition" id="toc-many-label-count-decomposition" class="nav-link" data-scroll-target="#many-label-count-decomposition">Many-Label Count Decomposition</a></li>
+  <li><a href="#inference" id="toc-inference" class="nav-link" data-scroll-target="#inference">Inference</a></li>
   </ul>
 </nav>
     </div>
@@ -5082,33 +5110,62 @@ white-space: nowrap;
 </header>
 
 
-<p>The GLM API extends the compression idea to canonical-link likelihoods. Logistic, Poisson, and multinomial models are fitted from grouped sufficient statistics using Fisher scoring.</p>
-<section id="fisher-scoring" class="level2">
-<h2 class="anchored" data-anchor-id="fisher-scoring">Fisher Scoring</h2>
-<p>All canonical GLM paths use the update</p>
-<p><span class="math display">\[
-\beta^{(t+1)}
-=
-\beta^{(t)}
-+
-I(\beta^{(t)})^{-1} U(\beta^{(t)}),
-\]</span></p>
-<p>where <span class="math inline">\(U(\beta)\)</span> is the score and <span class="math inline">\(I(\beta)\)</span> is expected Fisher information.</p>
-<p>The implementation solves</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>step <span class="op">=</span> np.linalg.solve(info, score)</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>beta_new <span class="op">=</span> beta <span class="op">+</span> step</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>The GLM estimators extend compression from least squares to canonical-link likelihoods. The database groups rows by covariates and collects counts or outcome sums; Python runs Fisher scoring on the grouped likelihood.</p>
+<section id="api" class="level2">
+<h2 class="anchored" data-anchor-id="api">API</h2>
+<div id="05ef2a63" class="cell" data-execution_count="1">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> (</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    DBLogisticRegression,</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    DBPoissonRegression,</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    DBMultinomialLogisticRegression,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    DBPoissonMultinomialRegression,</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<p>with a small ridge fallback if the solve fails.</p>
+</div>
+<p>Binary logit and Poisson regression share the same constructor shape:</p>
+<div id="1f487946" class="cell" data-execution_count="2">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DBLogisticRegression(</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;glm.db&quot;</span>,</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;binary_data&quot;</span>,</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    formula<span class="op">=</span><span class="st">&quot;y ~ x1 + x2&quot;</span>,</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    method<span class="op">=</span><span class="st">&quot;irls&quot;</span>,</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>model.fit_vcov()</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+<p>Use <code>DBPoissonRegression</code> for count outcomes:</p>
+<div id="83514650" class="cell" data-execution_count="3">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DBPoissonRegression(</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;glm.db&quot;</span>,</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;count_data&quot;</span>,</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    formula<span class="op">=</span><span class="st">&quot;y ~ x1 + x2&quot;</span>,</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    method<span class="op">=</span><span class="st">&quot;irls&quot;</span>,</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+</section>
+<section id="methods" class="level2">
+<h2 class="anchored" data-anchor-id="methods">Methods</h2>
+<p><code>method=&quot;irls&quot;</code> runs Fisher scoring to convergence on compressed sufficient statistics. <code>method=&quot;one_step&quot;</code> fits a pilot model on a subsample and takes one full-data Fisher scoring step using the compressed score and information.</p>
+<p>For exact benchmarking or small examples, use <code>method=&quot;irls&quot;</code>. For very large data, <code>method=&quot;one_step&quot;</code> is intended to reduce the cost of the initial iterative fit.</p>
 </section>
 <section id="binary-logit" class="level2">
 <h2 class="anchored" data-anchor-id="binary-logit">Binary Logit</h2>
-<p>For each compressed covariate cell <span class="math inline">\(g\)</span>, let <span class="math inline">\(s_g\)</span> be successes and <span class="math inline">\(n_g\)</span> be total rows. With</p>
+<p>For cell <span class="math inline">\(g\)</span>, let <span class="math inline">\(s_g\)</span> be the number of successes and <span class="math inline">\(n_g\)</span> be the number of rows. With</p>
 <p><span class="math display">\[
-p_g = \Lambda(x_g&#39;\beta),
+p_g(\beta) = \Lambda(x_g&#39;\beta),
 \]</span></p>
 <p>the grouped log likelihood is</p>
 <p><span class="math display">\[
@@ -5117,184 +5174,90 @@ p_g = \Lambda(x_g&#39;\beta),
 \sum_g
 \left[
 s_g x_g&#39;\beta
--
-n_g\log\{1+\exp(x_g&#39;\beta)\}
+- n_g\log\{1+\exp(x_g&#39;\beta)\}
 \right].
 \]</span></p>
 <p>The score and information are</p>
 <p><span class="math display">\[
 U(\beta)
 =
-\sum_g x_g(s_g - n_g p_g),
-\]</span></p>
-<p><span class="math display">\[
+\sum_g x_g(s_g - n_gp_g),
+\qquad
 I(\beta)
 =
-\sum_g n_g p_g(1-p_g)x_gx_g&#39;.
+\sum_g n_gp_g(1-p_g)x_gx_g&#39;.
 \]</span></p>
-<p>Usage from <code>notebooks/glm.ipynb</code>:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg.estimators <span class="im">import</span> DuckLogisticRegression</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>logit <span class="op">=</span> DuckLogisticRegression(</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    db_path,</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;binary_data&quot;</span>,</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;y ~ x1 + x2&quot;</span>,</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">1</span>,</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    method<span class="op">=</span><span class="st">&quot;irls&quot;</span>,</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>logit.fit()</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>logit.fit_vcov()</span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>logit.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </section>
-<section id="poisson-regression" class="level2">
-<h2 class="anchored" data-anchor-id="poisson-regression">Poisson Regression</h2>
-<p>For Poisson,</p>
+<section id="poisson" class="level2">
+<h2 class="anchored" data-anchor-id="poisson">Poisson</h2>
+<p>For Poisson regression,</p>
 <p><span class="math display">\[
-\mu_g = \exp(x_g&#39;\beta).
+\mu_g(\beta)=\exp(x_g&#39;\beta).
 \]</span></p>
-<p>The grouped log likelihood is</p>
+<p>If <span class="math inline">\(y_g^+=\sum_{i\in g}y_i\)</span>, then</p>
 <p><span class="math display">\[
 \ell(\beta)
 =
 \sum_g
 \left[
 y_g^+x_g&#39;\beta
--
-n_g\exp(x_g&#39;\beta)
-\right].
+- n_g\exp(x_g&#39;\beta)
+\right],
 \]</span></p>
-<p>The score and information are</p>
+<p>with</p>
 <p><span class="math display">\[
-U(\beta)
-=
-\sum_g x_g(y_g^+ - n_g\mu_g),
+U(\beta)=\sum_g x_g(y_g^+ - n_g\mu_g),
+\qquad
+I(\beta)=\sum_g n_g\mu_gx_gx_g&#39;.
 \]</span></p>
-<p><span class="math display">\[
-I(\beta)
-=
-\sum_g n_g\mu_g x_gx_g&#39;.
-\]</span></p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg.estimators <span class="im">import</span> DuckPoissonRegression</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>pois <span class="op">=</span> DuckPoissonRegression(</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    db_path,</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;count_data&quot;</span>,</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;y ~ x1 + x2&quot;</span>,</span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">1</span>,</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    method<span class="op">=</span><span class="st">&quot;irls&quot;</span>,</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>pois.fit()</span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>pois.fit_vcov()</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>pois.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-</section>
-<section id="exact-irls-vs-one-step" class="level2">
-<h2 class="anchored" data-anchor-id="exact-irls-vs-one-step">Exact IRLS vs One-Step</h2>
-<p>The canonical binary and Poisson classes accept:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>method<span class="op">=</span><span class="st">&quot;irls&quot;</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>method<span class="op">=</span><span class="st">&quot;one_step&quot;</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<p><code>method=&quot;irls&quot;</code> iterates Fisher scoring on the compressed full data until the maximum absolute step is below tolerance.</p>
-<p><code>method=&quot;one_step&quot;</code> fits a pilot model on a reservoir sample, then takes one full-data Fisher step:</p>
-<p><span class="math display">\[
-\hat{\beta}_{\mathrm{one}}
-=
-\hat{\beta}_0
-+
-I_N(\hat{\beta}_0)^{-1}U_N(\hat{\beta}_0).
-\]</span></p>
-<p>This is faster for very large tables, but it is approximate relative to the full compressed IRLS solution.</p>
 </section>
 <section id="multinomial-logit" class="level2">
 <h2 class="anchored" data-anchor-id="multinomial-logit">Multinomial Logit</h2>
-<p><code>DuckMultinomialLogisticRegression</code> fits a baseline-category softmax for moderate numbers of labels. If label <span class="math inline">\(K\)</span> is the baseline, the estimated labels are <span class="math inline">\(1,\ldots,K-1\)</span> and</p>
-<p><span class="math display">\[
-\pi_{gk}
-=
-\frac{\exp(x_g&#39;\beta_k)}
-{1+\sum_{j=1}^{K-1}\exp(x_g&#39;\beta_j)}.
-\]</span></p>
-<p>The score block for label <span class="math inline">\(k\)</span> is</p>
-<p><span class="math display">\[
-U_k(\beta)
-=
-\sum_g x_g(c_{gk} - n_g\pi_{gk}),
-\]</span></p>
-<p>and the Fisher information block for labels <span class="math inline">\(k,l\)</span> is</p>
-<p><span class="math display">\[
-I_{kl}(\beta)
-=
-\sum_g
-n_g\pi_{gk}
-\{1[k=l]-\pi_{gl}\}
-x_gx_g&#39;.
-\]</span></p>
-<p>The computational cost is the block information matrix of size <span class="math inline">\(((K-1)p)\times((K-1)p)\)</span>.</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg.estimators <span class="im">import</span> DuckMultinomialLogisticRegression</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>mn <span class="op">=</span> DuckMultinomialLogisticRegression(</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    db_path,</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;class_data&quot;</span>,</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;y ~ x1 + x2&quot;</span>,</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">1</span>,</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    labels<span class="op">=</span>[<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>, <span class="st">&quot;c&quot;</span>],</span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    baseline<span class="op">=</span><span class="st">&quot;c&quot;</span>,</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>mn.fit()</span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>mn.fit_vcov()</span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>mn.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p><code>DBMultinomialLogisticRegression</code> fits an exact baseline-category multinomial logit for moderate numbers of labels:</p>
+<div id="0363d28e" class="cell" data-execution_count="4">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DBMultinomialLogisticRegression(</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;glm.db&quot;</span>,</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;label_data&quot;</span>,</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    formula<span class="op">=</span><span class="st">&quot;label ~ x1 + x2&quot;</span>,</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    labels<span class="op">=</span>[<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>, <span class="st">&quot;c&quot;</span>],</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    baseline<span class="op">=</span><span class="st">&quot;c&quot;</span>,</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>model.fit_vcov()</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
+</div>
+<p>The compressed table contains one count column per label. If there are <span class="math inline">\(K\)</span> labels and the last label is the baseline, the coefficient matrix has shape <span class="math inline">\((K-1) \times p\)</span>.</p>
 </section>
-<section id="many-label-poisson-decomposition" class="level2">
-<h2 class="anchored" data-anchor-id="many-label-poisson-decomposition">Many-Label Poisson Decomposition</h2>
-<p><code>DuckPoissonMultinomialRegression</code> is for many count labels. It fits one Poisson regression per label:</p>
-<p><span class="math display">\[
-\log \mu_{ij} = x_i&#39;\gamma_j.
-\]</span></p>
-<p>This replaces one coupled softmax Hessian with <span class="math inline">\(K\)</span> independent <span class="math inline">\(p \times p\)</span> Poisson systems.</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg.estimators <span class="im">import</span> DuckPoissonMultinomialRegression</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>pm <span class="op">=</span> DuckPoissonMultinomialRegression(</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    db_path,</span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;token_counts&quot;</span>,</span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    count_col<span class="op">=</span><span class="st">&quot;count&quot;</span>,</span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    label_col<span class="op">=</span><span class="st">&quot;label&quot;</span>,</span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    covars<span class="op">=</span>[<span class="st">&quot;x1&quot;</span>, <span class="st">&quot;x2&quot;</span>],</span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">1</span>,</span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>pm.fit()</span>
-<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>pm.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<section id="many-label-count-decomposition" class="level2">
+<h2 class="anchored" data-anchor-id="many-label-count-decomposition">Many-Label Count Decomposition</h2>
+<p><code>DBPoissonMultinomialRegression</code> is for wide label/count problems:</p>
+<div id="5fd5a3b6" class="cell" data-execution_count="5">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DBPoissonMultinomialRegression(</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;counts.db&quot;</span>,</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;token_counts&quot;</span>,</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    count_col<span class="op">=</span><span class="st">&quot;count&quot;</span>,</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    label_col<span class="op">=</span><span class="st">&quot;token&quot;</span>,</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    covars<span class="op">=</span>[<span class="st">&quot;segment&quot;</span>, <span class="st">&quot;period&quot;</span>],</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>model.summary()[<span class="st">&quot;point_estimate&quot;</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<p>The Poisson decomposition is scalable and naturally parallelizable across labels. In the current code it is a separable count model, not an exact joint multinomial MLE with unit fixed effects or conditioning on document totals.</p>
+</div>
+<p>It fits independent label-wise Poisson regressions. That is scalable and naturally distributable, but it is not the exact joint multinomial likelihood unless the modeling problem justifies the Poisson decomposition.</p>
 </section>
-<section id="current-glm-inference-caveat" class="level2">
-<h2 class="anchored" data-anchor-id="current-glm-inference-caveat">Current GLM Inference Caveat</h2>
-<p><code>fit_vcov()</code> is implemented for canonical binary, Poisson, and moderate-<span class="math inline">\(K\)</span> multinomial models. The GLM bootstrap methods currently return empty arrays, so do not rely on <code>n_bootstraps &gt; 0</code> for GLM standard errors without first implementing real resampling.</p>
+<section id="inference" class="level2">
+<h2 class="anchored" data-anchor-id="inference">Inference</h2>
+<p><code>fit_vcov()</code> computes the inverse Fisher information by default. For binary and Poisson models, <code>fit_vcov(robust=True)</code> computes a grouped sandwich covariance from compressed score contributions.</p>
+<p>Bootstrap covariance is not implemented for the GLM estimators. Keep <code>n_bootstraps=0</code> and call <code>fit_vcov()</code>.</p>
 
 
 </section>

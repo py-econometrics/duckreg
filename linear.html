@@ -4882,22 +4882,20 @@ window.Quarto = {
 <style type="text/css">body {
 font-size: 16px;
 }
-.content {
+.navbar-title {
+font-weight: 650;
+}
+main.content {
 max-width: 1180px;
 }
-pre code {
-font-size: 0.88rem;
-}
 table {
-width: 100%;
+font-size: 0.94rem;
 }
-.callout-note,
-.callout-warning,
-.callout-tip {
+code {
+white-space: pre-wrap;
+}
+.callout {
 border-radius: 6px;
-}
-.api-table td:first-child {
-white-space: nowrap;
 }
 </style>
 </head>
@@ -4924,12 +4922,16 @@ white-space: nowrap;
 <span class="menu-text">Home</span></a>
   </li>  
   <li class="nav-item">
+    <a class="nav-link" href="./ibis.html"> 
+<span class="menu-text">Ibis</span></a>
+  </li>  
+  <li class="nav-item">
     <a class="nav-link" href="./compression.html"> 
 <span class="menu-text">Compression</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./linear.html"> 
-<span class="menu-text">Linear Models</span></a>
+<span class="menu-text">Linear</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./panel.html"> 
@@ -4944,6 +4946,10 @@ white-space: nowrap;
 <span class="menu-text">GLMs</span></a>
   </li>  
   <li class="nav-item">
+    <a class="nav-link" href="./fisher-scoring.html"> 
+<span class="menu-text">Fisher Scoring</span></a>
+  </li>  
+  <li class="nav-item">
     <a class="nav-link" href="./ridge.html"> 
 <span class="menu-text">Ridge</span></a>
   </li>  
@@ -4954,6 +4960,10 @@ white-space: nowrap;
   <li class="nav-item">
     <a class="nav-link" href="./examples.html"> 
 <span class="menu-text">Examples</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="./performance.html"> 
+<span class="menu-text">Performance</span></a>
   </li>  
 </ul>
           </div> <!-- /navcollapse -->
@@ -4989,7 +4999,13 @@ white-space: nowrap;
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./index.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">duckreg Documentation</span></a>
+ <span class="menu-text">duckreg</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./ibis.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Ibis Backends</span></a>
   </div>
 </li>
         <li class="sidebar-item">
@@ -5024,6 +5040,12 @@ white-space: nowrap;
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="./fisher-scoring.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Fisher Scoring and Multinomial GLMs</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="./ridge.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Compressed Ridge Regression</span></a>
   </div>
@@ -5040,6 +5062,12 @@ white-space: nowrap;
  <span class="menu-text">Executed Examples</span></a>
   </div>
 </li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./performance.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Performance Comparisons</span></a>
+  </div>
+</li>
     </ul>
     </div>
 </nav>
@@ -5051,11 +5079,10 @@ white-space: nowrap;
    
   <ul>
   <li><a href="#constructor" id="toc-constructor" class="nav-link active" data-scroll-target="#constructor">Constructor</a></li>
-  <li><a href="#point-estimation" id="toc-point-estimation" class="nav-link" data-scroll-target="#point-estimation">Point Estimation</a></li>
+  <li><a href="#basic-fit" id="toc-basic-fit" class="nav-link" data-scroll-target="#basic-fit">Basic Fit</a></li>
   <li><a href="#analytic-hc1-covariance" id="toc-analytic-hc1-covariance" class="nav-link" data-scroll-target="#analytic-hc1-covariance">Analytic HC1 Covariance</a></li>
-  <li><a href="#bootstrap-covariance" id="toc-bootstrap-covariance" class="nav-link" data-scroll-target="#bootstrap-covariance">Bootstrap Covariance</a></li>
-  <li><a href="#multiple-outcomes" id="toc-multiple-outcomes" class="nav-link" data-scroll-target="#multiple-outcomes">Multiple Outcomes</a></li>
-  <li><a href="#what-to-check-in-practice" id="toc-what-to-check-in-practice" class="nav-link" data-scroll-target="#what-to-check-in-practice">What To Check In Practice</a></li>
+  <li><a href="#bootstrap" id="toc-bootstrap" class="nav-link" data-scroll-target="#bootstrap">Bootstrap</a></li>
+  <li><a href="#backwards-compatibility" id="toc-backwards-compatibility" class="nav-link" data-scroll-target="#backwards-compatibility">Backwards Compatibility</a></li>
   </ul>
 </nav>
     </div>
@@ -5081,170 +5108,127 @@ white-space: nowrap;
 </header>
 
 
-<p><code>DuckRegression</code> is the original estimator in the package. It handles compressed ordinary least squares with optional fixed-effect demeaning, analytic HC1-style standard errors for a single outcome, and bootstrap covariance when <code>n_bootstraps &gt; 0</code>.</p>
+<p><code>DBRegression</code> is the preferred linear-regression interface. It compresses ordinary least squares by grouping on the right-hand-side variables, then solves weighted least squares on the compressed cells.</p>
 <section id="constructor" class="level2">
 <h2 class="anchored" data-anchor-id="constructor">Constructor</h2>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>DuckRegression(</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    db_name: <span class="bu">str</span>,</span>
+<div id="224ac607" class="cell" data-execution_count="1">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>DBRegression(</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    db_name: <span class="bu">str</span> <span class="op">|</span> <span class="va">None</span>,</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    table_name: <span class="bu">str</span>,</span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    formula: <span class="bu">str</span>,</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    cluster_col: <span class="bu">str</span>,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    cluster_col: <span class="bu">str</span> <span class="op">|</span> <span class="va">None</span>,</span>
 <span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    seed: <span class="bu">int</span>,</span>
 <span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    n_bootstraps: <span class="bu">int</span> <span class="op">=</span> <span class="dv">100</span>,</span>
 <span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    rowid_col: <span class="bu">str</span> <span class="op">=</span> <span class="st">&quot;rowid&quot;</span>,</span>
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    fitter: <span class="bu">str</span> <span class="op">=</span> <span class="st">&quot;numpy&quot;</span>,</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    connection<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<p>The formula has the form</p>
-<details>
-<summary>
-Show code
-</summary>
-<pre class="text"><code>Y ~ X1 + X2 + X3</code></pre>
+</div>
+<p>The formula is a standard additive linear formula:</p>
+<div id="e5870c8e" class="cell" data-execution_count="2">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>formula <span class="op">=</span> <span class="st">&quot;Y ~ D + f1 + f2&quot;</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<p>or, with fixed effects,</p>
-<details>
-<summary>
-Show code
-</summary>
-<pre class="text"><code>Y ~ X1 + X2 | unit + time</code></pre>
+</div>
+<p>Multiple outcomes are supported:</p>
+<div id="95cbc88e" class="cell" data-execution_count="3">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>formula <span class="op">=</span> <span class="st">&quot;Y + Y2 ~ D + f1 + f2&quot;</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<p>Multiple outcomes are allowed:</p>
-<details>
-<summary>
-Show code
-</summary>
-<pre class="text"><code>Y1 + Y2 ~ D + f1 + f2</code></pre>
-</details>
+</div>
+<p>Fixed-effect separators such as <code>Y ~ D | unit + time</code> are intentionally rejected. Use <code>DBMundlak</code>, <code>DBDoubleDemeaning</code>, or <code>DBMundlakEventStudy</code> for those designs.</p>
 </section>
-<section id="point-estimation" class="level2">
-<h2 class="anchored" data-anchor-id="point-estimation">Point Estimation</h2>
-<p>Without fixed effects, <code>DuckRegression</code> adds an intercept and solves weighted least squares on the compressed rows:</p>
-<p><span class="math display">\[
-\hat{\beta}
-=
-\left(X_c&#39; W X_c\right)^{-1} X_c&#39; W \bar{y}_c,
-\]</span></p>
-<p>where <span class="math inline">\(W=\operatorname{diag}(n_g)\)</span>. With fixed effects, the compressed <span class="math inline">\(y\)</span> and <span class="math inline">\(X\)</span> are weighted-demeaned first.</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg.estimators <span class="im">import</span> DuckRegression</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>m <span class="op">=</span> DuckRegression(</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;large_dataset.db&quot;</span>,</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;data&quot;</span>,</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    formula<span class="op">=</span><span class="st">&quot;Y ~ D + f1 + f2&quot;</span>,</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    cluster_col<span class="op">=</span><span class="st">&quot;&quot;</span>,</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>m.fit()</span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>m.fit_vcov()</span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>m.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<section id="basic-fit" class="level2">
+<h2 class="anchored" data-anchor-id="basic-fit">Basic Fit</h2>
+<div id="f0178610" class="cell" data-execution_count="4">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBRegression</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DBRegression(</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;large_dataset.db&quot;</span>,</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;data&quot;</span>,</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    formula<span class="op">=</span><span class="st">&quot;Y ~ D + f1 + f2&quot;</span>,</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    cluster_col<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>model.fit_vcov()</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<p>The test suite checks that compressed estimates match direct NumPy OLS coefficients on the uncompressed table for formulas such as <code>Y ~ D</code>, <code>Y ~ D + f1</code>, and <code>Y ~ D + f1 + f2</code>.</p>
+</div>
+<p>The returned point estimate is ordered as intercept followed by the RHS variables:</p>
+<div id="5de50949" class="cell" data-execution_count="5">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>[<span class="st">&quot;Intercept&quot;</span>, <span class="st">&quot;D&quot;</span>, <span class="st">&quot;f1&quot;</span>, <span class="st">&quot;f2&quot;</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
 </section>
 <section id="analytic-hc1-covariance" class="level2">
 <h2 class="anchored" data-anchor-id="analytic-hc1-covariance">Analytic HC1 Covariance</h2>
-<p><code>fit_vcov()</code> computes a compressed version of HC1 for a single outcome. It uses</p>
+<p>For a single outcome, <code>fit_vcov()</code> computes an HC1-style sandwich covariance from compressed sufficient statistics:</p>
 <p><span class="math display">\[
 \hat{V}
 =
 \frac{N}{N-k}
 (X&#39;WX)^{-1}
-\left(\sum_g \operatorname{RSS}_g x_g x_g&#39;\right)
-(X&#39;WX)^{-1},
+\left(\sum_g RSS_g x_gx_g&#39;\right)
+(X&#39;WX)^{-1}.
 \]</span></p>
-<p>where the within-cell residual sum of squares is reconstructed from sufficient statistics:</p>
+<p>The grouped residual sum of squares is</p>
 <p><span class="math display">\[
-\operatorname{RSS}_g
+RSS_g
 =
 n_g \hat{y}_g^2
-- 2\hat{y}_g \sum_{i \in g} y_i
+-2\hat{y}_g \sum_{i \in g} y_i
 + \sum_{i \in g} y_i^2.
 \]</span></p>
-<p>This is why the compression step stores <code>sum_y_sq</code>.</p>
+<p>This is why compression stores both <code>sum_Y</code> and <code>sum_Y_sq</code>.</p>
 </section>
-<section id="bootstrap-covariance" class="level2">
-<h2 class="anchored" data-anchor-id="bootstrap-covariance">Bootstrap Covariance</h2>
-<p>If <code>n_bootstraps &gt; 0</code>, <code>DuckReg.fit()</code> calls <code>bootstrap()</code>. For <code>DuckRegression</code>, the bootstrap has two paths:</p>
+<section id="bootstrap" class="level2">
+<h2 class="anchored" data-anchor-id="bootstrap">Bootstrap</h2>
+<p>When <code>n_bootstraps &gt; 0</code>, <code>fit()</code> calls <code>bootstrap()</code>.</p>
 <table class="caption-top table">
 <colgroup>
-<col style="width: 33%">
-<col style="width: 33%">
-<col style="width: 33%">
+<col style="width: 50%">
+<col style="width: 50%">
 </colgroup>
 <thead>
 <tr class="header">
 <th>Setting</th>
-<th>Resampling unit</th>
-<th>Data path</th>
+<th>Path</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td><code>cluster_col=&quot;&quot;</code> or false-like</td>
-<td>row ids</td>
-<td>recompress selected rows</td>
+<td><code>cluster_col=None</code></td>
+<td>Resample compressed rows and recompute weighted least squares.</td>
 </tr>
 <tr class="even">
 <td><code>cluster_col=&quot;cluster&quot;</code></td>
-<td>clusters</td>
-<td>join cluster multiplicities to grouped data</td>
+<td>Group by covariate cell and cluster, resample clusters, then collapse back to covariate cells.</td>
 </tr>
 </tbody>
 </table>
-<p>Cluster bootstrap logic uses a resampled cluster table:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb6"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">WITH</span> resampled <span class="kw">AS</span> (</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="kw">SELECT</span> cluster_id, <span class="fu">COUNT</span>(<span class="op">*</span>) <span class="kw">AS</span> mult</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  <span class="kw">FROM</span> (<span class="kw">SELECT</span> unnest(?) <span class="kw">AS</span> cluster_id)</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="kw">GROUP</span> <span class="kw">BY</span> cluster_id</span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<p>and then multiplies grouped counts and sums by <code>mult</code>.</p>
+<p>In the <code>DBRegression</code> implementation, cluster bootstrap multiplicities are handled in pandas after collecting a compressed cluster-by-cell table. This avoids DuckDB-only <code>unnest(?)</code> idioms in the backend-neutral path.</p>
 </section>
-<section id="multiple-outcomes" class="level2">
-<h2 class="anchored" data-anchor-id="multiple-outcomes">Multiple Outcomes</h2>
-<p>The parser allows</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>m <span class="op">=</span> DuckRegression(</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;large_dataset.db&quot;</span>,</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;data&quot;</span>,</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    formula<span class="op">=</span><span class="st">&quot;Y + Y2 ~ D + f1 + f2&quot;</span>,</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    cluster_col<span class="op">=</span><span class="st">&quot;f1&quot;</span>,</span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">100</span>,</span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">232</span>,</span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>m.fit()</span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>m.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<section id="backwards-compatibility" class="level2">
+<h2 class="anchored" data-anchor-id="backwards-compatibility">Backwards Compatibility</h2>
+<p><code>DuckRegression</code> has the same constructor shape and remains exported:</p>
+<div id="2e30c40d" class="cell" data-execution_count="6">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DuckRegression</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<p>Compression stores <code>sum_Y</code>, <code>sum_Y_sq</code>, <code>mean_Y</code>, <code>sum_Y2</code>, <code>sum_Y2_sq</code>, and <code>mean_Y2</code>. The output concatenates the coefficient vectors.</p>
-</section>
-<section id="what-to-check-in-practice" class="level2">
-<h2 class="anchored" data-anchor-id="what-to-check-in-practice">What To Check In Practice</h2>
-<p>For a linear fit, check:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>m.df_compressed[<span class="st">&quot;count&quot;</span>].<span class="bu">sum</span>()</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="bu">len</span>(m.df_compressed)</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>m.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<p>The first should equal the raw observation count. The second is the compression payoff. The third reports <code>standard_error</code> only if covariance was computed either by <code>fit_vcov()</code> or by bootstrap.</p>
+</div>
+<p>For new code, prefer <code>DBRegression</code> unless you specifically need to preserve an older <code>DuckRegression</code> workflow.</p>
 
 
 </section>

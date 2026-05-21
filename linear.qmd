@@ -1,0 +1,105 @@
+---
+title: "Linear Regression API"
+---
+
+`DBRegression` is the preferred linear-regression interface. It compresses ordinary least squares by grouping on the right-hand-side variables, then solves weighted least squares on the compressed cells.
+
+## Constructor
+
+```{python}
+DBRegression(
+    db_name: str | None,
+    table_name: str,
+    formula: str,
+    cluster_col: str | None,
+    seed: int,
+    n_bootstraps: int = 100,
+    rowid_col: str = "rowid",
+    fitter: str = "numpy",
+    connection=None,
+)
+```
+
+The formula is a standard additive linear formula:
+
+```{python}
+formula = "Y ~ D + f1 + f2"
+```
+
+Multiple outcomes are supported:
+
+```{python}
+formula = "Y + Y2 ~ D + f1 + f2"
+```
+
+Fixed-effect separators such as `Y ~ D | unit + time` are intentionally rejected. Use `DBMundlak`, `DBDoubleDemeaning`, or `DBMundlakEventStudy` for those designs.
+
+## Basic Fit
+
+```{python}
+from duckreg import DBRegression
+
+model = DBRegression(
+    db_name="large_dataset.db",
+    table_name="data",
+    formula="Y ~ D + f1 + f2",
+    cluster_col=None,
+    seed=42,
+    n_bootstraps=0,
+)
+model.fit()
+model.fit_vcov()
+model.summary()
+```
+
+The returned point estimate is ordered as intercept followed by the RHS variables:
+
+```{python}
+["Intercept", "D", "f1", "f2"]
+```
+
+## Analytic HC1 Covariance
+
+For a single outcome, `fit_vcov()` computes an HC1-style sandwich covariance from compressed sufficient statistics:
+
+$$
+\hat{V}
+=
+\frac{N}{N-k}
+(X'WX)^{-1}
+\left(\sum_g RSS_g x_gx_g'\right)
+(X'WX)^{-1}.
+$$
+
+The grouped residual sum of squares is
+
+$$
+RSS_g
+=
+n_g \hat{y}_g^2
+-2\hat{y}_g \sum_{i \in g} y_i
++ \sum_{i \in g} y_i^2.
+$$
+
+This is why compression stores both `sum_Y` and `sum_Y_sq`.
+
+## Bootstrap
+
+When `n_bootstraps > 0`, `fit()` calls `bootstrap()`.
+
+| Setting | Path |
+|---|---|
+| `cluster_col=None` | Resample compressed rows and recompute weighted least squares. |
+| `cluster_col="cluster"` | Group by covariate cell and cluster, resample clusters, then collapse back to covariate cells. |
+
+In the `DBRegression` implementation, cluster bootstrap multiplicities are handled in pandas after collecting a compressed cluster-by-cell table. This avoids DuckDB-only `unnest(?)` idioms in the backend-neutral path.
+
+## Backwards Compatibility
+
+`DuckRegression` has the same constructor shape and remains exported:
+
+```{python}
+from duckreg import DuckRegression
+```
+
+For new code, prefer `DBRegression` unless you specifically need to preserve an older `DuckRegression` workflow.

@@ -4882,22 +4882,20 @@ window.Quarto = {
 <style type="text/css">body {
 font-size: 16px;
 }
-.content {
+.navbar-title {
+font-weight: 650;
+}
+main.content {
 max-width: 1180px;
 }
-pre code {
-font-size: 0.88rem;
-}
 table {
-width: 100%;
+font-size: 0.94rem;
 }
-.callout-note,
-.callout-warning,
-.callout-tip {
+code {
+white-space: pre-wrap;
+}
+.callout {
 border-radius: 6px;
-}
-.api-table td:first-child {
-white-space: nowrap;
 }
 </style>
 </head>
@@ -4924,12 +4922,16 @@ white-space: nowrap;
 <span class="menu-text">Home</span></a>
   </li>  
   <li class="nav-item">
+    <a class="nav-link" href="./ibis.html"> 
+<span class="menu-text">Ibis</span></a>
+  </li>  
+  <li class="nav-item">
     <a class="nav-link" href="./compression.html"> 
 <span class="menu-text">Compression</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./linear.html"> 
-<span class="menu-text">Linear Models</span></a>
+<span class="menu-text">Linear</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./panel.html"> 
@@ -4944,6 +4946,10 @@ white-space: nowrap;
 <span class="menu-text">GLMs</span></a>
   </li>  
   <li class="nav-item">
+    <a class="nav-link" href="./fisher-scoring.html"> 
+<span class="menu-text">Fisher Scoring</span></a>
+  </li>  
+  <li class="nav-item">
     <a class="nav-link" href="./ridge.html"> 
 <span class="menu-text">Ridge</span></a>
   </li>  
@@ -4954,6 +4960,10 @@ white-space: nowrap;
   <li class="nav-item">
     <a class="nav-link" href="./examples.html"> 
 <span class="menu-text">Examples</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="./performance.html"> 
+<span class="menu-text">Performance</span></a>
   </li>  
 </ul>
           </div> <!-- /navcollapse -->
@@ -4989,7 +4999,13 @@ white-space: nowrap;
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./index.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">duckreg Documentation</span></a>
+ <span class="menu-text">duckreg</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./ibis.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Ibis Backends</span></a>
   </div>
 </li>
         <li class="sidebar-item">
@@ -5024,6 +5040,12 @@ white-space: nowrap;
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="./fisher-scoring.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Fisher Scoring and Multinomial GLMs</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="./ridge.html" class="sidebar-item-text sidebar-link active">
  <span class="menu-text">Compressed Ridge Regression</span></a>
   </div>
@@ -5040,6 +5062,12 @@ white-space: nowrap;
  <span class="menu-text">Executed Examples</span></a>
   </div>
 </li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./performance.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Performance Comparisons</span></a>
+  </div>
+</li>
     </ul>
     </div>
 </nav>
@@ -5051,12 +5079,11 @@ white-space: nowrap;
    
   <ul>
   <li><a href="#constructor" id="toc-constructor" class="nav-link active" data-scroll-target="#constructor">Constructor</a></li>
-  <li><a href="#ridge-objective" id="toc-ridge-objective" class="nav-link" data-scroll-target="#ridge-objective">Ridge Objective</a></li>
+  <li><a href="#objective" id="toc-objective" class="nav-link" data-scroll-target="#objective">Objective</a></li>
   <li><a href="#single-lambda" id="toc-single-lambda" class="nav-link" data-scroll-target="#single-lambda">Single Lambda</a></li>
   <li><a href="#lambda-path" id="toc-lambda-path" class="nav-link" data-scroll-target="#lambda-path">Lambda Path</a></li>
   <li><a href="#cross-validation" id="toc-cross-validation" class="nav-link" data-scroll-target="#cross-validation">Cross-Validation</a></li>
-  <li><a href="#plot-helpers" id="toc-plot-helpers" class="nav-link" data-scroll-target="#plot-helpers">Plot Helpers</a></li>
-  <li><a href="#inference" id="toc-inference" class="nav-link" data-scroll-target="#inference">Inference</a></li>
+  <li><a href="#current-limits" id="toc-current-limits" class="nav-link" data-scroll-target="#current-limits">Current Limits</a></li>
   </ul>
 </nav>
     </div>
@@ -5082,14 +5109,13 @@ white-space: nowrap;
 </header>
 
 
-<p><code>DuckRidge</code> adds ridge regression to the compressed linear-regression workflow. It supports a single penalty value, a full lambda path, and cross-validation over compressed folds.</p>
+<p><code>DuckRidge</code> adds ridge regression to the compressed linear-regression workflow. It supports a single penalty, a full lambda path, and cross-validation over compressed folds.</p>
 <section id="constructor" class="level2">
 <h2 class="anchored" data-anchor-id="constructor">Constructor</h2>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>DuckRidge(</span>
+<div id="57b0e019" class="cell" data-execution_count="1">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>DuckRidge(</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    db_name: <span class="bu">str</span>,</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    table_name: <span class="bu">str</span>,</span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    formula: <span class="bu">str</span>,</span>
@@ -5101,23 +5127,24 @@ Show code
 <span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    fitter: <span class="bu">str</span> <span class="op">=</span> <span class="st">&quot;ridge&quot;</span>,</span>
 <span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<p><code>DuckRidge</code> currently supports one outcome variable and does not support fixed effects.</p>
+</div>
+<p><code>DuckRidge</code> currently supports one outcome variable and does not support formula fixed effects.</p>
 </section>
-<section id="ridge-objective" class="level2">
-<h2 class="anchored" data-anchor-id="ridge-objective">Ridge Objective</h2>
-<p>After compression, the estimator solves</p>
+<section id="objective" class="level2">
+<h2 class="anchored" data-anchor-id="objective">Objective</h2>
+<p>After compression, ridge solves</p>
 <p><span class="math display">\[
 \hat{\beta}_\lambda
 =
 \arg\min_\beta
 \sum_g n_g(\bar{y}_g - x_g&#39;\beta)^2
-+ \lambda \|\beta\|_2^2.
++ \lambda\|\beta\|_2^2.
 \]</span></p>
 <p>The closed form is</p>
 <p><span class="math display">\[
 \hat{\beta}_\lambda
 =
-(X&#39;WX + \lambda I)^{-1}X&#39;W\bar{y}.
+(X&#39;WX+\lambda I)^{-1}X&#39;W\bar{y}.
 \]</span></p>
 <p>The implementation uses an augmented least-squares representation:</p>
 <p><span class="math display">\[
@@ -5125,7 +5152,7 @@ Show code
 =
 \begin{bmatrix}
 W^{1/2}X \\
-\sqrt{\lambda} I
+\sqrt{\lambda}I
 \end{bmatrix},
 \qquad
 \tilde{y}
@@ -5139,89 +5166,65 @@ W^{1/2}\bar{y} \\
 </section>
 <section id="single-lambda" class="level2">
 <h2 class="anchored" data-anchor-id="single-lambda">Single Lambda</h2>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg.regularized <span class="im">import</span> DuckRidge</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>duck_ridge <span class="op">=</span> DuckRidge(</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;ridge_test.db&quot;</span>,</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;data&quot;</span>,</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    formula<span class="op">=</span><span class="st">&quot;Y ~ D + f1 + f2 + f3&quot;</span>,</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    lambda_grid<span class="op">=</span>[<span class="fl">0.1</span>],</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    cv_folds<span class="op">=</span><span class="dv">1</span>,</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>duck_ridge.fit(lambda_selection<span class="op">=</span><span class="st">&quot;single&quot;</span>)</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>duck_ridge.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div id="b1b0fad3" class="cell" data-execution_count="2">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DuckRidge</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DuckRidge(</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;ridge.db&quot;</span>,</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;data&quot;</span>,</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    formula<span class="op">=</span><span class="st">&quot;Y ~ D + f1 + f2 + f3&quot;</span>,</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    lambda_grid<span class="op">=</span>[<span class="fl">0.1</span>],</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    cv_folds<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>model.fit(lambda_selection<span class="op">=</span><span class="st">&quot;single&quot;</span>)</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
+</div>
 </section>
 <section id="lambda-path" class="level2">
 <h2 class="anchored" data-anchor-id="lambda-path">Lambda Path</h2>
-<p>The batch path precomputes weighted <span class="math inline">\(X\)</span> and <span class="math inline">\(y\)</span>, then solves over the full lambda grid:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>duck_ridge <span class="op">=</span> DuckRidge(</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;ridge_test.db&quot;</span>,</span>
+<div id="aac28abc" class="cell" data-execution_count="3">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DuckRidge(</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;ridge.db&quot;</span>,</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;data&quot;</span>,</span>
 <span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    formula<span class="op">=</span><span class="st">&quot;Y ~ D + f1 + f2 + f3&quot;</span>,</span>
 <span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    lambda_grid<span class="op">=</span>np.logspace(<span class="op">-</span><span class="dv">4</span>, <span class="dv">2</span>, <span class="dv">50</span>),</span>
 <span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    cv_folds<span class="op">=</span><span class="dv">1</span>,</span>
 <span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
 <span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>duck_ridge.fit(lambda_selection<span class="op">=</span><span class="st">&quot;path&quot;</span>)</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>duck_ridge.summary()[<span class="st">&quot;lambda_path_coefs&quot;</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>model.fit(lambda_selection<span class="op">=</span><span class="st">&quot;path&quot;</span>)</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>model.summary()[<span class="st">&quot;lambda_path_coefs&quot;</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
+</div>
 </section>
 <section id="cross-validation" class="level2">
 <h2 class="anchored" data-anchor-id="cross-validation">Cross-Validation</h2>
-<p>When <code>cv_folds &gt; 1</code>, <code>prepare_data()</code> creates a temporary table with fold assignments:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb4"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">CREATE</span> TEMP <span class="kw">TABLE</span> cv_folds <span class="kw">AS</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span> <span class="op">*</span>,</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>       (<span class="fu">ROW_NUMBER</span>() <span class="kw">OVER</span> (<span class="kw">ORDER</span> <span class="kw">BY</span> <span class="dt">rowid</span>)) % <span class="dv">5</span> <span class="kw">AS</span> fold_id</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> <span class="kw">data</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>When <code>cv_folds &gt; 1</code>, the estimator creates fold assignments, includes <code>fold_id</code> in the compression, and evaluates validation weighted MSE on compressed test cells.</p>
+<div id="70bd6bb1" class="cell" data-execution_count="4">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DuckRidge(</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;ridge.db&quot;</span>,</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;data&quot;</span>,</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    formula<span class="op">=</span><span class="st">&quot;Y ~ D + f1 + f2 + f3&quot;</span>,</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    lambda_grid<span class="op">=</span>np.logspace(<span class="op">-</span><span class="dv">3</span>, <span class="dv">1</span>, <span class="dv">20</span>),</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    cv_folds<span class="op">=</span><span class="dv">5</span>,</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>model.fit(lambda_selection<span class="op">=</span><span class="st">&quot;cv&quot;</span>)</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>model.best_lambda</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<p>Compression then includes <code>fold_id</code> in the group-by columns. Cross-validation loops over folds, fits on compressed training rows, predicts on compressed test rows, and computes weighted MSE.</p>
-<p>Example from <code>notebooks/regularized.ipynb</code>:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>duck_ridge_cv <span class="op">=</span> DuckRidge(</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;ridge_cv_test.db&quot;</span>,</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;data&quot;</span>,</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    formula<span class="op">=</span><span class="st">&quot;Y ~ D + f1 + f2 + f3&quot;</span>,</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    lambda_grid<span class="op">=</span>np.logspace(<span class="op">-</span><span class="dv">3</span>, <span class="dv">1</span>, <span class="dv">20</span>),</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    cv_folds<span class="op">=</span><span class="dv">5</span>,</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>duck_ridge_cv.fit(lambda_selection<span class="op">=</span><span class="st">&quot;cv&quot;</span>)</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>duck_ridge_cv.best_lambda</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>duck_ridge_cv.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
+</div>
 </section>
-<section id="plot-helpers" class="level2">
-<h2 class="anchored" data-anchor-id="plot-helpers">Plot Helpers</h2>
-<p><code>DuckRidge</code> includes:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>duck_ridge_cv.plot_cv_curve()</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>duck_ridge_cv.plot_coefficient_path()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<p>These require <code>matplotlib</code>.</p>
-</section>
-<section id="inference" class="level2">
-<h2 class="anchored" data-anchor-id="inference">Inference</h2>
-<p>Bootstrap standard errors are intentionally not implemented for ridge. Regularization changes the sampling behavior of the estimator, and a naive OLS-style bootstrap would be easy to misinterpret. The API raises <code>NotImplementedError</code> for ridge bootstrap.</p>
+<section id="current-limits" class="level2">
+<h2 class="anchored" data-anchor-id="current-limits">Current Limits</h2>
+<p>Ridge bootstrap standard errors are not implemented. Regularized inference requires a penalty-aware covariance treatment, so <code>DuckRidge</code> focuses on point estimates, paths, and validation.</p>
 
 
 </section>

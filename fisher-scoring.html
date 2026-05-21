@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Panel Estimators – duckreg</title>
+<title>Fisher Scoring and Multinomial GLMs – duckreg</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -4976,7 +4976,7 @@ border-radius: 6px;
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="./panel.html">Panel Estimators</a></li></ol></nav>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="./fisher-scoring.html">Fisher Scoring and Multinomial GLMs</a></li></ol></nav>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
       <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
@@ -5022,7 +5022,7 @@ border-radius: 6px;
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="./panel.html" class="sidebar-item-text sidebar-link active">
+  <a href="./panel.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Panel Estimators</span></a>
   </div>
 </li>
@@ -5040,7 +5040,7 @@ border-radius: 6px;
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="./fisher-scoring.html" class="sidebar-item-text sidebar-link">
+  <a href="./fisher-scoring.html" class="sidebar-item-text sidebar-link active">
  <span class="menu-text">Fisher Scoring and Multinomial GLMs</span></a>
   </div>
 </li>
@@ -5078,10 +5078,15 @@ border-radius: 6px;
     <h2 id="toc-title">On this page</h2>
    
   <ul>
-  <li><a href="#mundlak" id="toc-mundlak" class="nav-link active" data-scroll-target="#mundlak">Mundlak</a></li>
-  <li><a href="#double-demeaning" id="toc-double-demeaning" class="nav-link" data-scroll-target="#double-demeaning">Double Demeaning</a></li>
-  <li><a href="#event-study" id="toc-event-study" class="nav-link" data-scroll-target="#event-study">Event Study</a></li>
-  <li><a href="#implementation-pattern" id="toc-implementation-pattern" class="nav-link" data-scroll-target="#implementation-pattern">Implementation Pattern</a></li>
+  <li><a href="#purpose" id="toc-purpose" class="nav-link active" data-scroll-target="#purpose">Purpose</a></li>
+  <li><a href="#compression" id="toc-compression" class="nav-link" data-scroll-target="#compression">Compression</a></li>
+  <li><a href="#binary-logit" id="toc-binary-logit" class="nav-link" data-scroll-target="#binary-logit">Binary Logit</a></li>
+  <li><a href="#poisson-regression" id="toc-poisson-regression" class="nav-link" data-scroll-target="#poisson-regression">Poisson Regression</a></li>
+  <li><a href="#one-step-fisher-scoring" id="toc-one-step-fisher-scoring" class="nav-link" data-scroll-target="#one-step-fisher-scoring">One-Step Fisher Scoring</a></li>
+  <li><a href="#baseline-category-multinomial-logit" id="toc-baseline-category-multinomial-logit" class="nav-link" data-scroll-target="#baseline-category-multinomial-logit">Baseline-Category Multinomial Logit</a></li>
+  <li><a href="#many-label-poisson-decomposition" id="toc-many-label-poisson-decomposition" class="nav-link" data-scroll-target="#many-label-poisson-decomposition">Many-Label Poisson Decomposition</a></li>
+  <li><a href="#relation-to-multinomial-logit" id="toc-relation-to-multinomial-logit" class="nav-link" data-scroll-target="#relation-to-multinomial-logit">Relation to Multinomial Logit</a></li>
+  <li><a href="#practical-summary" id="toc-practical-summary" class="nav-link" data-scroll-target="#practical-summary">Practical Summary</a></li>
   </ul>
 </nav>
     </div>
@@ -5090,7 +5095,7 @@ border-radius: 6px;
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Panel Estimators</h1>
+<h1 class="title">Fisher Scoring and Multinomial GLMs</h1>
 </div>
 
 
@@ -5107,149 +5112,321 @@ border-radius: 6px;
 </header>
 
 
-<p>Panel estimators create fixed-effect style design variables before compression. This keeps the compressed table small when <span class="math inline">\(N\)</span> is large and <span class="math inline">\(T\)</span> is modest.</p>
-<section id="mundlak" class="level2">
-<h2 class="anchored" data-anchor-id="mundlak">Mundlak</h2>
-<p><code>DBMundlak</code> augments the original covariates with unit means and, optionally, time means. For a covariate <span class="math inline">\(W_{it}\)</span>, the two-way design contains</p>
+<section id="purpose" class="level2">
+<h2 class="anchored" data-anchor-id="purpose">Purpose</h2>
+<p>The GLM code in <code>duckreg.dbreg</code> and the compatibility <code>duckreg.estimators</code> module uses compressed sufficient statistics. The key move is to group rows with the same covariates, compute the score and Fisher information on those groups, and then run the same Fisher scoring update that would be used on the full data.</p>
+<p>The shared update is</p>
 <p><span class="math display">\[
-W_{it},
-\qquad
-\bar{W}_{i\cdot},
-\qquad
-\bar{W}_{\cdot t}.
-\]</span></p>
-<p>The fitted model is</p>
-<p><span class="math display">\[
-Y_{it}
+\beta^{(t+1)}
 =
-\alpha
-+ W_{it}&#39;\beta
-+ \bar{W}_{i\cdot}&#39;\gamma
-+ \bar{W}_{\cdot t}&#39;\delta
-+ u_{it}.
+\beta^{(t)}
++
+I(\beta^{(t)})^{-1} U(\beta^{(t)}),
 \]</span></p>
-<div id="7a120a37" class="cell" data-execution_count="1">
+<p>where <span class="math inline">\(U(\beta)\)</span> is the score and <span class="math inline">\(I(\beta)\)</span> is the expected Fisher information. In the code this appears as</p>
+<div id="code-shared-step" class="cell" data-execution_count="1">
 <details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBMundlak</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DBMundlak(</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;panel.db&quot;</span>,</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;panel_data&quot;</span>,</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    outcome_var<span class="op">=</span><span class="st">&quot;Y&quot;</span>,</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    covariates<span class="op">=</span>[<span class="st">&quot;D&quot;</span>, <span class="st">&quot;X&quot;</span>],</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    unit_col<span class="op">=</span><span class="st">&quot;unit&quot;</span>,</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    time_col<span class="op">=</span><span class="st">&quot;time&quot;</span>,</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    cluster_col<span class="op">=</span><span class="st">&quot;unit&quot;</span>,</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">100</span>,</span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<summary>Show implementation sketch</summary>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>step <span class="op">=</span> solve(info, score)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>beta_new <span class="op">=</span> beta <span class="op">+</span> step</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
-<p>The right-hand side is ordered as:</p>
-<div id="7b094d1d" class="cell" data-execution_count="2">
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>[<span class="st">&quot;Intercept&quot;</span>, <span class="st">&quot;D&quot;</span>, <span class="st">&quot;X&quot;</span>, <span class="st">&quot;avg_D_unit&quot;</span>, <span class="st">&quot;avg_X_unit&quot;</span>, <span class="st">&quot;avg_D_time&quot;</span>, <span class="st">&quot;avg_X_time&quot;</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-</div>
+<p>The function <code>_solve_step</code> solves this linear system, with a small ridge fallback if the information matrix is singular. The logistic, Poisson, and multinomial routines differ only in how they compute <code>score</code> and <code>info</code>.</p>
 </section>
-<section id="double-demeaning" class="level2">
-<h2 class="anchored" data-anchor-id="double-demeaning">Double Demeaning</h2>
-<p><code>DBDoubleDemeaning</code> constructs the two-way residualized treatment</p>
+<section id="compression" class="level2">
+<h2 class="anchored" data-anchor-id="compression">Compression</h2>
+<p>For canonical GLMs without fixed effects, rows with the same covariate vector <span class="math inline">\(x_g\)</span> can be collapsed. Let <span class="math inline">\(g\)</span> index compressed cells and <span class="math inline">\(n_g\)</span> be the number of original rows in cell <span class="math inline">\(g\)</span>.</p>
+<p>For binary outcomes, the compressed outcome is the number of successes</p>
 <p><span class="math display">\[
-\ddot{W}_{it}
+s_g = \sum_{i: x_i = x_g} y_i.
+\]</span></p>
+<p>For Poisson counts, the compressed outcome is the sum of counts</p>
+<p><span class="math display">\[
+y_g^+ = \sum_{i: x_i = x_g} y_i.
+\]</span></p>
+<p>For multinomial labels, the compressed outcome is the vector of class counts</p>
+<p><span class="math display">\[
+c_g = (c_{g1}, \ldots, c_{gK}),
+\qquad
+c_{gk} = \sum_{i: x_i = x_g} 1\{y_i = k\}.
+\]</span></p>
+<p>This is why the database aggregation is enough for estimation: the likelihood only needs covariate cells, totals, and outcome sums or class counts.</p>
+</section>
+<section id="binary-logit" class="level2">
+<h2 class="anchored" data-anchor-id="binary-logit">Binary Logit</h2>
+<p>For logit,</p>
+<p><span class="math display">\[
+p_g(\beta)
 =
-W_{it}
-- \bar{W}_{i\cdot}
-- \bar{W}_{\cdot t}
-+ \bar{W}_{\cdot\cdot}.
+\Lambda(x_g&#39;\beta)
+=
+\frac{\exp(x_g&#39;\beta)}{1 + \exp(x_g&#39;\beta)}.
 \]</span></p>
-<p>It then fits</p>
+<p>Ignoring constants that do not involve <span class="math inline">\(\beta\)</span>, the grouped log likelihood is</p>
 <p><span class="math display">\[
-Y_{it} = \alpha + \tau \ddot{W}_{it} + u_{it}
+\ell(\beta)
+=
+\sum_g
+\left[
+s_g x_g&#39;\beta
+-
+n_g \log\{1 + \exp(x_g&#39;\beta)\}
+\right].
 \]</span></p>
-<p>on the compressed residualized treatment values.</p>
-<div id="12333ba0" class="cell" data-execution_count="3">
+<p>The score is</p>
+<p><span class="math display">\[
+U(\beta)
+=
+\frac{\partial \ell(\beta)}{\partial \beta}
+=
+\sum_g x_g \{s_g - n_g p_g(\beta)\}.
+\]</span></p>
+<p>The expected Fisher information is</p>
+<p><span class="math display">\[
+I(\beta)
+=
+\sum_g n_g p_g(\beta)\{1 - p_g(\beta)\} x_g x_g&#39;.
+\]</span></p>
+<p>The implementation is the matrix version of these equations:</p>
+<div id="code-logit-score-info" class="cell" data-execution_count="2">
 <details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBDoubleDemeaning</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DBDoubleDemeaning(</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;panel.db&quot;</span>,</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;panel_data&quot;</span>,</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    outcome_var<span class="op">=</span><span class="st">&quot;Y&quot;</span>,</span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    treatment_var<span class="op">=</span><span class="st">&quot;D&quot;</span>,</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    unit_col<span class="op">=</span><span class="st">&quot;unit&quot;</span>,</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    time_col<span class="op">=</span><span class="st">&quot;time&quot;</span>,</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    cluster_col<span class="op">=</span><span class="st">&quot;unit&quot;</span>,</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<summary>Show implementation sketch</summary>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> sigmoid(X <span class="op">@</span> beta)</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>score <span class="op">=</span> X.T <span class="op">@</span> (successes <span class="op">-</span> totals <span class="op">*</span> p)</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>info <span class="op">=</span> X.T <span class="op">@</span> ((totals <span class="op">*</span> p <span class="op">*</span> (<span class="dv">1</span> <span class="op">-</span> p))[:, <span class="va">None</span>] <span class="op">*</span> X)</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>step <span class="op">=</span> solve(info, score)</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>beta <span class="op">=</span> beta <span class="op">+</span> step</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
-<p>This estimator is useful when the target is a two-way fixed-effect style coefficient on one treatment variable.</p>
+<p>The IRLS wording is slightly hidden here because the code does not explicitly form the working response <span class="math inline">\(z\)</span>. Algebraically, this is the same Fisher scoring step as weighted least squares on the IRLS working outcome.</p>
 </section>
-<section id="event-study" class="level2">
-<h2 class="anchored" data-anchor-id="event-study">Event Study</h2>
-<p><code>DBMundlakEventStudy</code> builds cohort indicators, time indicators, and cohort-by-time treatment interactions. It estimates event-study profiles by cohort after compression.</p>
-<div id="8ce0b2da" class="cell" data-execution_count="4">
+<section id="poisson-regression" class="level2">
+<h2 class="anchored" data-anchor-id="poisson-regression">Poisson Regression</h2>
+<p>For the canonical Poisson model,</p>
+<p><span class="math display">\[
+\mu_g(\beta) = \exp(x_g&#39;\beta).
+\]</span></p>
+<p>The grouped log likelihood, again dropping constants, is</p>
+<p><span class="math display">\[
+\ell(\beta)
+=
+\sum_g
+\left[
+y_g^+ x_g&#39;\beta
+-
+n_g \exp(x_g&#39;\beta)
+\right].
+\]</span></p>
+<p>The score is</p>
+<p><span class="math display">\[
+U(\beta)
+=
+\sum_g x_g \{y_g^+ - n_g \mu_g(\beta)\}.
+\]</span></p>
+<p>The Fisher information is</p>
+<p><span class="math display">\[
+I(\beta)
+=
+\sum_g n_g \mu_g(\beta) x_g x_g&#39;.
+\]</span></p>
+<p>The code is the direct matrix implementation:</p>
+<div id="code-poisson-score-info" class="cell" data-execution_count="3">
 <details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBMundlakEventStudy</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DBMundlakEventStudy(</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;event.db&quot;</span>,</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;panel_data&quot;</span>,</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    outcome_var<span class="op">=</span><span class="st">&quot;Y&quot;</span>,</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    treatment_col<span class="op">=</span><span class="st">&quot;D&quot;</span>,</span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    unit_col<span class="op">=</span><span class="st">&quot;unit&quot;</span>,</span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    time_col<span class="op">=</span><span class="st">&quot;time&quot;</span>,</span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    cluster_col<span class="op">=</span><span class="st">&quot;unit&quot;</span>,</span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    pre_treat_interactions<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">50</span>,</span>
-<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
-<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<summary>Show implementation sketch</summary>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>mu <span class="op">=</span> exp(X <span class="op">@</span> beta)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>score <span class="op">=</span> X.T <span class="op">@</span> (y_sum <span class="op">-</span> totals <span class="op">*</span> mu)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>info <span class="op">=</span> X.T <span class="op">@</span> ((totals <span class="op">*</span> mu)[:, <span class="va">None</span>] <span class="op">*</span> X)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>step <span class="op">=</span> solve(info, score)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>beta <span class="op">=</span> beta <span class="op">+</span> step</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
-<p>If <code>pre_treat_interactions=False</code>, the treatment interaction columns are zeroed outside treated periods. If it is <code>True</code>, the design keeps a full cohort-by-time profile.</p>
 </section>
-<section id="implementation-pattern" class="level2">
-<h2 class="anchored" data-anchor-id="implementation-pattern">Implementation Pattern</h2>
-<p>The panel estimators avoid formula-level fixed effects in <code>DBRegression</code>. They use ordinary database operations:</p>
-<table class="caption-top table">
-<colgroup>
-<col style="width: 50%">
-<col style="width: 50%">
-</colgroup>
-<thead>
-<tr class="header">
-<th>Estimator</th>
-<th>Preparation</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td><code>DBMundlak</code></td>
-<td>Group by unit/time to compute covariate means, then join them to the raw table.</td>
-</tr>
-<tr class="even">
-<td><code>DBDoubleDemeaning</code></td>
-<td>Join unit means, time means, and the overall treatment mean, then compute <span class="math inline">\(\ddot{W}_{it}\)</span>.</td>
-</tr>
-<tr class="odd">
-<td><code>DBMundlakEventStudy</code></td>
-<td>Infer treatment cohorts, create indicator columns, and compress the generated design.</td>
-</tr>
-</tbody>
-</table>
-<p>The compatibility <code>Duck*</code> panel classes expose the same statistical designs but use older SQL-string internals.</p>
+<section id="one-step-fisher-scoring" class="level2">
+<h2 class="anchored" data-anchor-id="one-step-fisher-scoring">One-Step Fisher Scoring</h2>
+<p>The exact path, <code>method=&quot;irls&quot;</code>, iterates until the step is small. The default canonical GLM path, <code>method=&quot;one_step&quot;</code>, uses a pilot estimator on a reservoir sample and then takes one full-data Fisher step:</p>
+<p><span class="math display">\[
+\hat{\beta}_{\mathrm{one}}
+=
+\hat{\beta}_0
++
+I_N(\hat{\beta}_0)^{-1} U_N(\hat{\beta}_0).
+\]</span></p>
+<p>Here <span class="math inline">\(\hat{\beta}_0\)</span> is the pilot fit and <span class="math inline">\(U_N\)</span>, <span class="math inline">\(I_N\)</span> are computed on the compressed full data. This is a large-data shortcut: the expensive full-data pass only computes sufficient statistics, score, and information once.</p>
+<div id="code-one-step" class="cell" data-execution_count="4">
+<details class="code-fold">
+<summary>Show implementation sketch</summary>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>beta0 <span class="op">=</span> fit_pilot_model(reservoir_sample)</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>score, info <span class="op">=</span> score_info(beta0, compressed_full_data)</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>beta_one_step <span class="op">=</span> beta0 <span class="op">+</span> solve(info, score)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+<p>The exact and one-step estimators use the same score and information formulas. They differ in how many full-data Fisher scoring iterations they take.</p>
+</section>
+<section id="baseline-category-multinomial-logit" class="level2">
+<h2 class="anchored" data-anchor-id="baseline-category-multinomial-logit">Baseline-Category Multinomial Logit</h2>
+<p><code>DBMultinomialLogisticRegression</code> handles moderate numbers of labels with the exact joint baseline-category multinomial logit. Suppose there are <span class="math inline">\(K\)</span> labels and label <span class="math inline">\(K\)</span> is the baseline. The model estimates coefficient vectors <span class="math inline">\(\beta_1, \ldots, \beta_{K-1}\)</span> and normalizes the baseline utility to zero:</p>
+<p><span class="math display">\[
+\eta_{gk} = x_g&#39;\beta_k,
+\qquad
+k = 1, \ldots, K - 1,
+\]</span></p>
+<p><span class="math display">\[
+\eta_{gK} = 0.
+\]</span></p>
+<p>The softmax probabilities are</p>
+<p><span class="math display">\[
+\pi_{gk}
+=
+\frac{\exp(x_g&#39;\beta_k)}
+{1 + \sum_{j=1}^{K-1} \exp(x_g&#39;\beta_j)},
+\qquad
+k = 1, \ldots, K - 1,
+\]</span></p>
+<p>and</p>
+<p><span class="math display">\[
+\pi_{gK}
+=
+\frac{1}
+{1 + \sum_{j=1}^{K-1} \exp(x_g&#39;\beta_j)}.
+\]</span></p>
+<p>The grouped log likelihood is</p>
+<p><span class="math display">\[
+\ell(\beta)
+=
+\sum_g
+\left[
+\sum_{k=1}^{K-1} c_{gk} x_g&#39;\beta_k
+-
+n_g
+\log
+\left\{
+1 + \sum_{j=1}^{K-1} \exp(x_g&#39;\beta_j)
+\right\}
+\right].
+\]</span></p>
+<p>The score block for label <span class="math inline">\(k\)</span> is</p>
+<p><span class="math display">\[
+U_k(\beta)
+=
+\sum_g x_g \{c_{gk} - n_g \pi_{gk}(\beta)\}.
+\]</span></p>
+<p>The Fisher information is a block matrix. The block for labels <span class="math inline">\(k\)</span> and <span class="math inline">\(l\)</span> is</p>
+<p><span class="math display">\[
+I_{kl}(\beta)
+=
+\sum_g
+n_g
+\pi_{gk}(\beta)
+\left[
+1\{k = l\} - \pi_{gl}(\beta)
+\right]
+x_g x_g&#39;.
+\]</span></p>
+<p>This cross-label block structure is the main computational issue. The information matrix has dimension <span class="math inline">\(((K - 1)p) \times ((K - 1)p)\)</span>, where <span class="math inline">\(p\)</span> is the number of columns in <span class="math inline">\(X\)</span>. It is not label-separable because every softmax probability shares the same denominator.</p>
+<p>The implementation follows that block formula:</p>
+<div id="code-multinomial-block-info" class="cell" data-execution_count="5">
+<details class="code-fold">
+<summary>Show implementation sketch</summary>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>eta <span class="op">=</span> X <span class="op">@</span> beta.T</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>probs <span class="op">=</span> softmax(column_bind(eta, zeros))</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>score <span class="op">=</span> (class_counts[:, :K_minus_1] <span class="op">-</span> totals[:, <span class="va">None</span>] <span class="op">*</span> probs).T <span class="op">@</span> X</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>info <span class="op">=</span> zeros((K_minus_1 <span class="op">*</span> p, K_minus_1 <span class="op">*</span> p))</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> k <span class="kw">in</span> <span class="bu">range</span>(K_minus_1):</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> l <span class="kw">in</span> <span class="bu">range</span>(K_minus_1):</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>        w <span class="op">=</span> totals <span class="op">*</span> probs[:, k] <span class="op">*</span> ((k <span class="op">==</span> l) <span class="op">-</span> probs[:, l])</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>        block <span class="op">=</span> X.T <span class="op">@</span> (w[:, <span class="va">None</span>] <span class="op">*</span> X)</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>        info[k_block, l_block] <span class="op">=</span> block</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>step <span class="op">=</span> solve(info, vectorize(score))</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>beta <span class="op">=</span> beta <span class="op">+</span> unvectorize(step)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+<p>This is the exact compressed multinomial Fisher scoring routine. Compression reduces the number of rows in the score and information sums, but the Hessian still couples labels.</p>
+</section>
+<section id="many-label-poisson-decomposition" class="level2">
+<h2 class="anchored" data-anchor-id="many-label-poisson-decomposition">Many-Label Poisson Decomposition</h2>
+<p><code>DBPoissonMultinomialRegression</code> takes a different route for many labels. Instead of fitting one large softmax model, it fits one Poisson regression per label. For label <span class="math inline">\(j\)</span>,</p>
+<p><span class="math display">\[
+y_{ij}
+\sim
+\mathrm{Poisson}(\mu_{ij}),
+\qquad
+\log \mu_{ij} = x_i&#39;\gamma_j.
+\]</span></p>
+<p>After compression by label and covariate cell, the label-specific objective is</p>
+<p><span class="math display">\[
+\ell_j(\gamma_j)
+=
+\sum_g
+\left[
+y_{gj}^+ x_g&#39;\gamma_j
+-
+r_{gj} \exp(x_g&#39;\gamma_j)
+\right],
+\]</span></p>
+<p>where <span class="math inline">\(r_{gj}\)</span> is the number of rows in the compressed label-covariate cell and <span class="math inline">\(y_{gj}^+\)</span> is the sum of counts for that label in that cell.</p>
+<p>The score and information are</p>
+<p><span class="math display">\[
+U_j(\gamma_j)
+=
+\sum_g x_g \{y_{gj}^+ - r_{gj} \mu_{gj}(\gamma_j)\},
+\]</span></p>
+<p><span class="math display">\[
+I_j(\gamma_j)
+=
+\sum_g r_{gj} \mu_{gj}(\gamma_j) x_g x_g&#39;.
+\]</span></p>
+<p>So the many-label path solves <span class="math inline">\(K\)</span> independent <span class="math inline">\(p \times p\)</span> systems rather than one coupled <span class="math inline">\(((K - 1)p) \times ((K - 1)p)\)</span> system:</p>
+<div id="code-many-label-poisson" class="cell" data-execution_count="6">
+<details class="code-fold">
+<summary>Show implementation sketch</summary>
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>coefs <span class="op">=</span> []</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> label <span class="kw">in</span> labels:</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    X_label, y_sum_label, rows_label <span class="op">=</span> collect_label_data(label)</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    gamma_label <span class="op">=</span> poisson_irls(X_label, y_sum_label, rows_label)</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    coefs.append(gamma_label)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+<p>This is the distributed part of the design. Each label-wise Poisson fit can be run independently after the database has produced compressed <code>(label, covariates)</code> sufficient statistics.</p>
+</section>
+<section id="relation-to-multinomial-logit" class="level2">
+<h2 class="anchored" data-anchor-id="relation-to-multinomial-logit">Relation to Multinomial Logit</h2>
+<p>There is a useful connection between Poisson count models and multinomial likelihoods. If counts for a unit are modeled as independent Poisson variables,</p>
+<p><span class="math display">\[
+y_{ij}
+\sim
+\mathrm{Poisson}(\lambda_i q_{ij}),
+\]</span></p>
+<p>then conditional on the unit total <span class="math inline">\(m_i = \sum_j y_{ij}\)</span>, the vector <span class="math inline">\((y_{i1}, \ldots, y_{iK})\)</span> is multinomial:</p>
+<p><span class="math display">\[
+(y_{i1}, \ldots, y_{iK})
+\mid
+m_i
+\sim
+\mathrm{Multinomial}
+\left(
+m_i,
+q_{i1}, \ldots, q_{iK}
+\right).
+\]</span></p>
+<p>If</p>
+<p><span class="math display">\[
+q_{ij}
+=
+\frac{\exp(x_i&#39;\gamma_j)}
+{\sum_l \exp(x_i&#39;\gamma_l)},
+\]</span></p>
+<p>then normalized Poisson intensities recover a softmax-like probability model.</p>
+<p>The implementation in <code>DBPoissonMultinomialRegression</code> should be read carefully, though. It fits separable label-wise Poisson regressions. It does not currently add unit/document fixed effects or an offset that explicitly conditions out row totals. Therefore it is best described as a scalable many-label Poisson count decomposition, not as the exact same estimator as the joint baseline-category multinomial logit.</p>
+</section>
+<section id="practical-summary" class="level2">
+<h2 class="anchored" data-anchor-id="practical-summary">Practical Summary</h2>
+<p>The canonical GLM implementation is exact after compression when <code>method=&quot;irls&quot;</code> is used. It computes the same score and Fisher information as the full data, but over grouped sufficient statistics.</p>
+<p>The one-step implementation uses the same formulas, but it starts from a pilot fit and takes only one full-data Fisher step.</p>
+<p>The moderate-<span class="math inline">\(K\)</span> multinomial implementation is exact compressed baseline-category multinomial logit. Its cost is dominated by the coupled softmax Fisher information matrix.</p>
+<p>The many-label implementation is scalable because it replaces the coupled multinomial Hessian with independent Poisson Fisher scoring problems by label. That makes it naturally distributable, but the current code path is a Poisson decomposition rather than an exact joint multinomial MLE.</p>
 
 
 </section>

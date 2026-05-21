@@ -1,0 +1,92 @@
+---
+title: "Inference and Variance Estimation"
+---
+
+Inference depends on whether the compressed table preserves the score or residual information needed for the target covariance estimator.
+
+## Linear HC1
+
+For `DBRegression.fit_vcov()`, the covariance has sandwich form:
+
+$$
+\hat{V}
+=
+\frac{N}{N-k}
+(X'WX)^{-1}
+\left(\sum_g RSS_gx_gx_g'\right)
+(X'WX)^{-1}.
+$$
+
+The grouped residual sum of squares is exact from compressed sufficient statistics:
+
+$$
+RSS_g
+=
+n_g\hat{y}_g^2
+-2\hat{y}_g\sum_{i\in g}y_i
++\sum_{i\in g}y_i^2.
+$$
+
+This is the fastest inference path when iid or HC1-style robust standard errors are enough.
+
+## Cluster Bootstrap
+
+Cluster bootstrap resamples clusters, applies multiplicities to grouped cluster-by-cell aggregates, collapses back to design cells, and refits. The `DBRegression` path does this without backend-specific array parameter expansion.
+
+Conceptually:
+
+```{python}
+grouped = group_by(covariate_cell, cluster).aggregate(
+    count=count(),
+    sum_y=sum(Y),
+    sum_y_sq=sum(Y * Y),
+)
+
+for bootstrap_draw in range(B):
+    multiplicities = sampled_clusters.value_counts()
+    boot = grouped.join(multiplicities).collapse_to(covariate_cell)
+    beta_b = wls(boot_X, boot_y, boot_n)
+```
+
+Panel event-study bootstrap uses the same idea with the generated event-study design.
+
+## GLM Covariance
+
+For canonical GLMs, `fit_vcov()` uses Fisher information:
+
+$$
+\hat{V}_{model} = I(\hat{\beta})^{-1}.
+$$
+
+For binary and Poisson models, `fit_vcov(robust=True)` computes a grouped sandwich:
+
+$$
+\hat{V}_{robust}
+=
+I(\hat{\beta})^{-1}
+\left(\sum_g U_g(\hat{\beta})U_g(\hat{\beta})'\right)
+I(\hat{\beta})^{-1}.
+$$
+
+The grouped score contribution $U_g$ is available because the compressed table stores covariates, outcome sums, and cell counts.
+
+## DML Bootstrap
+
+`DBDML` bootstraps over compressed control groups. The point estimator is built from group-level leave-one-out cross-products, so resampling compressed groups is a natural low-cost uncertainty calculation.
+
+## Current Matrix
+
+| Estimator | Inference path |
+|---|---|
+| `DBRegression` | HC1 via `fit_vcov()`; iid or cluster bootstrap through `fit()` when `n_bootstraps > 0`. |
+| `DBDML` | Bootstrap over compressed groups. |
+| `DBMundlak` | Cluster bootstrap when `cluster_col` is provided. |
+| `DBDoubleDemeaning` | Point estimate currently; bootstrap is not implemented in the `DB*` path. |
+| `DBMundlakEventStudy` | Cluster bootstrap by generated event-study design. |
+| `DBLogisticRegression` | Fisher covariance, or grouped robust sandwich with `fit_vcov(robust=True)`. |
+| `DBPoissonRegression` | Fisher covariance, or grouped robust sandwich with `fit_vcov(robust=True)`. |
+| `DBMultinomialLogisticRegression` | Inverse multinomial Fisher information. |
+| `DBPoissonMultinomialRegression` | Point estimates only. |
+| `DuckRidge` | Point estimates, paths, and cross-validation; no standard errors. |
+
+Keep `n_bootstraps=0` for GLMs unless a bootstrap implementation is added.

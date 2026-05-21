@@ -1,0 +1,117 @@
+---
+title: "Compressed Ridge Regression"
+---
+
+`DuckRidge` adds ridge regression to the compressed linear-regression workflow. It supports a single penalty, a full lambda path, and cross-validation over compressed folds.
+
+## Constructor
+
+```{python}
+DuckRidge(
+    db_name: str,
+    table_name: str,
+    formula: str,
+    lambda_grid=None,
+    cv_folds: int = 5,
+    seed: int = 42,
+    n_bootstraps: int = 0,
+    rowid_col: str = "rowid",
+    fitter: str = "ridge",
+)
+```
+
+`DuckRidge` currently supports one outcome variable and does not support formula fixed effects.
+
+## Objective
+
+After compression, ridge solves
+
+$$
+\hat{\beta}_\lambda
+=
+\arg\min_\beta
+\sum_g n_g(\bar{y}_g - x_g'\beta)^2
++ \lambda\|\beta\|_2^2.
+$$
+
+The closed form is
+
+$$
+\hat{\beta}_\lambda
+=
+(X'WX+\lambda I)^{-1}X'W\bar{y}.
+$$
+
+The implementation uses an augmented least-squares representation:
+
+$$
+\tilde{X}
+=
+\begin{bmatrix}
+W^{1/2}X \\
+\sqrt{\lambda}I
+\end{bmatrix},
+\qquad
+\tilde{y}
+=
+\begin{bmatrix}
+W^{1/2}\bar{y} \\
+0
+\end{bmatrix}.
+$$
+
+Then it calls `np.linalg.lstsq`.
+
+## Single Lambda
+
+```{python}
+import numpy as np
+from duckreg import DuckRidge
+
+model = DuckRidge(
+    db_name="ridge.db",
+    table_name="data",
+    formula="Y ~ D + f1 + f2 + f3",
+    lambda_grid=[0.1],
+    cv_folds=1,
+    seed=42,
+)
+model.fit(lambda_selection="single")
+model.summary()
+```
+
+## Lambda Path
+
+```{python}
+model = DuckRidge(
+    db_name="ridge.db",
+    table_name="data",
+    formula="Y ~ D + f1 + f2 + f3",
+    lambda_grid=np.logspace(-4, 2, 50),
+    cv_folds=1,
+    seed=42,
+)
+model.fit(lambda_selection="path")
+model.summary()["lambda_path_coefs"]
+```
+
+## Cross-Validation
+
+When `cv_folds > 1`, the estimator creates fold assignments, includes `fold_id` in the compression, and evaluates validation weighted MSE on compressed test cells.
+
+```{python}
+model = DuckRidge(
+    db_name="ridge.db",
+    table_name="data",
+    formula="Y ~ D + f1 + f2 + f3",
+    lambda_grid=np.logspace(-3, 1, 20),
+    cv_folds=5,
+    seed=42,
+)
+model.fit(lambda_selection="cv")
+model.best_lambda
+```
+
+## Current Limits
+
+Ridge bootstrap standard errors are not implemented. Regularized inference requires a penalty-aware covariance treatment, so `DuckRidge` focuses on point estimates, paths, and validation.

@@ -1,0 +1,303 @@
+---
+title: "Executed Examples"
+execute:
+  eval: true
+  echo: true
+  warning: false
+  message: false
+---
+
+This page runs compact versions of the repository notebooks. The data are synthetic and small enough for fast documentation renders, but the estimators execute the real package code.
+
+## Setup
+
+```{python}
+#| label: setup
+#| code-fold: true
+import os
+import tempfile
+
+import ibis
+import numpy as np
+import pandas as pd
+
+from duckreg import (
+    DBDML,
+    DBDoubleDemeaning,
+    DBLogisticRegression,
+    DBMultinomialLogisticRegression,
+    DBMundlak,
+    DBPoissonMultinomialRegression,
+    DBPoissonRegression,
+    DBRegression,
+)
+
+pd.set_option("display.precision", 4)
+rng = np.random.default_rng(2026)
+tmpdir = tempfile.mkdtemp(prefix="duckreg_docs_")
+
+
+def duckdb_backend(name, table, df):
+    path = os.path.join(tmpdir, name)
+    con = ibis.duckdb.connect(path)
+    con.create_table(table, df, overwrite=True)
+    return con
+```
+
+## Linear Regression
+
+```{python}
+#| label: linear-data
+#| code-fold: true
+n = 8_000
+linear = pd.DataFrame(
+    {
+        "rowid": np.arange(n),
+        "D": rng.integers(0, 2, n).astype(float),
+        "f1": rng.integers(0, 20, n).astype(float),
+        "f2": rng.integers(0, 8, n).astype(float),
+        "cluster": rng.integers(0, 250, n),
+    }
+)
+linear["Y"] = (
+    1.0
+    + 2.0 * linear["D"]
+    + 0.10 * linear["f1"]
+    - 0.05 * linear["f2"]
+    + rng.normal(0, 1, n)
+)
+
+con = duckdb_backend("linear.db", "data", linear)
+
+ols = DBRegression(
+    db_name=None,
+    connection=con,
+    table_name="data",
+    formula="Y ~ D + f1 + f2",
+    cluster_col=None,
+    seed=42,
+    n_bootstraps=0,
+)
+ols.fit()
+ols.fit_vcov()
+
+pd.DataFrame(
+    {
+        "term": ["Intercept", "D", "f1", "f2"],
+        "estimate": ols.summary()["point_estimate"],
+        "std_error": ols.summary()["standard_error"],
+    }
+)
+```
+
+Compression reduces 8,000 raw rows to one row per unique covariate cell.
+
+```{python}
+#| label: linear-compression
+pd.DataFrame(
+    {
+        "raw_rows": [len(linear)],
+        "compressed_rows": [len(ols.df_compressed)],
+        "compression_ratio": [len(linear) / len(ols.df_compressed)],
+    }
+)
+```
+
+## Panel Mundlak
+
+```{python}
+#| label: panel-example
+#| code-fold: true
+units, periods = 160, 6
+unit = np.repeat(np.arange(units), periods)
+time = np.tile(np.arange(periods), units)
+unit_fe = rng.normal(0, 1, units)
+time_fe = rng.normal(0, 0.4, periods)
+D = rng.normal(size=len(unit)) + 0.4 * unit_fe[unit] + 0.2 * time_fe[time]
+X = rng.normal(size=len(unit))
+Y = 1.5 * D - 0.5 * X + unit_fe[unit] + time_fe[time] + rng.normal(0, 0.5, len(unit))
+panel = pd.DataFrame({"unit": unit, "time": time, "D": D, "X": X, "Y": Y})
+
+panel_con = duckdb_backend("panel.db", "panel_data", panel)
+mundlak = DBMundlak(
+    db_name=None,
+    connection=panel_con,
+    table_name="panel_data",
+    outcome_var="Y",
+    covariates=["D", "X"],
+    unit_col="unit",
+    time_col="time",
+    seed=42,
+    n_bootstraps=0,
+)
+mundlak.fit()
+
+pd.DataFrame(
+    mundlak.point_estimate,
+    index=["Intercept"] + mundlak.rhs,
+    columns=["estimate"],
+).head(8)
+```
+
+## Double Demeaning
+
+```{python}
+#| label: double-demeaning
+twfe = DBDoubleDemeaning(
+    db_name=None,
+    connection=panel_con,
+    table_name="panel_data",
+    outcome_var="Y",
+    treatment_var="D",
+    unit_col="unit",
+    time_col="time",
+    seed=42,
+    n_bootstraps=0,
+)
+twfe.fit()
+
+pd.DataFrame(
+    twfe.point_estimate,
+    index=["Intercept", "ddot_D"],
+    columns=["estimate"],
+)
+```
+
+## DML With Discrete Controls
+
+```{python}
+#| label: dml-example
+#| code-fold: true
+dml_data = linear.copy()
+dml_data["X"] = rng.normal(size=len(dml_data))
+dml_data["Y"] = (
+    0.8 * dml_data["D"]
+    + 0.6 * dml_data["X"]
+    + dml_data.groupby(["f1", "f2"])["f1"].transform("mean") * 0.02
+    + rng.normal(0, 1, len(dml_data))
+)
+dml_con = duckdb_backend("dml.db", "data", dml_data)
+
+dml = DBDML(
+    db_name=None,
+    connection=dml_con,
+    table_name="data",
+    outcome_var="Y",
+    treatment_var=["D", "X"],
+    discrete_covars=["f1", "f2"],
+    seed=42,
+    n_bootstraps=0,
+)
+dml.fit()
+pd.DataFrame({"term": ["D", "X"], "estimate": dml.point_estimate})
+```
+
+## GLMs
+
+```{python}
+#| label: glm-example
+#| code-fold: true
+glm = linear[["D", "f1", "f2"]].copy()
+eta = -1.0 + 1.1 * glm["D"] + 0.04 * glm["f1"] - 0.08 * glm["f2"]
+glm["y_binary"] = rng.binomial(1, 1 / (1 + np.exp(-eta)))
+mu = np.exp(0.2 + 0.25 * glm["D"] + 0.02 * glm["f1"] - 0.03 * glm["f2"])
+glm["y_count"] = rng.poisson(mu)
+glm_con = duckdb_backend("glm.db", "glm_data", glm)
+
+logit = DBLogisticRegression(
+    db_name=None,
+    connection=glm_con,
+    table_name="glm_data",
+    formula="y_binary ~ D + f1 + f2",
+    seed=42,
+    method="irls",
+    n_bootstraps=0,
+)
+logit.fit()
+logit.fit_vcov()
+
+poisson = DBPoissonRegression(
+    db_name=None,
+    connection=glm_con,
+    table_name="glm_data",
+    formula="y_count ~ D + f1 + f2",
+    seed=42,
+    method="irls",
+    n_bootstraps=0,
+)
+poisson.fit()
+poisson.fit_vcov()
+
+pd.DataFrame(
+    {
+        "term": ["Intercept", "D", "f1", "f2"],
+        "logit": logit.point_estimate,
+        "poisson": poisson.point_estimate,
+    }
+)
+```
+
+## Multinomial Labels
+
+```{python}
+#| label: multinomial-example
+#| code-fold: true
+X_design = np.c_[np.ones(len(glm)), glm[["D", "f1", "f2"]].to_numpy()]
+beta = np.array([[0.2, 0.5, 0.03, -0.05], [-0.3, -0.2, 0.01, 0.06]])
+eta = np.c_[X_design @ beta.T, np.zeros(len(glm))]
+prob = np.exp(eta - eta.max(axis=1, keepdims=True))
+prob = prob / prob.sum(axis=1, keepdims=True)
+labels = np.array(["a", "b", "c"])
+glm["label"] = [rng.choice(labels, p=p) for p in prob]
+
+glm_con.create_table("label_data", glm, overwrite=True)
+multi = DBMultinomialLogisticRegression(
+    db_name=None,
+    connection=glm_con,
+    table_name="label_data",
+    formula="label ~ D + f1 + f2",
+    labels=["a", "b", "c"],
+    baseline="c",
+    seed=42,
+    n_bootstraps=0,
+)
+multi.fit()
+multi.fit_vcov()
+
+pd.DataFrame(
+    multi.point_estimate,
+    index=multi.labels[:-1],
+    columns=["Intercept", "D", "f1", "f2"],
+)
+```
+
+## Many-Label Counts
+
+```{python}
+#| label: poisson-multinomial-example
+#| code-fold: true
+rows = []
+count_labels = [f"label_{j}" for j in range(6)]
+for obs_id in range(500):
+    x1 = rng.integers(0, 4)
+    x2 = rng.integers(0, 3)
+    for j, label in enumerate(count_labels):
+        mean = np.exp(-1.1 + 0.08 * j + 0.12 * x1 - 0.06 * x2)
+        rows.append((obs_id, label, rng.poisson(mean), x1, x2))
+
+counts = pd.DataFrame(rows, columns=["obs_id", "label", "count", "x1", "x2"])
+count_con = duckdb_backend("counts.db", "token_counts", counts)
+
+pm = DBPoissonMultinomialRegression(
+    db_name=None,
+    connection=count_con,
+    table_name="token_counts",
+    count_col="count",
+    label_col="label",
+    covars=["x1", "x2"],
+    seed=42,
+    n_bootstraps=0,
+)
+pm.fit()
+pm.summary()["point_estimate"].head()
+```

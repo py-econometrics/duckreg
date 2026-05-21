@@ -1,0 +1,83 @@
+---
+title: "duckreg"
+description: "Compressed regressions for Ibis-compatible database backends."
+---
+
+`duckreg` estimates models by compressing raw rows inside a database and then solving the small numerical problem in Python. DuckDB remains the default local backend, but the current API is built around Ibis-compatible connections so the same estimator can run on DuckDB, Databricks, Postgres, Snowflake, and other Ibis SQL backends that support the generated aggregation queries.
+
+The central workflow is:
+
+1. Build any design variables needed by the estimator.
+2. Group rows into sufficient-statistic cells.
+3. Collect the compressed table into pandas.
+4. Solve weighted least squares, Fisher scoring, or a small matrix system.
+5. Compute analytic covariance when available, or bootstrap where implemented.
+
+```{python}
+from duckreg import DBRegression
+
+model = DBRegression(
+    db_name="large_dataset.db",
+    table_name="data",
+    formula="Y ~ D + X",
+    cluster_col="cluster_id",
+    seed=42,
+    n_bootstraps=0,
+)
+model.fit()
+model.fit_vcov()
+model.summary()
+```
+
+## API Map
+
+The `DB*` classes are the preferred backend-neutral API. The `Duck*` classes remain available for backwards compatibility and now also accept Ibis connections through the shared connection adapter.
+
+| Object | Use |
+|---|---|
+| `DBRegression` | Compressed OLS over discrete covariate cells, with HC1 covariance and bootstrap support. |
+| `DBMundlak` | One-way or two-way Mundlak panel regression. |
+| `DBDoubleDemeaning` | Two-way residualized treatment regression. |
+| `DBMundlakEventStudy` | Cohort-by-time event-study design with compressed WLS. |
+| `DBDML` | Leave-one-out partial linear estimator for discrete controls. |
+| `DBLogisticRegression` | Compressed binary logit through grouped Fisher scoring. |
+| `DBPoissonRegression` | Compressed Poisson regression through grouped Fisher scoring. |
+| `DBMultinomialLogisticRegression` | Exact baseline-category multinomial logit for moderate label counts. |
+| `DBPoissonMultinomialRegression` | Label-wise Poisson count decomposition for many labels. |
+| `DuckRidge` | Compressed ridge regression, lambda paths, and cross-validation. |
+
+## What Changed In 0.4
+
+Version 0.4 makes the database layer generic through Ibis. The old DuckDB-first SQL implementation is still present for compatibility, but new development should generally target the `DB*` estimators because they build relational operations with Ibis expressions rather than string SQL.
+
+Formula-level fixed effects were removed from `DuckRegression` and `DBRegression`. For fixed-effect style panel designs, use `DBMundlak`, `DBDoubleDemeaning`, or `DBMundlakEventStudy`.
+
+## Documentation
+
+| Page | Contents |
+|---|---|
+| [Ibis Backends](ibis.qmd) | Connection patterns, backend requirements, Databricks example, and migration notes. |
+| [Compression](compression.qmd) | Sufficient-statistic algebra and estimator lifecycle. |
+| [Linear](linear.qmd) | OLS API, HC1 covariance, bootstrap, and multiple outcomes. |
+| [Panel](panel.qmd) | Mundlak, double demeaning, and event-study estimators. |
+| [DML](dml.qmd) | Leave-one-out residualization and compressed cross-products. |
+| [GLMs](glm.qmd) | Logistic, Poisson, multinomial, and many-label count models. |
+| [Fisher Scoring](fisher-scoring.qmd) | Math behind the GLM implementation. |
+| [Ridge](ridge.qmd) | Ridge paths and compressed cross-validation. |
+| [Inference](inference.qmd) | Analytic and bootstrap covariance paths. |
+| [Examples](examples.qmd) | Executed compact examples adapted from the notebooks. |
+| [Performance](performance.qmd) | Compression ratios and timing comparisons. |
+
+## Installation
+
+```{bash}
+uv pip install duckreg
+```
+
+Install optional backend extras as needed:
+
+```{bash}
+uv pip install "duckreg[databricks]"
+uv pip install "duckreg[postgres]"
+uv pip install "duckreg[snowflake]"
+```

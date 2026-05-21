@@ -1,0 +1,158 @@
+---
+title: "Generalized Linear Models"
+---
+
+The GLM estimators extend compression from least squares to canonical-link likelihoods. The database groups rows by covariates and collects counts or outcome sums; Python runs Fisher scoring on the grouped likelihood.
+
+## API
+
+```{python}
+from duckreg import (
+    DBLogisticRegression,
+    DBPoissonRegression,
+    DBMultinomialLogisticRegression,
+    DBPoissonMultinomialRegression,
+)
+```
+
+Binary logit and Poisson regression share the same constructor shape:
+
+```{python}
+model = DBLogisticRegression(
+    db_name="glm.db",
+    table_name="binary_data",
+    formula="y ~ x1 + x2",
+    seed=42,
+    method="irls",
+    n_bootstraps=0,
+)
+model.fit()
+model.fit_vcov()
+model.summary()
+```
+
+Use `DBPoissonRegression` for count outcomes:
+
+```{python}
+model = DBPoissonRegression(
+    db_name="glm.db",
+    table_name="count_data",
+    formula="y ~ x1 + x2",
+    seed=42,
+    method="irls",
+    n_bootstraps=0,
+)
+```
+
+## Methods
+
+`method="irls"` runs Fisher scoring to convergence on compressed sufficient statistics. `method="one_step"` fits a pilot model on a subsample and takes one full-data Fisher scoring step using the compressed score and information.
+
+For exact benchmarking or small examples, use `method="irls"`. For very large data, `method="one_step"` is intended to reduce the cost of the initial iterative fit.
+
+## Binary Logit
+
+For cell $g$, let $s_g$ be the number of successes and $n_g$ be the number of rows. With
+
+$$
+p_g(\beta) = \Lambda(x_g'\beta),
+$$
+
+the grouped log likelihood is
+
+$$
+\ell(\beta)
+=
+\sum_g
+\left[
+s_g x_g'\beta
+- n_g\log\{1+\exp(x_g'\beta)\}
+\right].
+$$
+
+The score and information are
+
+$$
+U(\beta)
+=
+\sum_g x_g(s_g - n_gp_g),
+\qquad
+I(\beta)
+=
+\sum_g n_gp_g(1-p_g)x_gx_g'.
+$$
+
+## Poisson
+
+For Poisson regression,
+
+$$
+\mu_g(\beta)=\exp(x_g'\beta).
+$$
+
+If $y_g^+=\sum_{i\in g}y_i$, then
+
+$$
+\ell(\beta)
+=
+\sum_g
+\left[
+y_g^+x_g'\beta
+- n_g\exp(x_g'\beta)
+\right],
+$$
+
+with
+
+$$
+U(\beta)=\sum_g x_g(y_g^+ - n_g\mu_g),
+\qquad
+I(\beta)=\sum_g n_g\mu_gx_gx_g'.
+$$
+
+## Multinomial Logit
+
+`DBMultinomialLogisticRegression` fits an exact baseline-category multinomial logit for moderate numbers of labels:
+
+```{python}
+model = DBMultinomialLogisticRegression(
+    db_name="glm.db",
+    table_name="label_data",
+    formula="label ~ x1 + x2",
+    labels=["a", "b", "c"],
+    baseline="c",
+    seed=42,
+    n_bootstraps=0,
+)
+model.fit()
+model.fit_vcov()
+model.summary()
+```
+
+The compressed table contains one count column per label. If there are $K$ labels and the last label is the baseline, the coefficient matrix has shape $(K-1) \times p$.
+
+## Many-Label Count Decomposition
+
+`DBPoissonMultinomialRegression` is for wide label/count problems:
+
+```{python}
+model = DBPoissonMultinomialRegression(
+    db_name="counts.db",
+    table_name="token_counts",
+    count_col="count",
+    label_col="token",
+    covars=["segment", "period"],
+    seed=42,
+    n_bootstraps=0,
+)
+model.fit()
+model.summary()["point_estimate"]
+```
+
+It fits independent label-wise Poisson regressions. That is scalable and naturally distributable, but it is not the exact joint multinomial likelihood unless the modeling problem justifies the Poisson decomposition.
+
+## Inference
+
+`fit_vcov()` computes the inverse Fisher information by default. For binary and Poisson models, `fit_vcov(robust=True)` computes a grouped sandwich covariance from compressed score contributions.
+
+Bootstrap covariance is not implemented for the GLM estimators. Keep `n_bootstraps=0` and call `fit_vcov()`.

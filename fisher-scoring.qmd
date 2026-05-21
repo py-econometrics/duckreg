@@ -1,0 +1,390 @@
+---
+title: "Fisher Scoring and Multinomial GLMs"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    code-fold: true
+    code-summary: "Show implementation sketch"
+    page-layout: full
+execute:
+  echo: true
+  eval: false
+  warning: false
+  message: false
+---
+
+## Purpose
+
+The GLM code in `duckreg.dbreg` and the compatibility `duckreg.estimators` module uses compressed sufficient statistics. The key move is to group rows with the same covariates, compute the score and Fisher information on those groups, and then run the same Fisher scoring update that would be used on the full data.
+
+The shared update is
+
+$$
+\beta^{(t+1)}
+=
+\beta^{(t)}
++
+I(\beta^{(t)})^{-1} U(\beta^{(t)}),
+$$
+
+where $U(\beta)$ is the score and $I(\beta)$ is the expected Fisher information. In the code this appears as
+
+```{python}
+#| label: code-shared-step
+step = solve(info, score)
+beta_new = beta + step
+```
+
+The function `_solve_step` solves this linear system, with a small ridge fallback if the information matrix is singular. The logistic, Poisson, and multinomial routines differ only in how they compute `score` and `info`.
+
+## Compression
+
+For canonical GLMs without fixed effects, rows with the same covariate vector $x_g$ can be collapsed. Let $g$ index compressed cells and $n_g$ be the number of original rows in cell $g$.
+
+For binary outcomes, the compressed outcome is the number of successes
+
+$$
+s_g = \sum_{i: x_i = x_g} y_i.
+$$
+
+For Poisson counts, the compressed outcome is the sum of counts
+
+$$
+y_g^+ = \sum_{i: x_i = x_g} y_i.
+$$
+
+For multinomial labels, the compressed outcome is the vector of class counts
+
+$$
+c_g = (c_{g1}, \ldots, c_{gK}),
+\qquad
+c_{gk} = \sum_{i: x_i = x_g} 1\{y_i = k\}.
+$$
+
+This is why the database aggregation is enough for estimation: the likelihood only needs covariate cells, totals, and outcome sums or class counts.
+
+## Binary Logit
+
+For logit,
+
+$$
+p_g(\beta)
+=
+\Lambda(x_g'\beta)
+=
+\frac{\exp(x_g'\beta)}{1 + \exp(x_g'\beta)}.
+$$
+
+Ignoring constants that do not involve $\beta$, the grouped log likelihood is
+
+$$
+\ell(\beta)
+=
+\sum_g
+\left[
+s_g x_g'\beta
+-
+n_g \log\{1 + \exp(x_g'\beta)\}
+\right].
+$$
+
+The score is
+
+$$
+U(\beta)
+=
+\frac{\partial \ell(\beta)}{\partial \beta}
+=
+\sum_g x_g \{s_g - n_g p_g(\beta)\}.
+$$
+
+The expected Fisher information is
+
+$$
+I(\beta)
+=
+\sum_g n_g p_g(\beta)\{1 - p_g(\beta)\} x_g x_g'.
+$$
+
+The implementation is the matrix version of these equations:
+
+```{python}
+#| label: code-logit-score-info
+p = sigmoid(X @ beta)
+score = X.T @ (successes - totals * p)
+info = X.T @ ((totals * p * (1 - p))[:, None] * X)
+step = solve(info, score)
+beta = beta + step
+```
+
+The IRLS wording is slightly hidden here because the code does not explicitly form the working response $z$. Algebraically, this is the same Fisher scoring step as weighted least squares on the IRLS working outcome.
+
+## Poisson Regression
+
+For the canonical Poisson model,
+
+$$
+\mu_g(\beta) = \exp(x_g'\beta).
+$$
+
+The grouped log likelihood, again dropping constants, is
+
+$$
+\ell(\beta)
+=
+\sum_g
+\left[
+y_g^+ x_g'\beta
+-
+n_g \exp(x_g'\beta)
+\right].
+$$
+
+The score is
+
+$$
+U(\beta)
+=
+\sum_g x_g \{y_g^+ - n_g \mu_g(\beta)\}.
+$$
+
+The Fisher information is
+
+$$
+I(\beta)
+=
+\sum_g n_g \mu_g(\beta) x_g x_g'.
+$$
+
+The code is the direct matrix implementation:
+
+```{python}
+#| label: code-poisson-score-info
+mu = exp(X @ beta)
+score = X.T @ (y_sum - totals * mu)
+info = X.T @ ((totals * mu)[:, None] * X)
+step = solve(info, score)
+beta = beta + step
+```
+
+## One-Step Fisher Scoring
+
+The exact path, `method="irls"`, iterates until the step is small. The default canonical GLM path, `method="one_step"`, uses a pilot estimator on a reservoir sample and then takes one full-data Fisher step:
+
+$$
+\hat{\beta}_{\mathrm{one}}
+=
+\hat{\beta}_0
++
+I_N(\hat{\beta}_0)^{-1} U_N(\hat{\beta}_0).
+$$
+
+Here $\hat{\beta}_0$ is the pilot fit and $U_N$, $I_N$ are computed on the compressed full data. This is a large-data shortcut: the expensive full-data pass only computes sufficient statistics, score, and information once.
+
+```{python}
+#| label: code-one-step
+beta0 = fit_pilot_model(reservoir_sample)
+score, info = score_info(beta0, compressed_full_data)
+beta_one_step = beta0 + solve(info, score)
+```
+
+The exact and one-step estimators use the same score and information formulas. They differ in how many full-data Fisher scoring iterations they take.
+
+## Baseline-Category Multinomial Logit
+
+`DBMultinomialLogisticRegression` handles moderate numbers of labels with the exact joint baseline-category multinomial logit. Suppose there are $K$ labels and label $K$ is the baseline. The model estimates coefficient vectors $\beta_1, \ldots, \beta_{K-1}$ and normalizes the baseline utility to zero:
+
+$$
+\eta_{gk} = x_g'\beta_k,
+\qquad
+k = 1, \ldots, K - 1,
+$$
+
+$$
+\eta_{gK} = 0.
+$$
+
+The softmax probabilities are
+
+$$
+\pi_{gk}
+=
+\frac{\exp(x_g'\beta_k)}
+{1 + \sum_{j=1}^{K-1} \exp(x_g'\beta_j)},
+\qquad
+k = 1, \ldots, K - 1,
+$$
+
+and
+
+$$
+\pi_{gK}
+=
+\frac{1}
+{1 + \sum_{j=1}^{K-1} \exp(x_g'\beta_j)}.
+$$
+
+The grouped log likelihood is
+
+$$
+\ell(\beta)
+=
+\sum_g
+\left[
+\sum_{k=1}^{K-1} c_{gk} x_g'\beta_k
+-
+n_g
+\log
+\left\{
+1 + \sum_{j=1}^{K-1} \exp(x_g'\beta_j)
+\right\}
+\right].
+$$
+
+The score block for label $k$ is
+
+$$
+U_k(\beta)
+=
+\sum_g x_g \{c_{gk} - n_g \pi_{gk}(\beta)\}.
+$$
+
+The Fisher information is a block matrix. The block for labels $k$ and $l$ is
+
+$$
+I_{kl}(\beta)
+=
+\sum_g
+n_g
+\pi_{gk}(\beta)
+\left[
+1\{k = l\} - \pi_{gl}(\beta)
+\right]
+x_g x_g'.
+$$
+
+This cross-label block structure is the main computational issue. The information matrix has dimension $((K - 1)p) \times ((K - 1)p)$, where $p$ is the number of columns in $X$. It is not label-separable because every softmax probability shares the same denominator.
+
+The implementation follows that block formula:
+
+```{python}
+#| label: code-multinomial-block-info
+eta = X @ beta.T
+probs = softmax(column_bind(eta, zeros))
+
+score = (class_counts[:, :K_minus_1] - totals[:, None] * probs).T @ X
+
+info = zeros((K_minus_1 * p, K_minus_1 * p))
+for k in range(K_minus_1):
+    for l in range(K_minus_1):
+        w = totals * probs[:, k] * ((k == l) - probs[:, l])
+        block = X.T @ (w[:, None] * X)
+        info[k_block, l_block] = block
+
+step = solve(info, vectorize(score))
+beta = beta + unvectorize(step)
+```
+
+This is the exact compressed multinomial Fisher scoring routine. Compression reduces the number of rows in the score and information sums, but the Hessian still couples labels.
+
+## Many-Label Poisson Decomposition
+
+`DBPoissonMultinomialRegression` takes a different route for many labels. Instead of fitting one large softmax model, it fits one Poisson regression per label. For label $j$,
+
+$$
+y_{ij}
+\sim
+\mathrm{Poisson}(\mu_{ij}),
+\qquad
+\log \mu_{ij} = x_i'\gamma_j.
+$$
+
+After compression by label and covariate cell, the label-specific objective is
+
+$$
+\ell_j(\gamma_j)
+=
+\sum_g
+\left[
+y_{gj}^+ x_g'\gamma_j
+-
+r_{gj} \exp(x_g'\gamma_j)
+\right],
+$$
+
+where $r_{gj}$ is the number of rows in the compressed label-covariate cell and $y_{gj}^+$ is the sum of counts for that label in that cell.
+
+The score and information are
+
+$$
+U_j(\gamma_j)
+=
+\sum_g x_g \{y_{gj}^+ - r_{gj} \mu_{gj}(\gamma_j)\},
+$$
+
+$$
+I_j(\gamma_j)
+=
+\sum_g r_{gj} \mu_{gj}(\gamma_j) x_g x_g'.
+$$
+
+So the many-label path solves $K$ independent $p \times p$ systems rather than one coupled $((K - 1)p) \times ((K - 1)p)$ system:
+
+```{python}
+#| label: code-many-label-poisson
+coefs = []
+for label in labels:
+    X_label, y_sum_label, rows_label = collect_label_data(label)
+    gamma_label = poisson_irls(X_label, y_sum_label, rows_label)
+    coefs.append(gamma_label)
+```
+
+This is the distributed part of the design. Each label-wise Poisson fit can be run independently after the database has produced compressed `(label, covariates)` sufficient statistics.
+
+## Relation to Multinomial Logit
+
+There is a useful connection between Poisson count models and multinomial likelihoods. If counts for a unit are modeled as independent Poisson variables,
+
+$$
+y_{ij}
+\sim
+\mathrm{Poisson}(\lambda_i q_{ij}),
+$$
+
+then conditional on the unit total $m_i = \sum_j y_{ij}$, the vector $(y_{i1}, \ldots, y_{iK})$ is multinomial:
+
+$$
+(y_{i1}, \ldots, y_{iK})
+\mid
+m_i
+\sim
+\mathrm{Multinomial}
+\left(
+m_i,
+q_{i1}, \ldots, q_{iK}
+\right).
+$$
+
+If
+
+$$
+q_{ij}
+=
+\frac{\exp(x_i'\gamma_j)}
+{\sum_l \exp(x_i'\gamma_l)},
+$$
+
+then normalized Poisson intensities recover a softmax-like probability model.
+
+The implementation in `DBPoissonMultinomialRegression` should be read carefully, though. It fits separable label-wise Poisson regressions. It does not currently add unit/document fixed effects or an offset that explicitly conditions out row totals. Therefore it is best described as a scalable many-label Poisson count decomposition, not as the exact same estimator as the joint baseline-category multinomial logit.
+
+## Practical Summary
+
+The canonical GLM implementation is exact after compression when `method="irls"` is used. It computes the same score and Fisher information as the full data, but over grouped sufficient statistics.
+
+The one-step implementation uses the same formulas, but it starts from a pilot fit and takes only one full-data Fisher step.
+
+The moderate-$K$ multinomial implementation is exact compressed baseline-category multinomial logit. Its cost is dominated by the coupled softmax Fisher information matrix.
+
+The many-label implementation is scalable because it replaces the coupled multinomial Hessian with independent Poisson Fisher scoring problems by label. That makes it naturally distributable, but the current code path is a Poisson decomposition rather than an exact joint multinomial MLE.

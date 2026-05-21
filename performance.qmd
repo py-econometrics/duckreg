@@ -1,0 +1,180 @@
+---
+title: "Performance Comparisons"
+execute:
+  eval: true
+  echo: true
+  warning: false
+  message: false
+---
+
+The original notebooks benchmarked `duckreg` against full in-memory regression workflows. This page keeps the same spirit but uses a compact reproducible benchmark that is fast enough to render with the documentation.
+
+Absolute timings depend on hardware, backend, and data layout. The stable quantity is the compression ratio: when the design has many repeated covariate rows, the database can reduce a large raw table to a much smaller sufficient-statistic table before Python solves anything.
+
+## Setup
+
+```{python}
+#| label: perf-setup
+#| code-fold: true
+import importlib.util
+import os
+import tempfile
+import time
+
+import ibis
+import numpy as np
+import pandas as pd
+
+from duckreg import DBRegression
+
+rng = np.random.default_rng(2027)
+tmpdir = tempfile.mkdtemp(prefix="duckreg_perf_")
+
+
+def elapsed(label, fn):
+    start = time.perf_counter()
+    out = fn()
+    return label, time.perf_counter() - start, out
+```
+
+## Data
+
+The benchmark uses 250,000 rows, but only 2,000 unique right-hand-side cells.
+
+```{python}
+#| label: perf-data
+#| code-fold: true
+n = 250_000
+df = pd.DataFrame(
+    {
+        "rowid": np.arange(n),
+        "D": rng.integers(0, 2, n).astype(float),
+        "f1": rng.integers(0, 50, n).astype(float),
+        "f2": rng.integers(0, 20, n).astype(float),
+    }
+)
+df["Y"] = 1.0 + 1.5 * df["D"] + 0.04 * df["f1"] - 0.03 * df["f2"] + rng.normal(size=n)
+
+db_path = os.path.join(tmpdir, "perf.db")
+con = ibis.duckdb.connect(db_path)
+con.create_table("data", df, overwrite=True)
+
+raw_cells = len(df)
+unique_cells = df[["D", "f1", "f2"]].drop_duplicates().shape[0]
+pd.DataFrame(
+    {
+        "raw_rows": [raw_cells],
+        "unique_design_cells": [unique_cells],
+        "compression_ratio": [raw_cells / unique_cells],
+    }
+)
+```
+
+## Compressed Regression
+
+```{python}
+#| label: perf-duckreg
+#| code-fold: true
+def run_duckreg():
+    model = DBRegression(
+        db_name=None,
+        connection=con,
+        table_name="data",
+        formula="Y ~ D + f1 + f2",
+        cluster_col=None,
+        seed=42,
+        n_bootstraps=0,
+    )
+    model.fit()
+    model.fit_vcov()
+    return model
+
+duckreg_label, duckreg_time, duck_model = elapsed("DBRegression", run_duckreg)
+duck_estimate = duck_model.summary()["point_estimate"]
+duck_se = duck_model.summary()["standard_error"]
+
+pd.DataFrame(
+    {
+        "term": ["Intercept", "D", "f1", "f2"],
+        "estimate": duck_estimate,
+        "std_error": duck_se,
+    }
+)
+```
+
+## Full NumPy Baseline
+
+This baseline materializes the whole design matrix in Python and runs ordinary least squares directly. It is not a full replacement for a statistical package, but it shows the cost of solving on all rows instead of compressed cells.
+
+```{python}
+#| label: perf-numpy
+#| code-fold: true
+def run_numpy_ols():
+    X = np.c_[np.ones(len(df)), df[["D", "f1", "f2"]].to_numpy()]
+    y = df["Y"].to_numpy()
+    return np.linalg.lstsq(X, y, rcond=None)[0]
+
+numpy_label, numpy_time, numpy_estimate = elapsed("NumPy full OLS", run_numpy_ols)
+```
+
+## Optional pyfixest Baseline
+
+If `pyfixest` is installed, the render also runs a package-level OLS baseline.
+
+```{python}
+#| label: perf-pyfixest
+#| code-fold: true
+if importlib.util.find_spec("pyfixest") is not None:
+    import pyfixest as pf
+
+    def run_pyfixest():
+        return pf.feols("Y ~ D + f1 + f2", data=df, vcov="hetero")
+
+    pyfixest_label, pyfixest_time, pyfixest_fit = elapsed("pyfixest", run_pyfixest)
+    pyfixest_estimate = pyfixest_fit.coef().reindex(["Intercept", "D", "f1", "f2"]).to_numpy()
+else:
+    pyfixest_label, pyfixest_time, pyfixest_estimate = "pyfixest", np.nan, None
+```
+
+## Timing Summary
+
+```{python}
+#| label: perf-summary
+summary = pd.DataFrame(
+    {
+        "method": [duckreg_label, numpy_label, pyfixest_label],
+        "seconds": [duckreg_time, numpy_time, pyfixest_time],
+        "rows_seen_by_python": [len(duck_model.df_compressed), len(df), len(df)],
+    }
+)
+summary["relative_to_duckreg"] = summary["seconds"] / duckreg_time
+summary
+```
+
+## Coefficient Check
+
+```{python}
+#| label: perf-coef-check
+coef_table = pd.DataFrame(
+    {
+        "term": ["Intercept", "D", "f1", "f2"],
+        "duckreg": duck_estimate,
+        "numpy_full_ols": numpy_estimate,
+    }
+)
+if pyfixest_estimate is not None:
+    coef_table["pyfixest"] = pyfixest_estimate
+coef_table
+```
+
+The compressed and full-data OLS point estimates match because the grouped sufficient statistics preserve the linear-model normal equations exactly. The performance gain comes from moving the grouping operation to the database and collecting only the compressed table.
+
+## What To Expect On Larger Data
+
+The notebook benchmarks used larger local tables and found large speedups when the design compressed aggressively. The same pattern should hold on remote backends when:
+
+1. The backend can group the data efficiently.
+2. The RHS variables are discrete or saturated enough to create repeated cells.
+3. The collected sufficient-statistic table is much smaller than the raw table.
+
+If a design is nearly continuous and every row is unique, compression cannot do much. In that case the database still handles storage and query execution, but the in-memory solve approaches the raw-data problem size.

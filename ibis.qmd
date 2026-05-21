@@ -1,0 +1,146 @@
+---
+title: "Ibis Backends"
+---
+
+The 0.4 API separates estimator logic from a specific SQL engine. `duckreg` uses Ibis as the database expression layer, then collects only compressed sufficient statistics into Python.
+
+## Preferred API
+
+Use the `DB*` estimators for backend-neutral work:
+
+```{python}
+import ibis
+from duckreg import DBRegression
+
+con = ibis.duckdb.connect("large_dataset.db")
+
+model = DBRegression(
+    db_name=None,
+    connection=con,
+    table_name="data",
+    formula="Y ~ D + X",
+    cluster_col="cluster_id",
+    seed=42,
+    n_bootstraps=0,
+)
+model.fit()
+model.fit_vcov()
+model.summary()
+```
+
+For local DuckDB use, `db_name` is still enough:
+
+```{python}
+from duckreg import DBRegression
+
+model = DBRegression(
+    db_name="large_dataset.db",
+    table_name="data",
+    formula="Y ~ D + X",
+    cluster_col=None,
+    seed=42,
+    n_bootstraps=0,
+)
+```
+
+## Databricks
+
+Install the Databricks extra and pass a live Ibis backend:
+
+```{bash}
+uv pip install "duckreg[databricks]"
+```
+
+```{python}
+import ibis
+from duckreg import DBRegression
+
+con = ibis.databricks.connect(
+    server_hostname="dbc-...",
+    http_path="/sql/1.0/warehouses/...",
+    access_token="...",
+    catalog="main",
+    schema="analytics",
+)
+
+model = DBRegression(
+    db_name=None,
+    connection=con,
+    table_name="experiment_events",
+    formula="Y ~ treatment + segment + period",
+    cluster_col="user_id",
+    seed=42,
+    n_bootstraps=0,
+)
+model.fit()
+model.fit_vcov()
+```
+
+The same pattern applies to any backend created by `ibis.<backend>.connect(...)`.
+
+## Connection Forms
+
+`duckreg` accepts three connection styles:
+
+| Argument pattern | Meaning |
+|---|---|
+| `db_name="file.db"` | Open a DuckDB database through Ibis. |
+| `db_name="duckdb:///file.db"` | Use `ibis.connect(...)` on an Ibis URL. |
+| `db_name=None, connection=con` | Use an existing Ibis backend object. |
+
+The third form is the safest for remote engines because credentials, catalog selection, and session settings stay under caller control.
+
+## Backend Requirements
+
+The estimators rely on ordinary relational operations:
+
+| Estimator family | Ibis operations used |
+|---|---|
+| `DBRegression` | `group_by`, `aggregate`, sums, counts, joins for bootstrap multiplicities. |
+| `DBDML` | grouped sums and cross-products, plus `HAVING n_g > 1` expressed as an Ibis filter. |
+| `DBMundlak` | group means by unit/time and joins back to the base table. |
+| `DBDoubleDemeaning` | unit means, time means, an overall mean, joins, and a cross join. |
+| `DBMundlakEventStudy` | cohort construction, generated indicator columns, compression, cluster bootstrap. |
+| `DBLogisticRegression` and `DBPoissonRegression` | grouped counts and outcome sums. |
+| `DBMultinomialLogisticRegression` | grouped class-count indicators. |
+| `DBPoissonMultinomialRegression` | grouped label-by-covariate count sums. |
+
+The implementation avoids backend-specific constructs such as DuckDB `unnest(?)` in the `DB*` path. The compatibility `Duck*` estimators still contain older DuckDB-oriented SQL in some methods.
+
+## Migration From `Duck*` To `DB*`
+
+The constructor shapes are intentionally close:
+
+```{python}
+from duckreg import DuckRegression, DBRegression
+
+old = DuckRegression(
+    db_name="large_dataset.db",
+    table_name="data",
+    formula="Y ~ D + X",
+    cluster_col="cluster_id",
+    seed=42,
+    n_bootstraps=0,
+)
+
+new = DBRegression(
+    db_name="large_dataset.db",
+    table_name="data",
+    formula="Y ~ D + X",
+    cluster_col="cluster_id",
+    seed=42,
+    n_bootstraps=0,
+)
+```
+
+For remote data, keep the estimator call the same but pass `connection=con` and `db_name=None`.
+
+## Current Limits
+
+`DBRegression` does not parse fixed effects in formulas like `Y ~ D | unit + time`. Use panel estimators instead:
+
+```{python}
+from duckreg import DBMundlak, DBDoubleDemeaning
+```
+
+GLM bootstraps are not implemented. Use `fit_vcov()` with `n_bootstraps=0` for `DBLogisticRegression`, `DBPoissonRegression`, and `DBMultinomialLogisticRegression`.

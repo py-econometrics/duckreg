@@ -4882,22 +4882,20 @@ window.Quarto = {
 <style type="text/css">body {
 font-size: 16px;
 }
-.content {
+.navbar-title {
+font-weight: 650;
+}
+main.content {
 max-width: 1180px;
 }
-pre code {
-font-size: 0.88rem;
-}
 table {
-width: 100%;
+font-size: 0.94rem;
 }
-.callout-note,
-.callout-warning,
-.callout-tip {
+code {
+white-space: pre-wrap;
+}
+.callout {
 border-radius: 6px;
-}
-.api-table td:first-child {
-white-space: nowrap;
 }
 </style>
 </head>
@@ -4924,12 +4922,16 @@ white-space: nowrap;
 <span class="menu-text">Home</span></a>
   </li>  
   <li class="nav-item">
+    <a class="nav-link" href="./ibis.html"> 
+<span class="menu-text">Ibis</span></a>
+  </li>  
+  <li class="nav-item">
     <a class="nav-link" href="./compression.html"> 
 <span class="menu-text">Compression</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./linear.html"> 
-<span class="menu-text">Linear Models</span></a>
+<span class="menu-text">Linear</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./panel.html"> 
@@ -4944,6 +4946,10 @@ white-space: nowrap;
 <span class="menu-text">GLMs</span></a>
   </li>  
   <li class="nav-item">
+    <a class="nav-link" href="./fisher-scoring.html"> 
+<span class="menu-text">Fisher Scoring</span></a>
+  </li>  
+  <li class="nav-item">
     <a class="nav-link" href="./ridge.html"> 
 <span class="menu-text">Ridge</span></a>
   </li>  
@@ -4954,6 +4960,10 @@ white-space: nowrap;
   <li class="nav-item">
     <a class="nav-link" href="./examples.html"> 
 <span class="menu-text">Examples</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="./performance.html"> 
+<span class="menu-text">Performance</span></a>
   </li>  
 </ul>
           </div> <!-- /navcollapse -->
@@ -4989,7 +4999,13 @@ white-space: nowrap;
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./index.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">duckreg Documentation</span></a>
+ <span class="menu-text">duckreg</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./ibis.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Ibis Backends</span></a>
   </div>
 </li>
         <li class="sidebar-item">
@@ -5024,6 +5040,12 @@ white-space: nowrap;
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="./fisher-scoring.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Fisher Scoring and Multinomial GLMs</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="./ridge.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Compressed Ridge Regression</span></a>
   </div>
@@ -5040,6 +5062,12 @@ white-space: nowrap;
  <span class="menu-text">Executed Examples</span></a>
   </div>
 </li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./performance.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Performance Comparisons</span></a>
+  </div>
+</li>
     </ul>
     </div>
 </nav>
@@ -5050,11 +5078,11 @@ white-space: nowrap;
     <h2 id="toc-title">On this page</h2>
    
   <ul>
-  <li><a href="#analytic-hc1-for-linear-models" id="toc-analytic-hc1-for-linear-models" class="nav-link active" data-scroll-target="#analytic-hc1-for-linear-models">Analytic HC1 For Linear Models</a></li>
+  <li><a href="#linear-hc1" id="toc-linear-hc1" class="nav-link active" data-scroll-target="#linear-hc1">Linear HC1</a></li>
   <li><a href="#cluster-bootstrap" id="toc-cluster-bootstrap" class="nav-link" data-scroll-target="#cluster-bootstrap">Cluster Bootstrap</a></li>
-  <li><a href="#analytic-cluster-robust-scores" id="toc-analytic-cluster-robust-scores" class="nav-link" data-scroll-target="#analytic-cluster-robust-scores">Analytic Cluster-Robust Scores</a></li>
-  <li><a href="#tradeoff" id="toc-tradeoff" class="nav-link" data-scroll-target="#tradeoff">Tradeoff</a></li>
-  <li><a href="#current-api-details" id="toc-current-api-details" class="nav-link" data-scroll-target="#current-api-details">Current API Details</a></li>
+  <li><a href="#glm-covariance" id="toc-glm-covariance" class="nav-link" data-scroll-target="#glm-covariance">GLM Covariance</a></li>
+  <li><a href="#dml-bootstrap" id="toc-dml-bootstrap" class="nav-link" data-scroll-target="#dml-bootstrap">DML Bootstrap</a></li>
+  <li><a href="#current-matrix" id="toc-current-matrix" class="nav-link" data-scroll-target="#current-matrix">Current Matrix</a></li>
   </ul>
 </nav>
     </div>
@@ -5080,140 +5108,126 @@ white-space: nowrap;
 </header>
 
 
-<p>Inference in <code>duckreg</code> depends on whether the compressed table preserves the score contributions needed for the target covariance estimator.</p>
-<section id="analytic-hc1-for-linear-models" class="level2">
-<h2 class="anchored" data-anchor-id="analytic-hc1-for-linear-models">Analytic HC1 For Linear Models</h2>
-<p>For <code>DuckRegression.fit_vcov()</code>, the covariance has sandwich form:</p>
+<p>Inference depends on whether the compressed table preserves the score or residual information needed for the target covariance estimator.</p>
+<section id="linear-hc1" class="level2">
+<h2 class="anchored" data-anchor-id="linear-hc1">Linear HC1</h2>
+<p>For <code>DBRegression.fit_vcov()</code>, the covariance has sandwich form:</p>
 <p><span class="math display">\[
 \hat{V}
 =
 \frac{N}{N-k}
 (X&#39;WX)^{-1}
-\left(\sum_g \operatorname{RSS}_g x_gx_g&#39;\right)
+\left(\sum_g RSS_gx_gx_g&#39;\right)
 (X&#39;WX)^{-1}.
 \]</span></p>
 <p>The grouped residual sum of squares is exact from compressed sufficient statistics:</p>
 <p><span class="math display">\[
-\operatorname{RSS}_g
+RSS_g
 =
-n_g \hat{y}_g^2
-- 2\hat{y}_g \sum_{i \in g} y_i
-+ \sum_{i \in g} y_i^2.
+n_g\hat{y}_g^2
+-2\hat{y}_g\sum_{i\in g}y_i
++\sum_{i\in g}y_i^2.
 \]</span></p>
-<p>This requires <code>sum_y_sq</code>, which the compression query stores.</p>
+<p>This is the fastest inference path when iid or HC1-style robust standard errors are enough.</p>
 </section>
 <section id="cluster-bootstrap" class="level2">
 <h2 class="anchored" data-anchor-id="cluster-bootstrap">Cluster Bootstrap</h2>
-<p>The implemented cluster bootstrap resamples clusters, recompresses, and refits. The cluster path is natural when the point-estimation compression does not preserve all cluster-level score contributions.</p>
-<p>For a cluster column <span class="math inline">\(c\)</span>, the bootstrap creates multiplicities:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb1"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">WITH</span> resampled <span class="kw">AS</span> (</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="kw">SELECT</span> cluster_id, <span class="fu">COUNT</span>(<span class="op">*</span>) <span class="kw">AS</span> mult</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="kw">FROM</span> (<span class="kw">SELECT</span> unnest(?) <span class="kw">AS</span> cluster_id)</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="kw">GROUP</span> <span class="kw">BY</span> cluster_id</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>Cluster bootstrap resamples clusters, applies multiplicities to grouped cluster-by-cell aggregates, collapses back to design cells, and refits. The <code>DBRegression</code> path does this without backend-specific array parameter expansion.</p>
+<p>Conceptually:</p>
+<div id="9a3922ba" class="cell" data-execution_count="1">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>grouped <span class="op">=</span> group_by(covariate_cell, cluster).aggregate(</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    count<span class="op">=</span>count(),</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    sum_y<span class="op">=</span><span class="bu">sum</span>(Y),</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    sum_y_sq<span class="op">=</span><span class="bu">sum</span>(Y <span class="op">*</span> Y),</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> bootstrap_draw <span class="kw">in</span> <span class="bu">range</span>(B):</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    multiplicities <span class="op">=</span> sampled_clusters.value_counts()</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    boot <span class="op">=</span> grouped.join(multiplicities).collapse_to(covariate_cell)</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    beta_b <span class="op">=</span> wls(boot_X, boot_y, boot_n)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<p>and then joins those multiplicities against grouped data.</p>
+</div>
+<p>Panel event-study bootstrap uses the same idea with the generated event-study design.</p>
 </section>
-<section id="analytic-cluster-robust-scores" class="level2">
-<h2 class="anchored" data-anchor-id="analytic-cluster-robust-scores">Analytic Cluster-Robust Scores</h2>
-<p>If the compressed rows preserve cluster identity, analytic cluster-robust covariance can be computed from compressed scores. The standard cluster-robust variance is</p>
+<section id="glm-covariance" class="level2">
+<h2 class="anchored" data-anchor-id="glm-covariance">GLM Covariance</h2>
+<p>For canonical GLMs, <code>fit_vcov()</code> uses Fisher information:</p>
 <p><span class="math display">\[
-\hat{V}_{CR}
-=
-(X&#39;X)^{-1}
-\left(
-\sum_{c=1}^C u_cu_c&#39;
-\right)
-(X&#39;X)^{-1},
+\hat{V}_{model} = I(\hat{\beta})^{-1}.
 \]</span></p>
-<p>where</p>
+<p>For binary and Poisson models, <code>fit_vcov(robust=True)</code> computes a grouped sandwich:</p>
 <p><span class="math display">\[
-u_c
+\hat{V}_{robust}
 =
-\sum_{i \in c} x_i \hat{\varepsilon}_i.
+I(\hat{\beta})^{-1}
+\left(\sum_g U_g(\hat{\beta})U_g(\hat{\beta})&#39;\right)
+I(\hat{\beta})^{-1}.
 \]</span></p>
-<p>If each compressed stratum <span class="math inline">\(g\)</span> belongs to exactly one cluster <span class="math inline">\(c\)</span>, then</p>
-<p><span class="math display">\[
-u_c
-=
-\sum_{g \in c}
-x_g
-\left(
-\sum_{i \in g} y_i
--
-n_gx_g&#39;\hat{\beta}
-\right).
-\]</span></p>
-<p>So exact analytic cluster scores require grouping by both covariate cell and cluster:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb2"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  x1,</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  x2,</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  <span class="kw">cluster</span>,</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">COUNT</span>(<span class="op">*</span>) <span class="kw">AS</span> <span class="fu">count</span>,</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">SUM</span>(y) <span class="kw">AS</span> sum_y</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> <span class="kw">data</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="kw">GROUP</span> <span class="kw">BY</span> x1, x2, <span class="kw">cluster</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<p>This is faster than bootstrap when cluster cardinality is modest and adding <code>cluster</code> to the group-by does not destroy compression.</p>
+<p>The grouped score contribution <span class="math inline">\(U_g\)</span> is available because the compressed table stores covariates, outcome sums, and cell counts.</p>
 </section>
-<section id="tradeoff" class="level2">
-<h2 class="anchored" data-anchor-id="tradeoff">Tradeoff</h2>
+<section id="dml-bootstrap" class="level2">
+<h2 class="anchored" data-anchor-id="dml-bootstrap">DML Bootstrap</h2>
+<p><code>DBDML</code> bootstraps over compressed control groups. The point estimator is built from group-level leave-one-out cross-products, so resampling compressed groups is a natural low-cost uncertainty calculation.</p>
+</section>
+<section id="current-matrix" class="level2">
+<h2 class="anchored" data-anchor-id="current-matrix">Current Matrix</h2>
 <table class="caption-top table">
 <colgroup>
-<col style="width: 33%">
-<col style="width: 33%">
-<col style="width: 33%">
+<col style="width: 50%">
+<col style="width: 50%">
 </colgroup>
 <thead>
 <tr class="header">
-<th>Scenario</th>
-<th>Strategy</th>
-<th>Reason</th>
+<th>Estimator</th>
+<th>Inference path</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td>IID or HC1-style robust errors</td>
-<td><code>fit_vcov()</code></td>
-<td>Sufficient statistics are already stored.</td>
+<td><code>DBRegression</code></td>
+<td>HC1 via <code>fit_vcov()</code>; iid or cluster bootstrap through <code>fit()</code> when <code>n_bootstraps &gt; 0</code>.</td>
 </tr>
 <tr class="even">
-<td>Few or moderate clusters</td>
-<td>analytic cluster scores, if implemented</td>
-<td>Grouping by cluster preserves scores and remains compact.</td>
+<td><code>DBDML</code></td>
+<td>Bootstrap over compressed groups.</td>
 </tr>
 <tr class="odd">
-<td>Many high-cardinality clusters</td>
-<td>cluster bootstrap</td>
-<td>Grouping by cluster may approach the raw data size.</td>
+<td><code>DBMundlak</code></td>
+<td>Cluster bootstrap when <code>cluster_col</code> is provided.</td>
 </tr>
 <tr class="even">
-<td>GLMs</td>
-<td><code>fit_vcov()</code></td>
-<td>Model-based Fisher covariance is implemented.</td>
+<td><code>DBDoubleDemeaning</code></td>
+<td>Point estimate currently; bootstrap is not implemented in the <code>DB*</code> path.</td>
 </tr>
 <tr class="odd">
-<td>Ridge</td>
-<td>no built-in SEs</td>
-<td>Regularization-aware inference is separate.</td>
+<td><code>DBMundlakEventStudy</code></td>
+<td>Cluster bootstrap by generated event-study design.</td>
+</tr>
+<tr class="even">
+<td><code>DBLogisticRegression</code></td>
+<td>Fisher covariance, or grouped robust sandwich with <code>fit_vcov(robust=True)</code>.</td>
+</tr>
+<tr class="odd">
+<td><code>DBPoissonRegression</code></td>
+<td>Fisher covariance, or grouped robust sandwich with <code>fit_vcov(robust=True)</code>.</td>
+</tr>
+<tr class="even">
+<td><code>DBMultinomialLogisticRegression</code></td>
+<td>Inverse multinomial Fisher information.</td>
+</tr>
+<tr class="odd">
+<td><code>DBPoissonMultinomialRegression</code></td>
+<td>Point estimates only.</td>
+</tr>
+<tr class="even">
+<td><code>DuckRidge</code></td>
+<td>Point estimates, paths, and cross-validation; no standard errors.</td>
 </tr>
 </tbody>
 </table>
-</section>
-<section id="current-api-details" class="level2">
-<h2 class="anchored" data-anchor-id="current-api-details">Current API Details</h2>
-<p><code>DuckRegression.fit_vcov()</code> computes analytic HC1-style covariance for a single outcome.</p>
-<p><code>DuckDML.fit_vcov()</code> computes an analytic covariance from compressed leave-one-out residual cross-products.</p>
-<p><code>DuckMundlak</code>, <code>DuckDoubleDemeaning</code>, and <code>DuckMundlakEventStudy</code> use bootstrap covariance when <code>n_bootstraps &gt; 0</code>.</p>
-<p>GLM classes have <code>fit_vcov()</code> methods but currently stub out bootstrap. Use <code>n_bootstraps=0</code> for those classes until a real bootstrap implementation is added.</p>
+<p>Keep <code>n_bootstraps=0</code> for GLMs unless a bootstrap implementation is added.</p>
 
 
 </section>

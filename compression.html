@@ -4882,22 +4882,20 @@ window.Quarto = {
 <style type="text/css">body {
 font-size: 16px;
 }
-.content {
+.navbar-title {
+font-weight: 650;
+}
+main.content {
 max-width: 1180px;
 }
-pre code {
-font-size: 0.88rem;
-}
 table {
-width: 100%;
+font-size: 0.94rem;
 }
-.callout-note,
-.callout-warning,
-.callout-tip {
+code {
+white-space: pre-wrap;
+}
+.callout {
 border-radius: 6px;
-}
-.api-table td:first-child {
-white-space: nowrap;
 }
 </style>
 </head>
@@ -4924,12 +4922,16 @@ white-space: nowrap;
 <span class="menu-text">Home</span></a>
   </li>  
   <li class="nav-item">
+    <a class="nav-link" href="./ibis.html"> 
+<span class="menu-text">Ibis</span></a>
+  </li>  
+  <li class="nav-item">
     <a class="nav-link" href="./compression.html"> 
 <span class="menu-text">Compression</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./linear.html"> 
-<span class="menu-text">Linear Models</span></a>
+<span class="menu-text">Linear</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./panel.html"> 
@@ -4944,6 +4946,10 @@ white-space: nowrap;
 <span class="menu-text">GLMs</span></a>
   </li>  
   <li class="nav-item">
+    <a class="nav-link" href="./fisher-scoring.html"> 
+<span class="menu-text">Fisher Scoring</span></a>
+  </li>  
+  <li class="nav-item">
     <a class="nav-link" href="./ridge.html"> 
 <span class="menu-text">Ridge</span></a>
   </li>  
@@ -4954,6 +4960,10 @@ white-space: nowrap;
   <li class="nav-item">
     <a class="nav-link" href="./examples.html"> 
 <span class="menu-text">Examples</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="./performance.html"> 
+<span class="menu-text">Performance</span></a>
   </li>  
 </ul>
           </div> <!-- /navcollapse -->
@@ -4989,7 +4999,13 @@ white-space: nowrap;
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./index.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">duckreg Documentation</span></a>
+ <span class="menu-text">duckreg</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./ibis.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Ibis Backends</span></a>
   </div>
 </li>
         <li class="sidebar-item">
@@ -5024,6 +5040,12 @@ white-space: nowrap;
 </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
+  <a href="./fisher-scoring.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Fisher Scoring and Multinomial GLMs</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
   <a href="./ridge.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Compressed Ridge Regression</span></a>
   </div>
@@ -5040,6 +5062,12 @@ white-space: nowrap;
  <span class="menu-text">Executed Examples</span></a>
   </div>
 </li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./performance.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Performance Comparisons</span></a>
+  </div>
+</li>
     </ul>
     </div>
 </nav>
@@ -5050,11 +5078,11 @@ white-space: nowrap;
     <h2 id="toc-title">On this page</h2>
    
   <ul>
-  <li><a href="#the-duckreg-contract" id="toc-the-duckreg-contract" class="nav-link active" data-scroll-target="#the-duckreg-contract">The <code>DuckReg</code> Contract</a></li>
-  <li><a href="#weighted-least-squares-after-compression" id="toc-weighted-least-squares-after-compression" class="nav-link" data-scroll-target="#weighted-least-squares-after-compression">Weighted Least Squares After Compression</a></li>
-  <li><a href="#what-the-sql-aggregation-stores" id="toc-what-the-sql-aggregation-stores" class="nav-link" data-scroll-target="#what-the-sql-aggregation-stores">What The SQL Aggregation Stores</a></li>
-  <li><a href="#fixed-effects" id="toc-fixed-effects" class="nav-link" data-scroll-target="#fixed-effects">Fixed Effects</a></li>
-  <li><a href="#compression-is-a-contract" id="toc-compression-is-a-contract" class="nav-link" data-scroll-target="#compression-is-a-contract">Compression Is A Contract</a></li>
+  <li><a href="#lifecycle" id="toc-lifecycle" class="nav-link active" data-scroll-target="#lifecycle">Lifecycle</a></li>
+  <li><a href="#weighted-least-squares" id="toc-weighted-least-squares" class="nav-link" data-scroll-target="#weighted-least-squares">Weighted Least Squares</a></li>
+  <li><a href="#sufficient-statistics" id="toc-sufficient-statistics" class="nav-link" data-scroll-target="#sufficient-statistics">Sufficient Statistics</a></li>
+  <li><a href="#why-compression-works-best-with-discrete-designs" id="toc-why-compression-works-best-with-discrete-designs" class="nav-link" data-scroll-target="#why-compression-works-best-with-discrete-designs">Why Compression Works Best With Discrete Designs</a></li>
+  <li><a href="#estimator-specific-compression" id="toc-estimator-specific-compression" class="nav-link" data-scroll-target="#estimator-specific-compression">Estimator-Specific Compression</a></li>
   </ul>
 </nav>
     </div>
@@ -5080,129 +5108,149 @@ white-space: nowrap;
 </header>
 
 
-<p>The package is built around a simple observation: if an estimator only needs sums over repeated covariate patterns, the raw data can stay in DuckDB. Python only sees a compressed table whose number of rows is the number of unique strata.</p>
-<section id="the-duckreg-contract" class="level2">
-<h2 class="anchored" data-anchor-id="the-duckreg-contract">The <code>DuckReg</code> Contract</h2>
-<p>Every estimator subclasses <code>DuckReg</code> and implements four methods:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> DuckReg:</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> fit(<span class="va">self</span>):</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.prepare_data()</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.compress_data()</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.point_estimate <span class="op">=</span> <span class="va">self</span>.estimate()</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="va">self</span>.n_bootstraps <span class="op">&gt;</span> <span class="dv">0</span>:</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>            <span class="va">self</span>.vcov <span class="op">=</span> <span class="va">self</span>.bootstrap()</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="va">self</span>.conn.close()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>The basic <code>duckreg</code> trick is to identify the sufficient statistics that an estimator needs, compute them in the database, and solve the remaining small problem in Python. The raw data can have millions or billions of rows; the collected table has one row per unique covariate or design cell.</p>
+<section id="lifecycle" class="level2">
+<h2 class="anchored" data-anchor-id="lifecycle">Lifecycle</h2>
+<p>Every estimator follows the same public lifecycle:</p>
+<div id="01612b48" class="cell" data-execution_count="1">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>model.prepare_data()</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>model.compress_data()</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>model.point_estimate <span class="op">=</span> model.estimate()</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> model.n_bootstraps <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    model.vcov <span class="op">=</span> model.bootstrap()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<p>This makes the public workflow uniform:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>The user-facing call is simply:</p>
+<div id="d7b7c1be" class="cell" data-execution_count="2">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<p>Classes that support analytic covariance add a method such as:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>model.fit_vcov()</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>results <span class="op">=</span> model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>Estimators with analytic covariance expose <code>fit_vcov()</code>:</p>
+<div id="8a66f1ed" class="cell" data-execution_count="3">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>model.fit_vcov()</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<p>The important object created during fitting is usually <code>model.df_compressed</code>. It is the in-memory table passed to NumPy for the final solve.</p>
+</div>
 </section>
-<section id="weighted-least-squares-after-compression" class="level2">
-<h2 class="anchored" data-anchor-id="weighted-least-squares-after-compression">Weighted Least Squares After Compression</h2>
-<p>Suppose the raw linear model is</p>
+<section id="weighted-least-squares" class="level2">
+<h2 class="anchored" data-anchor-id="weighted-least-squares">Weighted Least Squares</h2>
+<p>For a linear model</p>
 <p><span class="math display">\[
 y_i = x_i&#39;\beta + \varepsilon_i,
 \]</span></p>
-<p>and rows are grouped by identical covariates. For group <span class="math inline">\(g\)</span>:</p>
+<p>suppose rows are grouped by identical right-hand-side covariates. For cell <span class="math inline">\(g\)</span>, define</p>
 <p><span class="math display">\[
 n_g = \#\{i:x_i=x_g\},
 \qquad
 \bar{y}_g = \frac{1}{n_g}\sum_{i:x_i=x_g} y_i.
 \]</span></p>
-<p>The full-sample least-squares objective can be written as</p>
-<p><span class="math display">\[
-\sum_i (y_i - x_i&#39;\beta)^2
-=
-\sum_g \sum_{i \in g} (y_i - x_g&#39;\beta)^2.
-\]</span></p>
-<p>The first-order condition depends on the raw data only through <span class="math inline">\(n_g\)</span> and <span class="math inline">\(\bar{y}_g\)</span>:</p>
+<p>The least-squares normal equations become</p>
 <p><span class="math display">\[
 \sum_i x_i(y_i - x_i&#39;\beta)
 =
 \sum_g n_g x_g(\bar{y}_g - x_g&#39;\beta).
 \]</span></p>
-<p>So the compressed estimator is weighted least squares:</p>
+<p>So the full-data OLS coefficient is exactly the weighted least-squares coefficient on compressed cells:</p>
 <p><span class="math display">\[
 \hat{\beta}
 =
-\left(\sum_g n_g x_g x_g&#39;\right)^{-1}
-\left(\sum_g n_g x_g \bar{y}_g\right).
+\left(\sum_g n_g x_gx_g&#39;\right)^{-1}
+\left(\sum_g n_g x_g\bar{y}_g\right).
 \]</span></p>
-<p>The implementation uses frequency weights:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> wls(X, y, n):</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    N <span class="op">=</span> sqrt(n)</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    Xn <span class="op">=</span> X <span class="op">*</span> N</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    yn <span class="op">=</span> y <span class="op">*</span> N</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.linalg.lstsq(Xn, yn, rcond<span class="op">=</span><span class="va">None</span>)[<span class="dv">0</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>The shared numerical helper applies frequency weights by premultiplying by <span class="math inline">\(\sqrt{n_g}\)</span>:</p>
+<div id="76173045" class="cell" data-execution_count="4">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> wls(X, y, n):</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    weights <span class="op">=</span> np.sqrt(n).reshape(<span class="op">-</span><span class="dv">1</span>, <span class="dv">1</span>)</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.linalg.lstsq(X <span class="op">*</span> weights, y <span class="op">*</span> weights, rcond<span class="op">=</span><span class="va">None</span>)[<span class="dv">0</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
+</div>
 </section>
-<section id="what-the-sql-aggregation-stores" class="level2">
-<h2 class="anchored" data-anchor-id="what-the-sql-aggregation-stores">What The SQL Aggregation Stores</h2>
-<p>For <code>DuckRegression</code>, <code>compress_data()</code> groups by the right-hand-side covariates and fixed-effect columns:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb5"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  x1, x2, fe1,</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">COUNT</span>(<span class="op">*</span>) <span class="kw">AS</span> <span class="fu">count</span>,</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">SUM</span>(y) <span class="kw">AS</span> sum_y,</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">SUM</span>(POW(y, <span class="dv">2</span>)) <span class="kw">AS</span> sum_y_sq</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> <span class="kw">data</span></span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="kw">GROUP</span> <span class="kw">BY</span> x1, x2, fe1</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<p>The compressed table is then augmented with</p>
+<section id="sufficient-statistics" class="level2">
+<h2 class="anchored" data-anchor-id="sufficient-statistics">Sufficient Statistics</h2>
+<p>For a regression <code>Y ~ D + f1 + f2</code>, the compressed table stores:</p>
+<pre class="{sql}"><code>SELECT
+  D,
+  f1,
+  f2,
+  COUNT(*) AS count,
+  SUM(Y) AS sum_Y,
+  SUM(Y * Y) AS sum_Y_sq
+FROM data
+GROUP BY D, f1, f2</code></pre>
+<p>The point estimate needs <code>count</code> and <code>sum_Y</code>. HC1 covariance also needs <code>sum_Y_sq</code>, because the within-cell residual sum of squares can be reconstructed without expanding the raw rows:</p>
 <p><span class="math display">\[
-\bar{y}_g = \frac{\text{sum\_y}_g}{\text{count}_g}.
+RSS_g
+=
+n_g \hat{y}_g^2
+- 2\hat{y}_g \sum_{i \in g} y_i
++ \sum_{i \in g} y_i^2.
 \]</span></p>
-<p>For multiple outcomes, the same pattern is repeated for every outcome variable.</p>
 </section>
-<section id="fixed-effects" class="level2">
-<h2 class="anchored" data-anchor-id="fixed-effects">Fixed Effects</h2>
-<p>The formula parser supports a fixed-effect separator:</p>
-<details>
-<summary>
-Show code
-</summary>
-<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DuckRegression(</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;large_dataset.db&quot;</span>,</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;data&quot;</span>,</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    formula<span class="op">=</span><span class="st">&quot;Y ~ D + f1 | unit + time&quot;</span>,</span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    cluster_col<span class="op">=</span><span class="st">&quot;unit&quot;</span>,</span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<p>If fixed effects are present, <code>collect_data()</code> converts the fixed-effect columns to integer ids, then calls <code>demean()</code> on both <span class="math inline">\(y\)</span> and <span class="math inline">\(X\)</span> using the compressed-cell frequency weights. The demeaning routine uses alternating projections:</p>
-<p><span class="math display">\[
-z \leftarrow z - E_w[z \mid \text{fixed effect}]
-\]</span></p>
-<p>cycling over each fixed-effect dimension until convergence.</p>
+<section id="why-compression-works-best-with-discrete-designs" class="level2">
+<h2 class="anchored" data-anchor-id="why-compression-works-best-with-discrete-designs">Why Compression Works Best With Discrete Designs</h2>
+<p>Compression is most powerful when the design has repeated rows. This is common in saturated designs, discretized covariates, experiments with treatment arms and strata, panel designs with generated averages, and text/count designs where features are categorical.</p>
+<p>If every row has a unique continuous covariate vector, the compressed table can be nearly as large as the raw table. In that case <code>duckreg</code> still gives a uniform API, but the performance gains are smaller.</p>
 </section>
-<section id="compression-is-a-contract" class="level2">
-<h2 class="anchored" data-anchor-id="compression-is-a-contract">Compression Is A Contract</h2>
-<p>Compression is exact when the grouped statistics preserve the quantities that enter the estimator. For ordinary least squares with discrete covariates, that contract is exact. For cluster-robust inference, the grouping must also preserve cluster membership if one wants exact analytic cluster scores. Otherwise, bootstrap resampling has to return to the raw table or to a cluster-preserving compressed table.</p>
+<section id="estimator-specific-compression" class="level2">
+<h2 class="anchored" data-anchor-id="estimator-specific-compression">Estimator-Specific Compression</h2>
+<p>Different estimators define different design cells:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Estimator</th>
+<th>Compression cell</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>DBRegression</code></td>
+<td>Unique RHS covariate values.</td>
+</tr>
+<tr class="even">
+<td><code>DBMundlak</code></td>
+<td>Unique original covariates plus generated unit/time means.</td>
+</tr>
+<tr class="odd">
+<td><code>DBDoubleDemeaning</code></td>
+<td>Unique values of the residualized treatment.</td>
+</tr>
+<tr class="even">
+<td><code>DBMundlakEventStudy</code></td>
+<td>Unique cohort, time, and cohort-by-time indicator rows.</td>
+</tr>
+<tr class="odd">
+<td><code>DBDML</code></td>
+<td>Discrete control groups with sums and cross-products.</td>
+</tr>
+<tr class="even">
+<td><code>DBLogisticRegression</code></td>
+<td>Unique RHS covariate values with success counts.</td>
+</tr>
+<tr class="odd">
+<td><code>DBPoissonRegression</code></td>
+<td>Unique RHS covariate values with outcome-count sums.</td>
+</tr>
+<tr class="even">
+<td><code>DBMultinomialLogisticRegression</code></td>
+<td>Unique RHS covariate values with class-count vectors.</td>
+</tr>
+</tbody>
+</table>
+<p>Formula-level fixed effects are not part of <code>DBRegression</code>; panel estimators construct their fixed-effect style designs explicitly before compression.</p>
 
 
 </section>

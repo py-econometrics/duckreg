@@ -1,0 +1,131 @@
+---
+title: "Panel Estimators"
+---
+
+Panel estimators create fixed-effect style design variables before compression. This keeps the compressed table small when $N$ is large and $T$ is modest.
+
+## Mundlak
+
+`DBMundlak` augments the original covariates with unit means and, optionally, time means. For a covariate $W_{it}$, the two-way design contains
+
+$$
+W_{it},
+\qquad
+\bar{W}_{i\cdot},
+\qquad
+\bar{W}_{\cdot t}.
+$$
+
+The fitted model is
+
+$$
+Y_{it}
+=
+\alpha
++ W_{it}'\beta
++ \bar{W}_{i\cdot}'\gamma
++ \bar{W}_{\cdot t}'\delta
++ u_{it}.
+$$
+
+```{python}
+from duckreg import DBMundlak
+
+model = DBMundlak(
+    db_name="panel.db",
+    table_name="panel_data",
+    outcome_var="Y",
+    covariates=["D", "X"],
+    unit_col="unit",
+    time_col="time",
+    cluster_col="unit",
+    seed=42,
+    n_bootstraps=100,
+)
+model.fit()
+model.summary()
+```
+
+The right-hand side is ordered as:
+
+```{python}
+["Intercept", "D", "X", "avg_D_unit", "avg_X_unit", "avg_D_time", "avg_X_time"]
+```
+
+## Double Demeaning
+
+`DBDoubleDemeaning` constructs the two-way residualized treatment
+
+$$
+\ddot{W}_{it}
+=
+W_{it}
+- \bar{W}_{i\cdot}
+- \bar{W}_{\cdot t}
++ \bar{W}_{\cdot\cdot}.
+$$
+
+It then fits
+
+$$
+Y_{it} = \alpha + \tau \ddot{W}_{it} + u_{it}
+$$
+
+on the compressed residualized treatment values.
+
+```{python}
+from duckreg import DBDoubleDemeaning
+
+model = DBDoubleDemeaning(
+    db_name="panel.db",
+    table_name="panel_data",
+    outcome_var="Y",
+    treatment_var="D",
+    unit_col="unit",
+    time_col="time",
+    cluster_col="unit",
+    seed=42,
+    n_bootstraps=0,
+)
+model.fit()
+model.summary()
+```
+
+This estimator is useful when the target is a two-way fixed-effect style coefficient on one treatment variable.
+
+## Event Study
+
+`DBMundlakEventStudy` builds cohort indicators, time indicators, and cohort-by-time treatment interactions. It estimates event-study profiles by cohort after compression.
+
+```{python}
+from duckreg import DBMundlakEventStudy
+
+model = DBMundlakEventStudy(
+    db_name="event.db",
+    table_name="panel_data",
+    outcome_var="Y",
+    treatment_col="D",
+    unit_col="unit",
+    time_col="time",
+    cluster_col="unit",
+    seed=42,
+    pre_treat_interactions=True,
+    n_bootstraps=50,
+)
+model.fit()
+model.summary()
+```
+
+If `pre_treat_interactions=False`, the treatment interaction columns are zeroed outside treated periods. If it is `True`, the design keeps a full cohort-by-time profile.
+
+## Implementation Pattern
+
+The panel estimators avoid formula-level fixed effects in `DBRegression`. They use ordinary database operations:
+
+| Estimator | Preparation |
+|---|---|
+| `DBMundlak` | Group by unit/time to compute covariate means, then join them to the raw table. |
+| `DBDoubleDemeaning` | Join unit means, time means, and the overall treatment mean, then compute $\ddot{W}_{it}$. |
+| `DBMundlakEventStudy` | Infer treatment cohorts, create indicator columns, and compress the generated design. |
+
+The compatibility `Duck*` panel classes expose the same statistical designs but use older SQL-string internals.
