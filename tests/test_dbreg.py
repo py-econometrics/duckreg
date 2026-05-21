@@ -15,7 +15,6 @@ def _make_con(tmp_path, df, table="data"):
 
 def test_dbreg_exports():
     assert duckreg.DBRegression is DBRegression
-    assert duckreg.DbRegression is DBRegression
     assert duckreg.DBDML is DBDML
 
 

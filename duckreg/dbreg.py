@@ -438,11 +438,3 @@ class DBDoubleDemeaning(DBReg):
 
     def bootstrap(self):
         raise NotImplementedError("Bootstrap for DBDoubleDemeaning is not implemented yet")
-
-
-# Friendly mixed-case aliases for users who type Db* rather than DB*.
-DbReg = DBReg
-DbRegression = DBRegression
-DbDML = DBDML
-DbMundlak = DBMundlak
-DbDoubleDemeaning = DBDoubleDemeaning

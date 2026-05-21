@@ -9,11 +9,6 @@ from .dbreg import (
     DBMundlak,
     DBReg,
     DBRegression,
-    DbDML,
-    DbDoubleDemeaning,
-    DbMundlak,
-    DbReg,
-    DbRegression,
 )
 from .estimators import (
     DuckDML,
@@ -34,11 +29,6 @@ __all__ = [
     "DBMundlak",
     "DBReg",
     "DBRegression",
-    "DbDML",
-    "DbDoubleDemeaning",
-    "DbMundlak",
-    "DbReg",
-    "DbRegression",
     "DuckDML",
     "DuckDoubleDemeaning",
     "DuckLogisticRegression",
