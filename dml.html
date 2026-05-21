@@ -5115,9 +5115,7 @@ Y_i = W_i&#39;\beta + g(X_i) + \varepsilon_i.
 <p>The controls <span class="math inline">\(X_i\)</span> define groups <span class="math inline">\(g \in \mathcal{G}\)</span>. The estimator residualizes both <span class="math inline">\(Y_i\)</span> and <span class="math inline">\(W_i\)</span> against leave-one-out group means, then runs OLS on the residuals.</p>
 <section id="constructor" class="level2">
 <h2 class="anchored" data-anchor-id="constructor">Constructor</h2>
-<div id="24c461d0" class="cell" data-execution_count="1">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="ff9d25a4" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>DBDML(</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    db_name: <span class="bu">str</span> <span class="op">|</span> <span class="va">None</span>,</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    table_name: <span class="bu">str</span>,</span>
@@ -5128,7 +5126,6 @@ Y_i = W_i&#39;\beta + g(X_i) + \varepsilon_i.
 <span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    n_bootstraps: <span class="bu">int</span> <span class="op">=</span> <span class="dv">200</span>,</span>
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    connection<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 </section>
 <section id="leave-one-out-residualization" class="level2">
@@ -5192,9 +5189,7 @@ N_g S_{WY}^{(g)} - S_W^{(g)}S_Y^{(g)}
 </section>
 <section id="usage" class="level2">
 <h2 class="anchored" data-anchor-id="usage">Usage</h2>
-<div id="d96b05b4" class="cell" data-execution_count="2">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="a0f072ba" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBDML</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DBDML(</span>
@@ -5208,7 +5203,6 @@ N_g S_{WY}^{(g)} - S_W^{(g)}S_Y^{(g)}
 <span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
 <span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>For a remote backend, pass <code>connection=con</code> and <code>db_name=None</code>.</p>
 </section>

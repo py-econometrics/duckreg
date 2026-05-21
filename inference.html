@@ -5134,9 +5134,7 @@ n_g\hat{y}_g^2
 <h2 class="anchored" data-anchor-id="cluster-bootstrap">Cluster Bootstrap</h2>
 <p>Cluster bootstrap resamples clusters, applies multiplicities to grouped cluster-by-cell aggregates, collapses back to design cells, and refits. The <code>DBRegression</code> path does this without backend-specific array parameter expansion.</p>
 <p>Conceptually:</p>
-<div id="9a3922ba" class="cell" data-execution_count="1">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="5938701e" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>grouped <span class="op">=</span> group_by(covariate_cell, cluster).aggregate(</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    count<span class="op">=</span>count(),</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    sum_y<span class="op">=</span><span class="bu">sum</span>(Y),</span>
@@ -5147,7 +5145,6 @@ n_g\hat{y}_g^2
 <span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    multiplicities <span class="op">=</span> sampled_clusters.value_counts()</span>
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    boot <span class="op">=</span> grouped.join(multiplicities).collapse_to(covariate_cell)</span>
 <span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    beta_b <span class="op">=</span> wls(boot_X, boot_y, boot_n)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>Panel event-study bootstrap uses the same idea with the generated event-study design.</p>
 </section>

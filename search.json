@@ -4,7 +4,7 @@
     "href": "fisher-scoring.html",
     "title": "Fisher Scoring and Multinomial GLMs",
     "section": "",
-    "text": "The GLM code in duckreg.dbreg and the compatibility duckreg.estimators module uses compressed sufficient statistics. The key move is to group rows with the same covariates, compute the score and Fisher information on those groups, and then run the same Fisher scoring update that would be used on the full data.\nThe shared update is\n\\[\n\\beta^{(t+1)}\n=\n\\beta^{(t)}\n+\nI(\\beta^{(t)})^{-1} U(\\beta^{(t)}),\n\\]\nwhere \\(U(\\beta)\\) is the score and \\(I(\\beta)\\) is the expected Fisher information. In the code this appears as\n\n\nShow implementation sketch\nstep = solve(info, score)\nbeta_new = beta + step\n\n\nThe function _solve_step solves this linear system, with a small ridge fallback if the information matrix is singular. The logistic, Poisson, and multinomial routines differ only in how they compute score and info.",
+    "text": "The GLM code in duckreg.dbreg and the compatibility duckreg.estimators module uses compressed sufficient statistics. The key move is to group rows with the same covariates, compute the score and Fisher information on those groups, and then run the same Fisher scoring update that would be used on the full data.\nThe shared update is\n\\[\n\\beta^{(t+1)}\n=\n\\beta^{(t)}\n+\nI(\\beta^{(t)})^{-1} U(\\beta^{(t)}),\n\\]\nwhere \\(U(\\beta)\\) is the score and \\(I(\\beta)\\) is the expected Fisher information. In the code this appears as\n\nstep = solve(info, score)\nbeta_new = beta + step\n\nThe function _solve_step solves this linear system, with a small ridge fallback if the information matrix is singular. The logistic, Poisson, and multinomial routines differ only in how they compute score and info.",
     "crumbs": [
       "Home",
       "Fisher Scoring and Multinomial GLMs"
@@ -15,7 +15,7 @@
     "href": "fisher-scoring.html#purpose",
     "title": "Fisher Scoring and Multinomial GLMs",
     "section": "",
-    "text": "The GLM code in duckreg.dbreg and the compatibility duckreg.estimators module uses compressed sufficient statistics. The key move is to group rows with the same covariates, compute the score and Fisher information on those groups, and then run the same Fisher scoring update that would be used on the full data.\nThe shared update is\n\\[\n\\beta^{(t+1)}\n=\n\\beta^{(t)}\n+\nI(\\beta^{(t)})^{-1} U(\\beta^{(t)}),\n\\]\nwhere \\(U(\\beta)\\) is the score and \\(I(\\beta)\\) is the expected Fisher information. In the code this appears as\n\n\nShow implementation sketch\nstep = solve(info, score)\nbeta_new = beta + step\n\n\nThe function _solve_step solves this linear system, with a small ridge fallback if the information matrix is singular. The logistic, Poisson, and multinomial routines differ only in how they compute score and info.",
+    "text": "The GLM code in duckreg.dbreg and the compatibility duckreg.estimators module uses compressed sufficient statistics. The key move is to group rows with the same covariates, compute the score and Fisher information on those groups, and then run the same Fisher scoring update that would be used on the full data.\nThe shared update is\n\\[\n\\beta^{(t+1)}\n=\n\\beta^{(t)}\n+\nI(\\beta^{(t)})^{-1} U(\\beta^{(t)}),\n\\]\nwhere \\(U(\\beta)\\) is the score and \\(I(\\beta)\\) is the expected Fisher information. In the code this appears as\n\nstep = solve(info, score)\nbeta_new = beta + step\n\nThe function _solve_step solves this linear system, with a small ridge fallback if the information matrix is singular. The logistic, Poisson, and multinomial routines differ only in how they compute score and info.",
     "crumbs": [
       "Home",
       "Fisher Scoring and Multinomial GLMs"
@@ -37,7 +37,7 @@
     "href": "fisher-scoring.html#binary-logit",
     "title": "Fisher Scoring and Multinomial GLMs",
     "section": "Binary Logit",
-    "text": "Binary Logit\nFor logit,\n\\[\np_g(\\beta)\n=\n\\Lambda(x_g'\\beta)\n=\n\\frac{\\exp(x_g'\\beta)}{1 + \\exp(x_g'\\beta)}.\n\\]\nIgnoring constants that do not involve \\(\\beta\\), the grouped log likelihood is\n\\[\n\\ell(\\beta)\n=\n\\sum_g\n\\left[\ns_g x_g'\\beta\n-\nn_g \\log\\{1 + \\exp(x_g'\\beta)\\}\n\\right].\n\\]\nThe score is\n\\[\nU(\\beta)\n=\n\\frac{\\partial \\ell(\\beta)}{\\partial \\beta}\n=\n\\sum_g x_g \\{s_g - n_g p_g(\\beta)\\}.\n\\]\nThe expected Fisher information is\n\\[\nI(\\beta)\n=\n\\sum_g n_g p_g(\\beta)\\{1 - p_g(\\beta)\\} x_g x_g'.\n\\]\nThe implementation is the matrix version of these equations:\n\n\nShow implementation sketch\np = sigmoid(X @ beta)\nscore = X.T @ (successes - totals * p)\ninfo = X.T @ ((totals * p * (1 - p))[:, None] * X)\nstep = solve(info, score)\nbeta = beta + step\n\n\nThe IRLS wording is slightly hidden here because the code does not explicitly form the working response \\(z\\). Algebraically, this is the same Fisher scoring step as weighted least squares on the IRLS working outcome.",
+    "text": "Binary Logit\nFor logit,\n\\[\np_g(\\beta)\n=\n\\Lambda(x_g'\\beta)\n=\n\\frac{\\exp(x_g'\\beta)}{1 + \\exp(x_g'\\beta)}.\n\\]\nIgnoring constants that do not involve \\(\\beta\\), the grouped log likelihood is\n\\[\n\\ell(\\beta)\n=\n\\sum_g\n\\left[\ns_g x_g'\\beta\n-\nn_g \\log\\{1 + \\exp(x_g'\\beta)\\}\n\\right].\n\\]\nThe score is\n\\[\nU(\\beta)\n=\n\\frac{\\partial \\ell(\\beta)}{\\partial \\beta}\n=\n\\sum_g x_g \\{s_g - n_g p_g(\\beta)\\}.\n\\]\nThe expected Fisher information is\n\\[\nI(\\beta)\n=\n\\sum_g n_g p_g(\\beta)\\{1 - p_g(\\beta)\\} x_g x_g'.\n\\]\nThe implementation is the matrix version of these equations:\n\np = sigmoid(X @ beta)\nscore = X.T @ (successes - totals * p)\ninfo = X.T @ ((totals * p * (1 - p))[:, None] * X)\nstep = solve(info, score)\nbeta = beta + step\n\nThe IRLS wording is slightly hidden here because the code does not explicitly form the working response \\(z\\). Algebraically, this is the same Fisher scoring step as weighted least squares on the IRLS working outcome.",
     "crumbs": [
       "Home",
       "Fisher Scoring and Multinomial GLMs"
@@ -48,7 +48,7 @@
     "href": "fisher-scoring.html#poisson-regression",
     "title": "Fisher Scoring and Multinomial GLMs",
     "section": "Poisson Regression",
-    "text": "Poisson Regression\nFor the canonical Poisson model,\n\\[\n\\mu_g(\\beta) = \\exp(x_g'\\beta).\n\\]\nThe grouped log likelihood, again dropping constants, is\n\\[\n\\ell(\\beta)\n=\n\\sum_g\n\\left[\ny_g^+ x_g'\\beta\n-\nn_g \\exp(x_g'\\beta)\n\\right].\n\\]\nThe score is\n\\[\nU(\\beta)\n=\n\\sum_g x_g \\{y_g^+ - n_g \\mu_g(\\beta)\\}.\n\\]\nThe Fisher information is\n\\[\nI(\\beta)\n=\n\\sum_g n_g \\mu_g(\\beta) x_g x_g'.\n\\]\nThe code is the direct matrix implementation:\n\n\nShow implementation sketch\nmu = exp(X @ beta)\nscore = X.T @ (y_sum - totals * mu)\ninfo = X.T @ ((totals * mu)[:, None] * X)\nstep = solve(info, score)\nbeta = beta + step",
+    "text": "Poisson Regression\nFor the canonical Poisson model,\n\\[\n\\mu_g(\\beta) = \\exp(x_g'\\beta).\n\\]\nThe grouped log likelihood, again dropping constants, is\n\\[\n\\ell(\\beta)\n=\n\\sum_g\n\\left[\ny_g^+ x_g'\\beta\n-\nn_g \\exp(x_g'\\beta)\n\\right].\n\\]\nThe score is\n\\[\nU(\\beta)\n=\n\\sum_g x_g \\{y_g^+ - n_g \\mu_g(\\beta)\\}.\n\\]\nThe Fisher information is\n\\[\nI(\\beta)\n=\n\\sum_g n_g \\mu_g(\\beta) x_g x_g'.\n\\]\nThe code is the direct matrix implementation:\n\nmu = exp(X @ beta)\nscore = X.T @ (y_sum - totals * mu)\ninfo = X.T @ ((totals * mu)[:, None] * X)\nstep = solve(info, score)\nbeta = beta + step",
     "crumbs": [
       "Home",
       "Fisher Scoring and Multinomial GLMs"
@@ -59,7 +59,7 @@
     "href": "fisher-scoring.html#one-step-fisher-scoring",
     "title": "Fisher Scoring and Multinomial GLMs",
     "section": "One-Step Fisher Scoring",
-    "text": "One-Step Fisher Scoring\nThe exact path, method=\"irls\", iterates until the step is small. The default canonical GLM path, method=\"one_step\", uses a pilot estimator on a reservoir sample and then takes one full-data Fisher step:\n\\[\n\\hat{\\beta}_{\\mathrm{one}}\n=\n\\hat{\\beta}_0\n+\nI_N(\\hat{\\beta}_0)^{-1} U_N(\\hat{\\beta}_0).\n\\]\nHere \\(\\hat{\\beta}_0\\) is the pilot fit and \\(U_N\\), \\(I_N\\) are computed on the compressed full data. This is a large-data shortcut: the expensive full-data pass only computes sufficient statistics, score, and information once.\n\n\nShow implementation sketch\nbeta0 = fit_pilot_model(reservoir_sample)\nscore, info = score_info(beta0, compressed_full_data)\nbeta_one_step = beta0 + solve(info, score)\n\n\nThe exact and one-step estimators use the same score and information formulas. They differ in how many full-data Fisher scoring iterations they take.",
+    "text": "One-Step Fisher Scoring\nThe exact path, method=\"irls\", iterates until the step is small. The default canonical GLM path, method=\"one_step\", uses a pilot estimator on a reservoir sample and then takes one full-data Fisher step:\n\\[\n\\hat{\\beta}_{\\mathrm{one}}\n=\n\\hat{\\beta}_0\n+\nI_N(\\hat{\\beta}_0)^{-1} U_N(\\hat{\\beta}_0).\n\\]\nHere \\(\\hat{\\beta}_0\\) is the pilot fit and \\(U_N\\), \\(I_N\\) are computed on the compressed full data. This is a large-data shortcut: the expensive full-data pass only computes sufficient statistics, score, and information once.\n\nbeta0 = fit_pilot_model(reservoir_sample)\nscore, info = score_info(beta0, compressed_full_data)\nbeta_one_step = beta0 + solve(info, score)\n\nThe exact and one-step estimators use the same score and information formulas. They differ in how many full-data Fisher scoring iterations they take.",
     "crumbs": [
       "Home",
       "Fisher Scoring and Multinomial GLMs"
@@ -70,7 +70,7 @@
     "href": "fisher-scoring.html#baseline-category-multinomial-logit",
     "title": "Fisher Scoring and Multinomial GLMs",
     "section": "Baseline-Category Multinomial Logit",
-    "text": "Baseline-Category Multinomial Logit\nDBMultinomialLogisticRegression handles moderate numbers of labels with the exact joint baseline-category multinomial logit. Suppose there are \\(K\\) labels and label \\(K\\) is the baseline. The model estimates coefficient vectors \\(\\beta_1, \\ldots, \\beta_{K-1}\\) and normalizes the baseline utility to zero:\n\\[\n\\eta_{gk} = x_g'\\beta_k,\n\\qquad\nk = 1, \\ldots, K - 1,\n\\]\n\\[\n\\eta_{gK} = 0.\n\\]\nThe softmax probabilities are\n\\[\n\\pi_{gk}\n=\n\\frac{\\exp(x_g'\\beta_k)}\n{1 + \\sum_{j=1}^{K-1} \\exp(x_g'\\beta_j)},\n\\qquad\nk = 1, \\ldots, K - 1,\n\\]\nand\n\\[\n\\pi_{gK}\n=\n\\frac{1}\n{1 + \\sum_{j=1}^{K-1} \\exp(x_g'\\beta_j)}.\n\\]\nThe grouped log likelihood is\n\\[\n\\ell(\\beta)\n=\n\\sum_g\n\\left[\n\\sum_{k=1}^{K-1} c_{gk} x_g'\\beta_k\n-\nn_g\n\\log\n\\left\\{\n1 + \\sum_{j=1}^{K-1} \\exp(x_g'\\beta_j)\n\\right\\}\n\\right].\n\\]\nThe score block for label \\(k\\) is\n\\[\nU_k(\\beta)\n=\n\\sum_g x_g \\{c_{gk} - n_g \\pi_{gk}(\\beta)\\}.\n\\]\nThe Fisher information is a block matrix. The block for labels \\(k\\) and \\(l\\) is\n\\[\nI_{kl}(\\beta)\n=\n\\sum_g\nn_g\n\\pi_{gk}(\\beta)\n\\left[\n1\\{k = l\\} - \\pi_{gl}(\\beta)\n\\right]\nx_g x_g'.\n\\]\nThis cross-label block structure is the main computational issue. The information matrix has dimension \\(((K - 1)p) \\times ((K - 1)p)\\), where \\(p\\) is the number of columns in \\(X\\). It is not label-separable because every softmax probability shares the same denominator.\nThe implementation follows that block formula:\n\n\nShow implementation sketch\neta = X @ beta.T\nprobs = softmax(column_bind(eta, zeros))\n\nscore = (class_counts[:, :K_minus_1] - totals[:, None] * probs).T @ X\n\ninfo = zeros((K_minus_1 * p, K_minus_1 * p))\nfor k in range(K_minus_1):\n    for l in range(K_minus_1):\n        w = totals * probs[:, k] * ((k == l) - probs[:, l])\n        block = X.T @ (w[:, None] * X)\n        info[k_block, l_block] = block\n\nstep = solve(info, vectorize(score))\nbeta = beta + unvectorize(step)\n\n\nThis is the exact compressed multinomial Fisher scoring routine. Compression reduces the number of rows in the score and information sums, but the Hessian still couples labels.",
+    "text": "Baseline-Category Multinomial Logit\nDBMultinomialLogisticRegression handles moderate numbers of labels with the exact joint baseline-category multinomial logit. Suppose there are \\(K\\) labels and label \\(K\\) is the baseline. The model estimates coefficient vectors \\(\\beta_1, \\ldots, \\beta_{K-1}\\) and normalizes the baseline utility to zero:\n\\[\n\\eta_{gk} = x_g'\\beta_k,\n\\qquad\nk = 1, \\ldots, K - 1,\n\\]\n\\[\n\\eta_{gK} = 0.\n\\]\nThe softmax probabilities are\n\\[\n\\pi_{gk}\n=\n\\frac{\\exp(x_g'\\beta_k)}\n{1 + \\sum_{j=1}^{K-1} \\exp(x_g'\\beta_j)},\n\\qquad\nk = 1, \\ldots, K - 1,\n\\]\nand\n\\[\n\\pi_{gK}\n=\n\\frac{1}\n{1 + \\sum_{j=1}^{K-1} \\exp(x_g'\\beta_j)}.\n\\]\nThe grouped log likelihood is\n\\[\n\\ell(\\beta)\n=\n\\sum_g\n\\left[\n\\sum_{k=1}^{K-1} c_{gk} x_g'\\beta_k\n-\nn_g\n\\log\n\\left\\{\n1 + \\sum_{j=1}^{K-1} \\exp(x_g'\\beta_j)\n\\right\\}\n\\right].\n\\]\nThe score block for label \\(k\\) is\n\\[\nU_k(\\beta)\n=\n\\sum_g x_g \\{c_{gk} - n_g \\pi_{gk}(\\beta)\\}.\n\\]\nThe Fisher information is a block matrix. The block for labels \\(k\\) and \\(l\\) is\n\\[\nI_{kl}(\\beta)\n=\n\\sum_g\nn_g\n\\pi_{gk}(\\beta)\n\\left[\n1\\{k = l\\} - \\pi_{gl}(\\beta)\n\\right]\nx_g x_g'.\n\\]\nThis cross-label block structure is the main computational issue. The information matrix has dimension \\(((K - 1)p) \\times ((K - 1)p)\\), where \\(p\\) is the number of columns in \\(X\\). It is not label-separable because every softmax probability shares the same denominator.\nThe implementation follows that block formula:\n\neta = X @ beta.T\nprobs = softmax(column_bind(eta, zeros))\n\nscore = (class_counts[:, :K_minus_1] - totals[:, None] * probs).T @ X\n\ninfo = zeros((K_minus_1 * p, K_minus_1 * p))\nfor k in range(K_minus_1):\n    for l in range(K_minus_1):\n        w = totals * probs[:, k] * ((k == l) - probs[:, l])\n        block = X.T @ (w[:, None] * X)\n        info[k_block, l_block] = block\n\nstep = solve(info, vectorize(score))\nbeta = beta + unvectorize(step)\n\nThis is the exact compressed multinomial Fisher scoring routine. Compression reduces the number of rows in the score and information sums, but the Hessian still couples labels.",
     "crumbs": [
       "Home",
       "Fisher Scoring and Multinomial GLMs"
@@ -81,7 +81,7 @@
     "href": "fisher-scoring.html#many-label-poisson-decomposition",
     "title": "Fisher Scoring and Multinomial GLMs",
     "section": "Many-Label Poisson Decomposition",
-    "text": "Many-Label Poisson Decomposition\nDBPoissonMultinomialRegression takes a different route for many labels. Instead of fitting one large softmax model, it fits one Poisson regression per label. For label \\(j\\),\n\\[\ny_{ij}\n\\sim\n\\mathrm{Poisson}(\\mu_{ij}),\n\\qquad\n\\log \\mu_{ij} = x_i'\\gamma_j.\n\\]\nAfter compression by label and covariate cell, the label-specific objective is\n\\[\n\\ell_j(\\gamma_j)\n=\n\\sum_g\n\\left[\ny_{gj}^+ x_g'\\gamma_j\n-\nr_{gj} \\exp(x_g'\\gamma_j)\n\\right],\n\\]\nwhere \\(r_{gj}\\) is the number of rows in the compressed label-covariate cell and \\(y_{gj}^+\\) is the sum of counts for that label in that cell.\nThe score and information are\n\\[\nU_j(\\gamma_j)\n=\n\\sum_g x_g \\{y_{gj}^+ - r_{gj} \\mu_{gj}(\\gamma_j)\\},\n\\]\n\\[\nI_j(\\gamma_j)\n=\n\\sum_g r_{gj} \\mu_{gj}(\\gamma_j) x_g x_g'.\n\\]\nSo the many-label path solves \\(K\\) independent \\(p \\times p\\) systems rather than one coupled \\(((K - 1)p) \\times ((K - 1)p)\\) system:\n\n\nShow implementation sketch\ncoefs = []\nfor label in labels:\n    X_label, y_sum_label, rows_label = collect_label_data(label)\n    gamma_label = poisson_irls(X_label, y_sum_label, rows_label)\n    coefs.append(gamma_label)\n\n\nThis is the distributed part of the design. Each label-wise Poisson fit can be run independently after the database has produced compressed (label, covariates) sufficient statistics.",
+    "text": "Many-Label Poisson Decomposition\nDBPoissonMultinomialRegression takes a different route for many labels. Instead of fitting one large softmax model, it fits one Poisson regression per label. For label \\(j\\),\n\\[\ny_{ij}\n\\sim\n\\mathrm{Poisson}(\\mu_{ij}),\n\\qquad\n\\log \\mu_{ij} = x_i'\\gamma_j.\n\\]\nAfter compression by label and covariate cell, the label-specific objective is\n\\[\n\\ell_j(\\gamma_j)\n=\n\\sum_g\n\\left[\ny_{gj}^+ x_g'\\gamma_j\n-\nr_{gj} \\exp(x_g'\\gamma_j)\n\\right],\n\\]\nwhere \\(r_{gj}\\) is the number of rows in the compressed label-covariate cell and \\(y_{gj}^+\\) is the sum of counts for that label in that cell.\nThe score and information are\n\\[\nU_j(\\gamma_j)\n=\n\\sum_g x_g \\{y_{gj}^+ - r_{gj} \\mu_{gj}(\\gamma_j)\\},\n\\]\n\\[\nI_j(\\gamma_j)\n=\n\\sum_g r_{gj} \\mu_{gj}(\\gamma_j) x_g x_g'.\n\\]\nSo the many-label path solves \\(K\\) independent \\(p \\times p\\) systems rather than one coupled \\(((K - 1)p) \\times ((K - 1)p)\\) system:\n\ncoefs = []\nfor label in labels:\n    X_label, y_sum_label, rows_label = collect_label_data(label)\n    gamma_label = poisson_irls(X_label, y_sum_label, rows_label)\n    coefs.append(gamma_label)\n\nThis is the distributed part of the design. Each label-wise Poisson fit can be run independently after the database has produced compressed (label, covariates) sufficient statistics.",
     "crumbs": [
       "Home",
       "Fisher Scoring and Multinomial GLMs"
@@ -125,7 +125,7 @@
     "href": "performance.html#setup",
     "title": "Performance Comparisons",
     "section": "Setup",
-    "text": "Setup\n\n\nShow code\nimport importlib.util\nimport os\nimport tempfile\nimport time\n\nimport ibis\nimport numpy as np\nimport pandas as pd\n\nfrom duckreg import DBRegression\n\nrng = np.random.default_rng(2027)\ntmpdir = tempfile.mkdtemp(prefix=\"duckreg_perf_\")\n\n\ndef elapsed(label, fn):\n    start = time.perf_counter()\n    out = fn()\n    return label, time.perf_counter() - start, out",
+    "text": "Setup\n\n\nCode\nimport importlib.util\nimport os\nimport tempfile\nimport time\n\nimport ibis\nimport numpy as np\nimport pandas as pd\n\nfrom duckreg import DBRegression\n\nrng = np.random.default_rng(2027)\ntmpdir = tempfile.mkdtemp(prefix=\"duckreg_perf_\")\n\n\ndef elapsed(label, fn):\n    start = time.perf_counter()\n    out = fn()\n    return label, time.perf_counter() - start, out",
     "crumbs": [
       "Home",
       "Performance Comparisons"
@@ -136,7 +136,7 @@
     "href": "performance.html#data",
     "title": "Performance Comparisons",
     "section": "Data",
-    "text": "Data\nThe benchmark uses 250,000 rows, but only 2,000 unique right-hand-side cells.\n\n\nShow code\nn = 250_000\ndf = pd.DataFrame(\n    {\n        \"rowid\": np.arange(n),\n        \"D\": rng.integers(0, 2, n).astype(float),\n        \"f1\": rng.integers(0, 50, n).astype(float),\n        \"f2\": rng.integers(0, 20, n).astype(float),\n    }\n)\ndf[\"Y\"] = 1.0 + 1.5 * df[\"D\"] + 0.04 * df[\"f1\"] - 0.03 * df[\"f2\"] + rng.normal(size=n)\n\ndb_path = os.path.join(tmpdir, \"perf.db\")\ncon = ibis.duckdb.connect(db_path)\ncon.create_table(\"data\", df, overwrite=True)\n\nraw_cells = len(df)\nunique_cells = df[[\"D\", \"f1\", \"f2\"]].drop_duplicates().shape[0]\npd.DataFrame(\n    {\n        \"raw_rows\": [raw_cells],\n        \"unique_design_cells\": [unique_cells],\n        \"compression_ratio\": [raw_cells / unique_cells],\n    }\n)\n\n\n\n\n\n\n\n\n\nraw_rows\nunique_design_cells\ncompression_ratio\n\n\n\n\n0\n250000\n2000\n125.0",
+    "text": "Data\nThe benchmark uses 250,000 rows, but only 2,000 unique right-hand-side cells.\n\n\nCode\nn = 250_000\ndf = pd.DataFrame(\n    {\n        \"rowid\": np.arange(n),\n        \"D\": rng.integers(0, 2, n).astype(float),\n        \"f1\": rng.integers(0, 50, n).astype(float),\n        \"f2\": rng.integers(0, 20, n).astype(float),\n    }\n)\ndf[\"Y\"] = 1.0 + 1.5 * df[\"D\"] + 0.04 * df[\"f1\"] - 0.03 * df[\"f2\"] + rng.normal(size=n)\n\ndb_path = os.path.join(tmpdir, \"perf.db\")\ncon = ibis.duckdb.connect(db_path)\ncon.create_table(\"data\", df, overwrite=True)\n\nraw_cells = len(df)\nunique_cells = df[[\"D\", \"f1\", \"f2\"]].drop_duplicates().shape[0]\npd.DataFrame(\n    {\n        \"raw_rows\": [raw_cells],\n        \"unique_design_cells\": [unique_cells],\n        \"compression_ratio\": [raw_cells / unique_cells],\n    }\n)\n\n\n\n\n\n\n\n\n\nraw_rows\nunique_design_cells\ncompression_ratio\n\n\n\n\n0\n250000\n2000\n125.0",
     "crumbs": [
       "Home",
       "Performance Comparisons"
@@ -147,7 +147,7 @@
     "href": "performance.html#compressed-regression",
     "title": "Performance Comparisons",
     "section": "Compressed Regression",
-    "text": "Compressed Regression\n\n\nShow code\ndef run_duckreg():\n    model = DBRegression(\n        db_name=None,\n        connection=con,\n        table_name=\"data\",\n        formula=\"Y ~ D + f1 + f2\",\n        cluster_col=None,\n        seed=42,\n        n_bootstraps=0,\n    )\n    model.fit()\n    model.fit_vcov()\n    return model\n\nduckreg_label, duckreg_time, duck_model = elapsed(\"DBRegression\", run_duckreg)\nduck_estimate = duck_model.summary()[\"point_estimate\"]\nduck_se = duck_model.summary()[\"standard_error\"]\n\npd.DataFrame(\n    {\n        \"term\": [\"Intercept\", \"D\", \"f1\", \"f2\"],\n        \"estimate\": duck_estimate,\n        \"std_error\": duck_se,\n    }\n)\n\n\n\n\n\n\n\n\n\nterm\nestimate\nstd_error\n\n\n\n\n0\nIntercept\n0.997041\n0.005510\n\n\n1\nD\n1.500149\n0.003996\n\n\n2\nf1\n0.040063\n0.000139\n\n\n3\nf2\n-0.029919\n0.000347",
+    "text": "Compressed Regression\n\ndef run_duckreg():\n    model = DBRegression(\n        db_name=None,\n        connection=con,\n        table_name=\"data\",\n        formula=\"Y ~ D + f1 + f2\",\n        cluster_col=None,\n        seed=42,\n        n_bootstraps=0,\n    )\n    model.fit()\n    model.fit_vcov()\n    return model\n\nduckreg_label, duckreg_time, duck_model = elapsed(\"DBRegression\", run_duckreg)\nduck_estimate = duck_model.summary()[\"point_estimate\"]\nduck_se = duck_model.summary()[\"standard_error\"]\n\npd.DataFrame(\n    {\n        \"term\": [\"Intercept\", \"D\", \"f1\", \"f2\"],\n        \"estimate\": duck_estimate,\n        \"std_error\": duck_se,\n    }\n)\n\n\n\n\n\n\n\n\nterm\nestimate\nstd_error\n\n\n\n\n0\nIntercept\n0.997041\n0.005510\n\n\n1\nD\n1.500149\n0.003996\n\n\n2\nf1\n0.040063\n0.000139\n\n\n3\nf2\n-0.029919\n0.000347",
     "crumbs": [
       "Home",
       "Performance Comparisons"
@@ -158,7 +158,7 @@
     "href": "performance.html#full-numpy-baseline",
     "title": "Performance Comparisons",
     "section": "Full NumPy Baseline",
-    "text": "Full NumPy Baseline\nThis baseline materializes the whole design matrix in Python and runs ordinary least squares directly. It is not a full replacement for a statistical package, but it shows the cost of solving on all rows instead of compressed cells.\n\n\nShow code\ndef run_numpy_ols():\n    X = np.c_[np.ones(len(df)), df[[\"D\", \"f1\", \"f2\"]].to_numpy()]\n    y = df[\"Y\"].to_numpy()\n    return np.linalg.lstsq(X, y, rcond=None)[0]\n\nnumpy_label, numpy_time, numpy_estimate = elapsed(\"NumPy full OLS\", run_numpy_ols)",
+    "text": "Full NumPy Baseline\nThis baseline materializes the whole design matrix in Python and runs ordinary least squares directly. It is not a full replacement for a statistical package, but it shows the cost of solving on all rows instead of compressed cells.\n\ndef run_numpy_ols():\n    X = np.c_[np.ones(len(df)), df[[\"D\", \"f1\", \"f2\"]].to_numpy()]\n    y = df[\"Y\"].to_numpy()\n    return np.linalg.lstsq(X, y, rcond=None)[0]\n\nnumpy_label, numpy_time, numpy_estimate = elapsed(\"NumPy full OLS\", run_numpy_ols)",
     "crumbs": [
       "Home",
       "Performance Comparisons"
@@ -169,7 +169,7 @@
     "href": "performance.html#optional-pyfixest-baseline",
     "title": "Performance Comparisons",
     "section": "Optional pyfixest Baseline",
-    "text": "Optional pyfixest Baseline\nIf pyfixest is installed, the render also runs a package-level OLS baseline.\n\n\nShow code\nif importlib.util.find_spec(\"pyfixest\") is not None:\n    import pyfixest as pf\n\n    def run_pyfixest():\n        return pf.feols(\"Y ~ D + f1 + f2\", data=df, vcov=\"hetero\")\n\n    pyfixest_label, pyfixest_time, pyfixest_fit = elapsed(\"pyfixest\", run_pyfixest)\n    pyfixest_estimate = pyfixest_fit.coef().reindex([\"Intercept\", \"D\", \"f1\", \"f2\"]).to_numpy()\nelse:\n    pyfixest_label, pyfixest_time, pyfixest_estimate = \"pyfixest\", np.nan, None",
+    "text": "Optional pyfixest Baseline\nIf pyfixest is installed, the render also runs a package-level OLS baseline.\n\nif importlib.util.find_spec(\"pyfixest\") is not None:\n    import pyfixest as pf\n\n    def run_pyfixest():\n        return pf.feols(\"Y ~ D + f1 + f2\", data=df, vcov=\"hetero\")\n\n    pyfixest_label, pyfixest_time, pyfixest_fit = elapsed(\"pyfixest\", run_pyfixest)\n    pyfixest_estimate = pyfixest_fit.coef().reindex([\"Intercept\", \"D\", \"f1\", \"f2\"]).to_numpy()\nelse:\n    pyfixest_label, pyfixest_time, pyfixest_estimate = \"pyfixest\", np.nan, None",
     "crumbs": [
       "Home",
       "Performance Comparisons"
@@ -180,7 +180,7 @@
     "href": "performance.html#timing-summary",
     "title": "Performance Comparisons",
     "section": "Timing Summary",
-    "text": "Timing Summary\n\n\nShow code\nsummary = pd.DataFrame(\n    {\n        \"method\": [duckreg_label, numpy_label, pyfixest_label],\n        \"seconds\": [duckreg_time, numpy_time, pyfixest_time],\n        \"rows_seen_by_python\": [len(duck_model.df_compressed), len(df), len(df)],\n    }\n)\nsummary[\"relative_to_duckreg\"] = summary[\"seconds\"] / duckreg_time\nsummary\n\n\n\n\n\n\n\n\n\nmethod\nseconds\nrows_seen_by_python\nrelative_to_duckreg\n\n\n\n\n0\nDBRegression\n0.033570\n2000\n1.000000\n\n\n1\nNumPy full OLS\n0.010735\n250000\n0.319792\n\n\n2\npyfixest\n1.511121\n250000\n45.013949",
+    "text": "Timing Summary\n\nsummary = pd.DataFrame(\n    {\n        \"method\": [duckreg_label, numpy_label, pyfixest_label],\n        \"seconds\": [duckreg_time, numpy_time, pyfixest_time],\n        \"rows_seen_by_python\": [len(duck_model.df_compressed), len(df), len(df)],\n    }\n)\nsummary[\"relative_to_duckreg\"] = summary[\"seconds\"] / duckreg_time\nsummary\n\n\n\n\n\n\n\n\nmethod\nseconds\nrows_seen_by_python\nrelative_to_duckreg\n\n\n\n\n0\nDBRegression\n0.039078\n2000\n1.000000\n\n\n1\nNumPy full OLS\n0.014897\n250000\n0.381206\n\n\n2\npyfixest\n1.359962\n250000\n34.801247",
     "crumbs": [
       "Home",
       "Performance Comparisons"
@@ -191,7 +191,7 @@
     "href": "performance.html#coefficient-check",
     "title": "Performance Comparisons",
     "section": "Coefficient Check",
-    "text": "Coefficient Check\n\n\nShow code\ncoef_table = pd.DataFrame(\n    {\n        \"term\": [\"Intercept\", \"D\", \"f1\", \"f2\"],\n        \"duckreg\": duck_estimate,\n        \"numpy_full_ols\": numpy_estimate,\n    }\n)\nif pyfixest_estimate is not None:\n    coef_table[\"pyfixest\"] = pyfixest_estimate\ncoef_table\n\n\n\n\n\n\n\n\n\nterm\nduckreg\nnumpy_full_ols\npyfixest\n\n\n\n\n0\nIntercept\n0.997041\n0.997041\n0.997041\n\n\n1\nD\n1.500149\n1.500149\n1.500149\n\n\n2\nf1\n0.040063\n0.040063\n0.040063\n\n\n3\nf2\n-0.029919\n-0.029919\n-0.029919\n\n\n\n\n\n\n\nThe compressed and full-data OLS point estimates match because the grouped sufficient statistics preserve the linear-model normal equations exactly. The performance gain comes from moving the grouping operation to the database and collecting only the compressed table.",
+    "text": "Coefficient Check\n\ncoef_table = pd.DataFrame(\n    {\n        \"term\": [\"Intercept\", \"D\", \"f1\", \"f2\"],\n        \"duckreg\": duck_estimate,\n        \"numpy_full_ols\": numpy_estimate,\n    }\n)\nif pyfixest_estimate is not None:\n    coef_table[\"pyfixest\"] = pyfixest_estimate\ncoef_table\n\n\n\n\n\n\n\n\nterm\nduckreg\nnumpy_full_ols\npyfixest\n\n\n\n\n0\nIntercept\n0.997041\n0.997041\n0.997041\n\n\n1\nD\n1.500149\n1.500149\n1.500149\n\n\n2\nf1\n0.040063\n0.040063\n0.040063\n\n\n3\nf2\n-0.029919\n-0.029919\n-0.029919\n\n\n\n\n\n\n\nThe compressed and full-data OLS point estimates match because the grouped sufficient statistics preserve the linear-model normal equations exactly. The performance gain comes from moving the grouping operation to the database and collecting only the compressed table.",
     "crumbs": [
       "Home",
       "Performance Comparisons"
@@ -224,7 +224,7 @@
     "href": "ridge.html#constructor",
     "title": "Compressed Ridge Regression",
     "section": "Constructor",
-    "text": "Constructor\n\n\nShow code\nDuckRidge(\n    db_name: str,\n    table_name: str,\n    formula: str,\n    lambda_grid=None,\n    cv_folds: int = 5,\n    seed: int = 42,\n    n_bootstraps: int = 0,\n    rowid_col: str = \"rowid\",\n    fitter: str = \"ridge\",\n)\n\n\nDuckRidge currently supports one outcome variable and does not support formula fixed effects.",
+    "text": "Constructor\n\nDuckRidge(\n    db_name: str,\n    table_name: str,\n    formula: str,\n    lambda_grid=None,\n    cv_folds: int = 5,\n    seed: int = 42,\n    n_bootstraps: int = 0,\n    rowid_col: str = \"rowid\",\n    fitter: str = \"ridge\",\n)\n\nDuckRidge currently supports one outcome variable and does not support formula fixed effects.",
     "crumbs": [
       "Home",
       "Compressed Ridge Regression"
@@ -246,7 +246,7 @@
     "href": "ridge.html#single-lambda",
     "title": "Compressed Ridge Regression",
     "section": "Single Lambda",
-    "text": "Single Lambda\n\n\nShow code\nimport numpy as np\nfrom duckreg import DuckRidge\n\nmodel = DuckRidge(\n    db_name=\"ridge.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2 + f3\",\n    lambda_grid=[0.1],\n    cv_folds=1,\n    seed=42,\n)\nmodel.fit(lambda_selection=\"single\")\nmodel.summary()",
+    "text": "Single Lambda\n\nimport numpy as np\nfrom duckreg import DuckRidge\n\nmodel = DuckRidge(\n    db_name=\"ridge.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2 + f3\",\n    lambda_grid=[0.1],\n    cv_folds=1,\n    seed=42,\n)\nmodel.fit(lambda_selection=\"single\")\nmodel.summary()",
     "crumbs": [
       "Home",
       "Compressed Ridge Regression"
@@ -257,7 +257,7 @@
     "href": "ridge.html#lambda-path",
     "title": "Compressed Ridge Regression",
     "section": "Lambda Path",
-    "text": "Lambda Path\n\n\nShow code\nmodel = DuckRidge(\n    db_name=\"ridge.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2 + f3\",\n    lambda_grid=np.logspace(-4, 2, 50),\n    cv_folds=1,\n    seed=42,\n)\nmodel.fit(lambda_selection=\"path\")\nmodel.summary()[\"lambda_path_coefs\"]",
+    "text": "Lambda Path\n\nmodel = DuckRidge(\n    db_name=\"ridge.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2 + f3\",\n    lambda_grid=np.logspace(-4, 2, 50),\n    cv_folds=1,\n    seed=42,\n)\nmodel.fit(lambda_selection=\"path\")\nmodel.summary()[\"lambda_path_coefs\"]",
     "crumbs": [
       "Home",
       "Compressed Ridge Regression"
@@ -268,7 +268,7 @@
     "href": "ridge.html#cross-validation",
     "title": "Compressed Ridge Regression",
     "section": "Cross-Validation",
-    "text": "Cross-Validation\nWhen cv_folds &gt; 1, the estimator creates fold assignments, includes fold_id in the compression, and evaluates validation weighted MSE on compressed test cells.\n\n\nShow code\nmodel = DuckRidge(\n    db_name=\"ridge.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2 + f3\",\n    lambda_grid=np.logspace(-3, 1, 20),\n    cv_folds=5,\n    seed=42,\n)\nmodel.fit(lambda_selection=\"cv\")\nmodel.best_lambda",
+    "text": "Cross-Validation\nWhen cv_folds &gt; 1, the estimator creates fold assignments, includes fold_id in the compression, and evaluates validation weighted MSE on compressed test cells.\n\nmodel = DuckRidge(\n    db_name=\"ridge.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2 + f3\",\n    lambda_grid=np.logspace(-3, 1, 20),\n    cv_folds=5,\n    seed=42,\n)\nmodel.fit(lambda_selection=\"cv\")\nmodel.best_lambda",
     "crumbs": [
       "Home",
       "Compressed Ridge Regression"
@@ -301,7 +301,7 @@
     "href": "dml.html#constructor",
     "title": "Compressed Double Machine Learning",
     "section": "Constructor",
-    "text": "Constructor\n\n\nShow code\nDBDML(\n    db_name: str | None,\n    table_name: str,\n    outcome_var: str,\n    treatment_var: str | list[str],\n    discrete_covars: list[str],\n    seed: int,\n    n_bootstraps: int = 200,\n    connection=None,\n)",
+    "text": "Constructor\n\nDBDML(\n    db_name: str | None,\n    table_name: str,\n    outcome_var: str,\n    treatment_var: str | list[str],\n    discrete_covars: list[str],\n    seed: int,\n    n_bootstraps: int = 200,\n    connection=None,\n)",
     "crumbs": [
       "Home",
       "Compressed Double Machine Learning"
@@ -334,7 +334,7 @@
     "href": "dml.html#usage",
     "title": "Compressed Double Machine Learning",
     "section": "Usage",
-    "text": "Usage\n\n\nShow code\nfrom duckreg import DBDML\n\nmodel = DBDML(\n    db_name=\"dml.db\",\n    table_name=\"data\",\n    outcome_var=\"Y\",\n    treatment_var=[\"D1\", \"D2\"],\n    discrete_covars=[\"market\", \"period\"],\n    seed=42,\n    n_bootstraps=200,\n)\nmodel.fit()\nmodel.summary()\n\n\nFor a remote backend, pass connection=con and db_name=None.",
+    "text": "Usage\n\nfrom duckreg import DBDML\n\nmodel = DBDML(\n    db_name=\"dml.db\",\n    table_name=\"data\",\n    outcome_var=\"Y\",\n    treatment_var=[\"D1\", \"D2\"],\n    discrete_covars=[\"market\", \"period\"],\n    seed=42,\n    n_bootstraps=200,\n)\nmodel.fit()\nmodel.summary()\n\nFor a remote backend, pass connection=con and db_name=None.",
     "crumbs": [
       "Home",
       "Compressed Double Machine Learning"
@@ -378,7 +378,7 @@
     "href": "inference.html#cluster-bootstrap",
     "title": "Inference and Variance Estimation",
     "section": "Cluster Bootstrap",
-    "text": "Cluster Bootstrap\nCluster bootstrap resamples clusters, applies multiplicities to grouped cluster-by-cell aggregates, collapses back to design cells, and refits. The DBRegression path does this without backend-specific array parameter expansion.\nConceptually:\n\n\nShow code\ngrouped = group_by(covariate_cell, cluster).aggregate(\n    count=count(),\n    sum_y=sum(Y),\n    sum_y_sq=sum(Y * Y),\n)\n\nfor bootstrap_draw in range(B):\n    multiplicities = sampled_clusters.value_counts()\n    boot = grouped.join(multiplicities).collapse_to(covariate_cell)\n    beta_b = wls(boot_X, boot_y, boot_n)\n\n\nPanel event-study bootstrap uses the same idea with the generated event-study design.",
+    "text": "Cluster Bootstrap\nCluster bootstrap resamples clusters, applies multiplicities to grouped cluster-by-cell aggregates, collapses back to design cells, and refits. The DBRegression path does this without backend-specific array parameter expansion.\nConceptually:\n\ngrouped = group_by(covariate_cell, cluster).aggregate(\n    count=count(),\n    sum_y=sum(Y),\n    sum_y_sq=sum(Y * Y),\n)\n\nfor bootstrap_draw in range(B):\n    multiplicities = sampled_clusters.value_counts()\n    boot = grouped.join(multiplicities).collapse_to(covariate_cell)\n    beta_b = wls(boot_X, boot_y, boot_n)\n\nPanel event-study bootstrap uses the same idea with the generated event-study design.",
     "crumbs": [
       "Home",
       "Inference and Variance Estimation"
@@ -433,7 +433,7 @@
     "href": "linear.html#constructor",
     "title": "Linear Regression API",
     "section": "Constructor",
-    "text": "Constructor\n\n\nShow code\nDBRegression(\n    db_name: str | None,\n    table_name: str,\n    formula: str,\n    cluster_col: str | None,\n    seed: int,\n    n_bootstraps: int = 100,\n    rowid_col: str = \"rowid\",\n    fitter: str = \"numpy\",\n    connection=None,\n)\n\n\nThe formula is a standard additive linear formula:\n\n\nShow code\nformula = \"Y ~ D + f1 + f2\"\n\n\nMultiple outcomes are supported:\n\n\nShow code\nformula = \"Y + Y2 ~ D + f1 + f2\"\n\n\nFixed-effect separators such as Y ~ D | unit + time are intentionally rejected. Use DBMundlak, DBDoubleDemeaning, or DBMundlakEventStudy for those designs.",
+    "text": "Constructor\n\nDBRegression(\n    db_name: str | None,\n    table_name: str,\n    formula: str,\n    cluster_col: str | None,\n    seed: int,\n    n_bootstraps: int = 100,\n    rowid_col: str = \"rowid\",\n    fitter: str = \"numpy\",\n    connection=None,\n)\n\nThe formula is a standard additive linear formula:\n\nformula = \"Y ~ D + f1 + f2\"\n\nMultiple outcomes are supported:\n\nformula = \"Y + Y2 ~ D + f1 + f2\"\n\nFixed-effect separators such as Y ~ D | unit + time are intentionally rejected. Use DBMundlak, DBDoubleDemeaning, or DBMundlakEventStudy for those designs.",
     "crumbs": [
       "Home",
       "Linear Regression API"
@@ -444,7 +444,7 @@
     "href": "linear.html#basic-fit",
     "title": "Linear Regression API",
     "section": "Basic Fit",
-    "text": "Basic Fit\n\n\nShow code\nfrom duckreg import DBRegression\n\nmodel = DBRegression(\n    db_name=\"large_dataset.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2\",\n    cluster_col=None,\n    seed=42,\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.fit_vcov()\nmodel.summary()\n\n\nThe returned point estimate is ordered as intercept followed by the RHS variables:\n\n\nShow code\n[\"Intercept\", \"D\", \"f1\", \"f2\"]",
+    "text": "Basic Fit\n\nfrom duckreg import DBRegression\n\nmodel = DBRegression(\n    db_name=\"large_dataset.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2\",\n    cluster_col=None,\n    seed=42,\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.fit_vcov()\nmodel.summary()\n\nThe returned point estimate is ordered as intercept followed by the RHS variables:\n\n[\"Intercept\", \"D\", \"f1\", \"f2\"]",
     "crumbs": [
       "Home",
       "Linear Regression API"
@@ -477,7 +477,7 @@
     "href": "linear.html#backwards-compatibility",
     "title": "Linear Regression API",
     "section": "Backwards Compatibility",
-    "text": "Backwards Compatibility\nDuckRegression has the same constructor shape and remains exported:\n\n\nShow code\nfrom duckreg import DuckRegression\n\n\nFor new code, prefer DBRegression unless you specifically need to preserve an older DuckRegression workflow.",
+    "text": "Backwards Compatibility\nDuckRegression has the same constructor shape and remains exported:\n\nfrom duckreg import DuckRegression\n\nFor new code, prefer DBRegression unless you specifically need to preserve an older DuckRegression workflow.",
     "crumbs": [
       "Home",
       "Linear Regression API"
@@ -499,7 +499,7 @@
     "href": "glm.html#api",
     "title": "Generalized Linear Models",
     "section": "API",
-    "text": "API\n\n\nShow code\nfrom duckreg import (\n    DBLogisticRegression,\n    DBPoissonRegression,\n    DBMultinomialLogisticRegression,\n    DBPoissonMultinomialRegression,\n)\n\n\nBinary logit and Poisson regression share the same constructor shape:\n\n\nShow code\nmodel = DBLogisticRegression(\n    db_name=\"glm.db\",\n    table_name=\"binary_data\",\n    formula=\"y ~ x1 + x2\",\n    seed=42,\n    method=\"irls\",\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.fit_vcov()\nmodel.summary()\n\n\nUse DBPoissonRegression for count outcomes:\n\n\nShow code\nmodel = DBPoissonRegression(\n    db_name=\"glm.db\",\n    table_name=\"count_data\",\n    formula=\"y ~ x1 + x2\",\n    seed=42,\n    method=\"irls\",\n    n_bootstraps=0,\n)",
+    "text": "API\n\nfrom duckreg import (\n    DBLogisticRegression,\n    DBPoissonRegression,\n    DBMultinomialLogisticRegression,\n    DBPoissonMultinomialRegression,\n)\n\nBinary logit and Poisson regression share the same constructor shape:\n\nmodel = DBLogisticRegression(\n    db_name=\"glm.db\",\n    table_name=\"binary_data\",\n    formula=\"y ~ x1 + x2\",\n    seed=42,\n    method=\"irls\",\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.fit_vcov()\nmodel.summary()\n\nUse DBPoissonRegression for count outcomes:\n\nmodel = DBPoissonRegression(\n    db_name=\"glm.db\",\n    table_name=\"count_data\",\n    formula=\"y ~ x1 + x2\",\n    seed=42,\n    method=\"irls\",\n    n_bootstraps=0,\n)",
     "crumbs": [
       "Home",
       "Generalized Linear Models"
@@ -543,7 +543,7 @@
     "href": "glm.html#multinomial-logit",
     "title": "Generalized Linear Models",
     "section": "Multinomial Logit",
-    "text": "Multinomial Logit\nDBMultinomialLogisticRegression fits an exact baseline-category multinomial logit for moderate numbers of labels:\n\n\nShow code\nmodel = DBMultinomialLogisticRegression(\n    db_name=\"glm.db\",\n    table_name=\"label_data\",\n    formula=\"label ~ x1 + x2\",\n    labels=[\"a\", \"b\", \"c\"],\n    baseline=\"c\",\n    seed=42,\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.fit_vcov()\nmodel.summary()\n\n\nThe compressed table contains one count column per label. If there are \\(K\\) labels and the last label is the baseline, the coefficient matrix has shape \\((K-1) \\times p\\).",
+    "text": "Multinomial Logit\nDBMultinomialLogisticRegression fits an exact baseline-category multinomial logit for moderate numbers of labels:\n\nmodel = DBMultinomialLogisticRegression(\n    db_name=\"glm.db\",\n    table_name=\"label_data\",\n    formula=\"label ~ x1 + x2\",\n    labels=[\"a\", \"b\", \"c\"],\n    baseline=\"c\",\n    seed=42,\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.fit_vcov()\nmodel.summary()\n\nThe compressed table contains one count column per label. If there are \\(K\\) labels and the last label is the baseline, the coefficient matrix has shape \\((K-1) \\times p\\).",
     "crumbs": [
       "Home",
       "Generalized Linear Models"
@@ -554,7 +554,7 @@
     "href": "glm.html#many-label-count-decomposition",
     "title": "Generalized Linear Models",
     "section": "Many-Label Count Decomposition",
-    "text": "Many-Label Count Decomposition\nDBPoissonMultinomialRegression is for wide label/count problems:\n\n\nShow code\nmodel = DBPoissonMultinomialRegression(\n    db_name=\"counts.db\",\n    table_name=\"token_counts\",\n    count_col=\"count\",\n    label_col=\"token\",\n    covars=[\"segment\", \"period\"],\n    seed=42,\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.summary()[\"point_estimate\"]\n\n\nIt fits independent label-wise Poisson regressions. That is scalable and naturally distributable, but it is not the exact joint multinomial likelihood unless the modeling problem justifies the Poisson decomposition.",
+    "text": "Many-Label Count Decomposition\nDBPoissonMultinomialRegression is for wide label/count problems:\n\nmodel = DBPoissonMultinomialRegression(\n    db_name=\"counts.db\",\n    table_name=\"token_counts\",\n    count_col=\"count\",\n    label_col=\"token\",\n    covars=[\"segment\", \"period\"],\n    seed=42,\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.summary()[\"point_estimate\"]\n\nIt fits independent label-wise Poisson regressions. That is scalable and naturally distributable, but it is not the exact joint multinomial likelihood unless the modeling problem justifies the Poisson decomposition.",
     "crumbs": [
       "Home",
       "Generalized Linear Models"
@@ -587,7 +587,7 @@
     "href": "examples.html#setup",
     "title": "Executed Examples",
     "section": "Setup",
-    "text": "Setup\n\n\nShow code\nimport os\nimport tempfile\n\nimport ibis\nimport numpy as np\nimport pandas as pd\n\nfrom duckreg import (\n    DBDML,\n    DBDoubleDemeaning,\n    DBLogisticRegression,\n    DBMultinomialLogisticRegression,\n    DBMundlak,\n    DBPoissonMultinomialRegression,\n    DBPoissonRegression,\n    DBRegression,\n)\n\npd.set_option(\"display.precision\", 4)\nrng = np.random.default_rng(2026)\ntmpdir = tempfile.mkdtemp(prefix=\"duckreg_docs_\")\n\n\ndef duckdb_backend(name, table, df):\n    path = os.path.join(tmpdir, name)\n    con = ibis.duckdb.connect(path)\n    con.create_table(table, df, overwrite=True)\n    return con",
+    "text": "Setup\n\n\nCode\nimport os\nimport tempfile\n\nimport ibis\nimport numpy as np\nimport pandas as pd\n\nfrom duckreg import (\n    DBDML,\n    DBDoubleDemeaning,\n    DBLogisticRegression,\n    DBMultinomialLogisticRegression,\n    DBMundlak,\n    DBPoissonMultinomialRegression,\n    DBPoissonRegression,\n    DBRegression,\n)\n\npd.set_option(\"display.precision\", 4)\nrng = np.random.default_rng(2026)\ntmpdir = tempfile.mkdtemp(prefix=\"duckreg_docs_\")\n\n\ndef duckdb_backend(name, table, df):\n    path = os.path.join(tmpdir, name)\n    con = ibis.duckdb.connect(path)\n    con.create_table(table, df, overwrite=True)\n    return con",
     "crumbs": [
       "Home",
       "Executed Examples"
@@ -598,7 +598,7 @@
     "href": "examples.html#linear-regression",
     "title": "Executed Examples",
     "section": "Linear Regression",
-    "text": "Linear Regression\n\n\nShow code\nn = 8_000\nlinear = pd.DataFrame(\n    {\n        \"rowid\": np.arange(n),\n        \"D\": rng.integers(0, 2, n).astype(float),\n        \"f1\": rng.integers(0, 20, n).astype(float),\n        \"f2\": rng.integers(0, 8, n).astype(float),\n        \"cluster\": rng.integers(0, 250, n),\n    }\n)\nlinear[\"Y\"] = (\n    1.0\n    + 2.0 * linear[\"D\"]\n    + 0.10 * linear[\"f1\"]\n    - 0.05 * linear[\"f2\"]\n    + rng.normal(0, 1, n)\n)\n\ncon = duckdb_backend(\"linear.db\", \"data\", linear)\n\nols = DBRegression(\n    db_name=None,\n    connection=con,\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2\",\n    cluster_col=None,\n    seed=42,\n    n_bootstraps=0,\n)\nols.fit()\nols.fit_vcov()\n\npd.DataFrame(\n    {\n        \"term\": [\"Intercept\", \"D\", \"f1\", \"f2\"],\n        \"estimate\": ols.summary()[\"point_estimate\"],\n        \"std_error\": ols.summary()[\"standard_error\"],\n    }\n)\n\n\n\n\n\n\n\n\n\nterm\nestimate\nstd_error\n\n\n\n\n0\nIntercept\n1.0098\n0.0303\n\n\n1\nD\n2.0179\n0.0223\n\n\n2\nf1\n0.1004\n0.0019\n\n\n3\nf2\n-0.0512\n0.0049\n\n\n\n\n\n\n\nCompression reduces 8,000 raw rows to one row per unique covariate cell.\n\n\nShow code\npd.DataFrame(\n    {\n        \"raw_rows\": [len(linear)],\n        \"compressed_rows\": [len(ols.df_compressed)],\n        \"compression_ratio\": [len(linear) / len(ols.df_compressed)],\n    }\n)\n\n\n\n\n\n\n\n\n\nraw_rows\ncompressed_rows\ncompression_ratio\n\n\n\n\n0\n8000\n320\n25.0",
+    "text": "Linear Regression\n\nn = 8_000\nlinear = pd.DataFrame(\n    {\n        \"rowid\": np.arange(n),\n        \"D\": rng.integers(0, 2, n).astype(float),\n        \"f1\": rng.integers(0, 20, n).astype(float),\n        \"f2\": rng.integers(0, 8, n).astype(float),\n        \"cluster\": rng.integers(0, 250, n),\n    }\n)\nlinear[\"Y\"] = (\n    1.0\n    + 2.0 * linear[\"D\"]\n    + 0.10 * linear[\"f1\"]\n    - 0.05 * linear[\"f2\"]\n    + rng.normal(0, 1, n)\n)\n\ncon = duckdb_backend(\"linear.db\", \"data\", linear)\n\nols = DBRegression(\n    db_name=None,\n    connection=con,\n    table_name=\"data\",\n    formula=\"Y ~ D + f1 + f2\",\n    cluster_col=None,\n    seed=42,\n    n_bootstraps=0,\n)\nols.fit()\nols.fit_vcov()\n\npd.DataFrame(\n    {\n        \"term\": [\"Intercept\", \"D\", \"f1\", \"f2\"],\n        \"estimate\": ols.summary()[\"point_estimate\"],\n        \"std_error\": ols.summary()[\"standard_error\"],\n    }\n)\n\n\n\n\n\n\n\n\nterm\nestimate\nstd_error\n\n\n\n\n0\nIntercept\n1.0098\n0.0303\n\n\n1\nD\n2.0179\n0.0223\n\n\n2\nf1\n0.1004\n0.0019\n\n\n3\nf2\n-0.0512\n0.0049\n\n\n\n\n\n\n\nCompression reduces 8,000 raw rows to one row per unique covariate cell.\n\npd.DataFrame(\n    {\n        \"raw_rows\": [len(linear)],\n        \"compressed_rows\": [len(ols.df_compressed)],\n        \"compression_ratio\": [len(linear) / len(ols.df_compressed)],\n    }\n)\n\n\n\n\n\n\n\n\nraw_rows\ncompressed_rows\ncompression_ratio\n\n\n\n\n0\n8000\n320\n25.0",
     "crumbs": [
       "Home",
       "Executed Examples"
@@ -609,7 +609,7 @@
     "href": "examples.html#panel-mundlak",
     "title": "Executed Examples",
     "section": "Panel Mundlak",
-    "text": "Panel Mundlak\n\n\nShow code\nunits, periods = 160, 6\nunit = np.repeat(np.arange(units), periods)\ntime = np.tile(np.arange(periods), units)\nunit_fe = rng.normal(0, 1, units)\ntime_fe = rng.normal(0, 0.4, periods)\nD = rng.normal(size=len(unit)) + 0.4 * unit_fe[unit] + 0.2 * time_fe[time]\nX = rng.normal(size=len(unit))\nY = 1.5 * D - 0.5 * X + unit_fe[unit] + time_fe[time] + rng.normal(0, 0.5, len(unit))\npanel = pd.DataFrame({\"unit\": unit, \"time\": time, \"D\": D, \"X\": X, \"Y\": Y})\n\npanel_con = duckdb_backend(\"panel.db\", \"panel_data\", panel)\nmundlak = DBMundlak(\n    db_name=None,\n    connection=panel_con,\n    table_name=\"panel_data\",\n    outcome_var=\"Y\",\n    covariates=[\"D\", \"X\"],\n    unit_col=\"unit\",\n    time_col=\"time\",\n    seed=42,\n    n_bootstraps=0,\n)\nmundlak.fit()\n\npd.DataFrame(\n    mundlak.point_estimate,\n    index=[\"Intercept\"] + mundlak.rhs,\n    columns=[\"estimate\"],\n).head(8)\n\n\n\n\n\n\n\n\n\nestimate\n\n\n\n\nIntercept\n0.0156\n\n\nD\n1.4844\n\n\nX\n-0.5138\n\n\navg_D_unit\n1.3289\n\n\navg_X_unit\n-0.1031\n\n\navg_D_time\n1.8313\n\n\navg_X_time\n-1.8936",
+    "text": "Panel Mundlak\n\nunits, periods = 160, 6\nunit = np.repeat(np.arange(units), periods)\ntime = np.tile(np.arange(periods), units)\nunit_fe = rng.normal(0, 1, units)\ntime_fe = rng.normal(0, 0.4, periods)\nD = rng.normal(size=len(unit)) + 0.4 * unit_fe[unit] + 0.2 * time_fe[time]\nX = rng.normal(size=len(unit))\nY = 1.5 * D - 0.5 * X + unit_fe[unit] + time_fe[time] + rng.normal(0, 0.5, len(unit))\npanel = pd.DataFrame({\"unit\": unit, \"time\": time, \"D\": D, \"X\": X, \"Y\": Y})\n\npanel_con = duckdb_backend(\"panel.db\", \"panel_data\", panel)\nmundlak = DBMundlak(\n    db_name=None,\n    connection=panel_con,\n    table_name=\"panel_data\",\n    outcome_var=\"Y\",\n    covariates=[\"D\", \"X\"],\n    unit_col=\"unit\",\n    time_col=\"time\",\n    seed=42,\n    n_bootstraps=0,\n)\nmundlak.fit()\n\npd.DataFrame(\n    mundlak.point_estimate,\n    index=[\"Intercept\"] + mundlak.rhs,\n    columns=[\"estimate\"],\n).head(8)\n\n\n\n\n\n\n\n\nestimate\n\n\n\n\nIntercept\n0.0156\n\n\nD\n1.4844\n\n\nX\n-0.5138\n\n\navg_D_unit\n1.3289\n\n\navg_X_unit\n-0.1031\n\n\navg_D_time\n1.8313\n\n\navg_X_time\n-1.8936",
     "crumbs": [
       "Home",
       "Executed Examples"
@@ -620,7 +620,7 @@
     "href": "examples.html#double-demeaning",
     "title": "Executed Examples",
     "section": "Double Demeaning",
-    "text": "Double Demeaning\n\n\nShow code\ntwfe = DBDoubleDemeaning(\n    db_name=None,\n    connection=panel_con,\n    table_name=\"panel_data\",\n    outcome_var=\"Y\",\n    treatment_var=\"D\",\n    unit_col=\"unit\",\n    time_col=\"time\",\n    seed=42,\n    n_bootstraps=0,\n)\ntwfe.fit()\n\npd.DataFrame(\n    twfe.point_estimate,\n    index=[\"Intercept\", \"ddot_D\"],\n    columns=[\"estimate\"],\n)\n\n\n\n\n\n\n\n\n\nestimate\n\n\n\n\nIntercept\n-0.0941\n\n\nddot_D\n1.4960",
+    "text": "Double Demeaning\n\ntwfe = DBDoubleDemeaning(\n    db_name=None,\n    connection=panel_con,\n    table_name=\"panel_data\",\n    outcome_var=\"Y\",\n    treatment_var=\"D\",\n    unit_col=\"unit\",\n    time_col=\"time\",\n    seed=42,\n    n_bootstraps=0,\n)\ntwfe.fit()\n\npd.DataFrame(\n    twfe.point_estimate,\n    index=[\"Intercept\", \"ddot_D\"],\n    columns=[\"estimate\"],\n)\n\n\n\n\n\n\n\n\nestimate\n\n\n\n\nIntercept\n-0.0941\n\n\nddot_D\n1.4960",
     "crumbs": [
       "Home",
       "Executed Examples"
@@ -631,7 +631,7 @@
     "href": "examples.html#dml-with-discrete-controls",
     "title": "Executed Examples",
     "section": "DML With Discrete Controls",
-    "text": "DML With Discrete Controls\n\n\nShow code\ndml_data = linear.copy()\ndml_data[\"X\"] = rng.normal(size=len(dml_data))\ndml_data[\"Y\"] = (\n    0.8 * dml_data[\"D\"]\n    + 0.6 * dml_data[\"X\"]\n    + dml_data.groupby([\"f1\", \"f2\"])[\"f1\"].transform(\"mean\") * 0.02\n    + rng.normal(0, 1, len(dml_data))\n)\ndml_con = duckdb_backend(\"dml.db\", \"data\", dml_data)\n\ndml = DBDML(\n    db_name=None,\n    connection=dml_con,\n    table_name=\"data\",\n    outcome_var=\"Y\",\n    treatment_var=[\"D\", \"X\"],\n    discrete_covars=[\"f1\", \"f2\"],\n    seed=42,\n    n_bootstraps=0,\n)\ndml.fit()\npd.DataFrame({\"term\": [\"D\", \"X\"], \"estimate\": dml.point_estimate})\n\n\n\n\n\n\n\n\n\nterm\nestimate\n\n\n\n\n0\nD\n0.7762\n\n\n1\nX\n0.5858",
+    "text": "DML With Discrete Controls\n\ndml_data = linear.copy()\ndml_data[\"X\"] = rng.normal(size=len(dml_data))\ndml_data[\"Y\"] = (\n    0.8 * dml_data[\"D\"]\n    + 0.6 * dml_data[\"X\"]\n    + dml_data.groupby([\"f1\", \"f2\"])[\"f1\"].transform(\"mean\") * 0.02\n    + rng.normal(0, 1, len(dml_data))\n)\ndml_con = duckdb_backend(\"dml.db\", \"data\", dml_data)\n\ndml = DBDML(\n    db_name=None,\n    connection=dml_con,\n    table_name=\"data\",\n    outcome_var=\"Y\",\n    treatment_var=[\"D\", \"X\"],\n    discrete_covars=[\"f1\", \"f2\"],\n    seed=42,\n    n_bootstraps=0,\n)\ndml.fit()\npd.DataFrame({\"term\": [\"D\", \"X\"], \"estimate\": dml.point_estimate})\n\n\n\n\n\n\n\n\nterm\nestimate\n\n\n\n\n0\nD\n0.7762\n\n\n1\nX\n0.5858",
     "crumbs": [
       "Home",
       "Executed Examples"
@@ -642,7 +642,7 @@
     "href": "examples.html#glms",
     "title": "Executed Examples",
     "section": "GLMs",
-    "text": "GLMs\n\n\nShow code\nglm = linear[[\"D\", \"f1\", \"f2\"]].copy()\neta = -1.0 + 1.1 * glm[\"D\"] + 0.04 * glm[\"f1\"] - 0.08 * glm[\"f2\"]\nglm[\"y_binary\"] = rng.binomial(1, 1 / (1 + np.exp(-eta)))\nmu = np.exp(0.2 + 0.25 * glm[\"D\"] + 0.02 * glm[\"f1\"] - 0.03 * glm[\"f2\"])\nglm[\"y_count\"] = rng.poisson(mu)\nglm_con = duckdb_backend(\"glm.db\", \"glm_data\", glm)\n\nlogit = DBLogisticRegression(\n    db_name=None,\n    connection=glm_con,\n    table_name=\"glm_data\",\n    formula=\"y_binary ~ D + f1 + f2\",\n    seed=42,\n    method=\"irls\",\n    n_bootstraps=0,\n)\nlogit.fit()\nlogit.fit_vcov()\n\npoisson = DBPoissonRegression(\n    db_name=None,\n    connection=glm_con,\n    table_name=\"glm_data\",\n    formula=\"y_count ~ D + f1 + f2\",\n    seed=42,\n    method=\"irls\",\n    n_bootstraps=0,\n)\npoisson.fit()\npoisson.fit_vcov()\n\npd.DataFrame(\n    {\n        \"term\": [\"Intercept\", \"D\", \"f1\", \"f2\"],\n        \"logit\": logit.point_estimate,\n        \"poisson\": poisson.point_estimate,\n    }\n)\n\n\n\n\n\n\n\n\n\nterm\nlogit\npoisson\n\n\n\n\n0\nIntercept\n-0.9177\n0.1877\n\n\n1\nD\n1.1555\n0.2786\n\n\n2\nf1\n0.0356\n0.0196\n\n\n3\nf2\n-0.0880\n-0.0318",
+    "text": "GLMs\n\nglm = linear[[\"D\", \"f1\", \"f2\"]].copy()\neta = -1.0 + 1.1 * glm[\"D\"] + 0.04 * glm[\"f1\"] - 0.08 * glm[\"f2\"]\nglm[\"y_binary\"] = rng.binomial(1, 1 / (1 + np.exp(-eta)))\nmu = np.exp(0.2 + 0.25 * glm[\"D\"] + 0.02 * glm[\"f1\"] - 0.03 * glm[\"f2\"])\nglm[\"y_count\"] = rng.poisson(mu)\nglm_con = duckdb_backend(\"glm.db\", \"glm_data\", glm)\n\nlogit = DBLogisticRegression(\n    db_name=None,\n    connection=glm_con,\n    table_name=\"glm_data\",\n    formula=\"y_binary ~ D + f1 + f2\",\n    seed=42,\n    method=\"irls\",\n    n_bootstraps=0,\n)\nlogit.fit()\nlogit.fit_vcov()\n\npoisson = DBPoissonRegression(\n    db_name=None,\n    connection=glm_con,\n    table_name=\"glm_data\",\n    formula=\"y_count ~ D + f1 + f2\",\n    seed=42,\n    method=\"irls\",\n    n_bootstraps=0,\n)\npoisson.fit()\npoisson.fit_vcov()\n\npd.DataFrame(\n    {\n        \"term\": [\"Intercept\", \"D\", \"f1\", \"f2\"],\n        \"logit\": logit.point_estimate,\n        \"poisson\": poisson.point_estimate,\n    }\n)\n\n\n\n\n\n\n\n\nterm\nlogit\npoisson\n\n\n\n\n0\nIntercept\n-0.9177\n0.1877\n\n\n1\nD\n1.1555\n0.2786\n\n\n2\nf1\n0.0356\n0.0196\n\n\n3\nf2\n-0.0880\n-0.0318",
     "crumbs": [
       "Home",
       "Executed Examples"
@@ -653,7 +653,7 @@
     "href": "examples.html#multinomial-labels",
     "title": "Executed Examples",
     "section": "Multinomial Labels",
-    "text": "Multinomial Labels\n\n\nShow code\nX_design = np.c_[np.ones(len(glm)), glm[[\"D\", \"f1\", \"f2\"]].to_numpy()]\nbeta = np.array([[0.2, 0.5, 0.03, -0.05], [-0.3, -0.2, 0.01, 0.06]])\neta = np.c_[X_design @ beta.T, np.zeros(len(glm))]\nprob = np.exp(eta - eta.max(axis=1, keepdims=True))\nprob = prob / prob.sum(axis=1, keepdims=True)\nlabels = np.array([\"a\", \"b\", \"c\"])\nglm[\"label\"] = [rng.choice(labels, p=p) for p in prob]\n\nglm_con.create_table(\"label_data\", glm, overwrite=True)\nmulti = DBMultinomialLogisticRegression(\n    db_name=None,\n    connection=glm_con,\n    table_name=\"label_data\",\n    formula=\"label ~ D + f1 + f2\",\n    labels=[\"a\", \"b\", \"c\"],\n    baseline=\"c\",\n    seed=42,\n    n_bootstraps=0,\n)\nmulti.fit()\nmulti.fit_vcov()\n\npd.DataFrame(\n    multi.point_estimate,\n    index=multi.labels[:-1],\n    columns=[\"Intercept\", \"D\", \"f1\", \"f2\"],\n)\n\n\n\n\n\n\n\n\n\nIntercept\nD\nf1\nf2\n\n\n\n\na\n0.2191\n0.5537\n0.0276\n-0.0673\n\n\nb\n-0.2284\n-0.0836\n0.0052\n0.0313",
+    "text": "Multinomial Labels\n\nX_design = np.c_[np.ones(len(glm)), glm[[\"D\", \"f1\", \"f2\"]].to_numpy()]\nbeta = np.array([[0.2, 0.5, 0.03, -0.05], [-0.3, -0.2, 0.01, 0.06]])\neta = np.c_[X_design @ beta.T, np.zeros(len(glm))]\nprob = np.exp(eta - eta.max(axis=1, keepdims=True))\nprob = prob / prob.sum(axis=1, keepdims=True)\nlabels = np.array([\"a\", \"b\", \"c\"])\nglm[\"label\"] = [rng.choice(labels, p=p) for p in prob]\n\nglm_con.create_table(\"label_data\", glm, overwrite=True)\nmulti = DBMultinomialLogisticRegression(\n    db_name=None,\n    connection=glm_con,\n    table_name=\"label_data\",\n    formula=\"label ~ D + f1 + f2\",\n    labels=[\"a\", \"b\", \"c\"],\n    baseline=\"c\",\n    seed=42,\n    n_bootstraps=0,\n)\nmulti.fit()\nmulti.fit_vcov()\n\npd.DataFrame(\n    multi.point_estimate,\n    index=multi.labels[:-1],\n    columns=[\"Intercept\", \"D\", \"f1\", \"f2\"],\n)\n\n\n\n\n\n\n\n\nIntercept\nD\nf1\nf2\n\n\n\n\na\n0.2191\n0.5537\n0.0276\n-0.0673\n\n\nb\n-0.2284\n-0.0836\n0.0052\n0.0313",
     "crumbs": [
       "Home",
       "Executed Examples"
@@ -664,7 +664,7 @@
     "href": "examples.html#many-label-counts",
     "title": "Executed Examples",
     "section": "Many-Label Counts",
-    "text": "Many-Label Counts\n\n\nShow code\nrows = []\ncount_labels = [f\"label_{j}\" for j in range(6)]\nfor obs_id in range(500):\n    x1 = rng.integers(0, 4)\n    x2 = rng.integers(0, 3)\n    for j, label in enumerate(count_labels):\n        mean = np.exp(-1.1 + 0.08 * j + 0.12 * x1 - 0.06 * x2)\n        rows.append((obs_id, label, rng.poisson(mean), x1, x2))\n\ncounts = pd.DataFrame(rows, columns=[\"obs_id\", \"label\", \"count\", \"x1\", \"x2\"])\ncount_con = duckdb_backend(\"counts.db\", \"token_counts\", counts)\n\npm = DBPoissonMultinomialRegression(\n    db_name=None,\n    connection=count_con,\n    table_name=\"token_counts\",\n    count_col=\"count\",\n    label_col=\"label\",\n    covars=[\"x1\", \"x2\"],\n    seed=42,\n    n_bootstraps=0,\n)\npm.fit()\npm.summary()[\"point_estimate\"].head()\n\n\n\n\n\n\n\n\n\nIntercept\nx1\nx2\n\n\n\n\nlabel_0\n-1.0286\n0.0702\n-0.0045\n\n\nlabel_1\n-1.0493\n0.1140\n-0.0824\n\n\nlabel_2\n-0.9425\n0.0935\n-0.0225\n\n\nlabel_3\n-0.9250\n0.2507\n-0.1838\n\n\nlabel_4\n-0.6342\n0.0618\n-0.1070",
+    "text": "Many-Label Counts\n\nrows = []\ncount_labels = [f\"label_{j}\" for j in range(6)]\nfor obs_id in range(500):\n    x1 = rng.integers(0, 4)\n    x2 = rng.integers(0, 3)\n    for j, label in enumerate(count_labels):\n        mean = np.exp(-1.1 + 0.08 * j + 0.12 * x1 - 0.06 * x2)\n        rows.append((obs_id, label, rng.poisson(mean), x1, x2))\n\ncounts = pd.DataFrame(rows, columns=[\"obs_id\", \"label\", \"count\", \"x1\", \"x2\"])\ncount_con = duckdb_backend(\"counts.db\", \"token_counts\", counts)\n\npm = DBPoissonMultinomialRegression(\n    db_name=None,\n    connection=count_con,\n    table_name=\"token_counts\",\n    count_col=\"count\",\n    label_col=\"label\",\n    covars=[\"x1\", \"x2\"],\n    seed=42,\n    n_bootstraps=0,\n)\npm.fit()\npm.summary()[\"point_estimate\"].head()\n\n\n\n\n\n\n\n\nIntercept\nx1\nx2\n\n\n\n\nlabel_0\n-1.0286\n0.0702\n-0.0045\n\n\nlabel_1\n-1.0493\n0.1140\n-0.0824\n\n\nlabel_2\n-0.9425\n0.0935\n-0.0225\n\n\nlabel_3\n-0.9250\n0.2507\n-0.1838\n\n\nlabel_4\n-0.6342\n0.0618\n-0.1070",
     "crumbs": [
       "Home",
       "Executed Examples"
@@ -686,7 +686,7 @@
     "href": "panel.html#mundlak",
     "title": "Panel Estimators",
     "section": "Mundlak",
-    "text": "Mundlak\nDBMundlak augments the original covariates with unit means and, optionally, time means. For a covariate \\(W_{it}\\), the two-way design contains\n\\[\nW_{it},\n\\qquad\n\\bar{W}_{i\\cdot},\n\\qquad\n\\bar{W}_{\\cdot t}.\n\\]\nThe fitted model is\n\\[\nY_{it}\n=\n\\alpha\n+ W_{it}'\\beta\n+ \\bar{W}_{i\\cdot}'\\gamma\n+ \\bar{W}_{\\cdot t}'\\delta\n+ u_{it}.\n\\]\n\n\nShow code\nfrom duckreg import DBMundlak\n\nmodel = DBMundlak(\n    db_name=\"panel.db\",\n    table_name=\"panel_data\",\n    outcome_var=\"Y\",\n    covariates=[\"D\", \"X\"],\n    unit_col=\"unit\",\n    time_col=\"time\",\n    cluster_col=\"unit\",\n    seed=42,\n    n_bootstraps=100,\n)\nmodel.fit()\nmodel.summary()\n\n\nThe right-hand side is ordered as:\n\n\nShow code\n[\"Intercept\", \"D\", \"X\", \"avg_D_unit\", \"avg_X_unit\", \"avg_D_time\", \"avg_X_time\"]",
+    "text": "Mundlak\nDBMundlak augments the original covariates with unit means and, optionally, time means. For a covariate \\(W_{it}\\), the two-way design contains\n\\[\nW_{it},\n\\qquad\n\\bar{W}_{i\\cdot},\n\\qquad\n\\bar{W}_{\\cdot t}.\n\\]\nThe fitted model is\n\\[\nY_{it}\n=\n\\alpha\n+ W_{it}'\\beta\n+ \\bar{W}_{i\\cdot}'\\gamma\n+ \\bar{W}_{\\cdot t}'\\delta\n+ u_{it}.\n\\]\n\nfrom duckreg import DBMundlak\n\nmodel = DBMundlak(\n    db_name=\"panel.db\",\n    table_name=\"panel_data\",\n    outcome_var=\"Y\",\n    covariates=[\"D\", \"X\"],\n    unit_col=\"unit\",\n    time_col=\"time\",\n    cluster_col=\"unit\",\n    seed=42,\n    n_bootstraps=100,\n)\nmodel.fit()\nmodel.summary()\n\nThe right-hand side is ordered as:\n\n[\"Intercept\", \"D\", \"X\", \"avg_D_unit\", \"avg_X_unit\", \"avg_D_time\", \"avg_X_time\"]",
     "crumbs": [
       "Home",
       "Panel Estimators"
@@ -697,7 +697,7 @@
     "href": "panel.html#double-demeaning",
     "title": "Panel Estimators",
     "section": "Double Demeaning",
-    "text": "Double Demeaning\nDBDoubleDemeaning constructs the two-way residualized treatment\n\\[\n\\ddot{W}_{it}\n=\nW_{it}\n- \\bar{W}_{i\\cdot}\n- \\bar{W}_{\\cdot t}\n+ \\bar{W}_{\\cdot\\cdot}.\n\\]\nIt then fits\n\\[\nY_{it} = \\alpha + \\tau \\ddot{W}_{it} + u_{it}\n\\]\non the compressed residualized treatment values.\n\n\nShow code\nfrom duckreg import DBDoubleDemeaning\n\nmodel = DBDoubleDemeaning(\n    db_name=\"panel.db\",\n    table_name=\"panel_data\",\n    outcome_var=\"Y\",\n    treatment_var=\"D\",\n    unit_col=\"unit\",\n    time_col=\"time\",\n    cluster_col=\"unit\",\n    seed=42,\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.summary()\n\n\nThis estimator is useful when the target is a two-way fixed-effect style coefficient on one treatment variable.",
+    "text": "Double Demeaning\nDBDoubleDemeaning constructs the two-way residualized treatment\n\\[\n\\ddot{W}_{it}\n=\nW_{it}\n- \\bar{W}_{i\\cdot}\n- \\bar{W}_{\\cdot t}\n+ \\bar{W}_{\\cdot\\cdot}.\n\\]\nIt then fits\n\\[\nY_{it} = \\alpha + \\tau \\ddot{W}_{it} + u_{it}\n\\]\non the compressed residualized treatment values.\n\nfrom duckreg import DBDoubleDemeaning\n\nmodel = DBDoubleDemeaning(\n    db_name=\"panel.db\",\n    table_name=\"panel_data\",\n    outcome_var=\"Y\",\n    treatment_var=\"D\",\n    unit_col=\"unit\",\n    time_col=\"time\",\n    cluster_col=\"unit\",\n    seed=42,\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.summary()\n\nThis estimator is useful when the target is a two-way fixed-effect style coefficient on one treatment variable.",
     "crumbs": [
       "Home",
       "Panel Estimators"
@@ -708,7 +708,7 @@
     "href": "panel.html#event-study",
     "title": "Panel Estimators",
     "section": "Event Study",
-    "text": "Event Study\nDBMundlakEventStudy builds cohort indicators, time indicators, and cohort-by-time treatment interactions. It estimates event-study profiles by cohort after compression.\n\n\nShow code\nfrom duckreg import DBMundlakEventStudy\n\nmodel = DBMundlakEventStudy(\n    db_name=\"event.db\",\n    table_name=\"panel_data\",\n    outcome_var=\"Y\",\n    treatment_col=\"D\",\n    unit_col=\"unit\",\n    time_col=\"time\",\n    cluster_col=\"unit\",\n    seed=42,\n    pre_treat_interactions=True,\n    n_bootstraps=50,\n)\nmodel.fit()\nmodel.summary()\n\n\nIf pre_treat_interactions=False, the treatment interaction columns are zeroed outside treated periods. If it is True, the design keeps a full cohort-by-time profile.",
+    "text": "Event Study\nDBMundlakEventStudy builds cohort indicators, time indicators, and cohort-by-time treatment interactions. It estimates event-study profiles by cohort after compression.\n\nfrom duckreg import DBMundlakEventStudy\n\nmodel = DBMundlakEventStudy(\n    db_name=\"event.db\",\n    table_name=\"panel_data\",\n    outcome_var=\"Y\",\n    treatment_col=\"D\",\n    unit_col=\"unit\",\n    time_col=\"time\",\n    cluster_col=\"unit\",\n    seed=42,\n    pre_treat_interactions=True,\n    n_bootstraps=50,\n)\nmodel.fit()\nmodel.summary()\n\nIf pre_treat_interactions=False, the treatment interaction columns are zeroed outside treated periods. If it is True, the design keeps a full cohort-by-time profile.",
     "crumbs": [
       "Home",
       "Panel Estimators"
@@ -730,7 +730,7 @@
     "href": "index.html",
     "title": "duckreg",
     "section": "",
-    "text": "duckreg estimates models by compressing raw rows inside a database and then solving the small numerical problem in Python. DuckDB remains the default local backend, but the current API is built around Ibis-compatible connections so the same estimator can run on DuckDB, Databricks, Postgres, Snowflake, and other Ibis SQL backends that support the generated aggregation queries.\nThe central workflow is:\nShow code\nfrom duckreg import DBRegression\n\nmodel = DBRegression(\n    db_name=\"large_dataset.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + X\",\n    cluster_col=\"cluster_id\",\n    seed=42,\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.fit_vcov()\nmodel.summary()",
+    "text": "duckreg estimates models by compressing raw rows inside a database and then solving the small numerical problem in Python. DuckDB remains the default local backend, but the current API is built around Ibis-compatible connections so the same estimator can run on DuckDB, Databricks, Postgres, Snowflake, and other Ibis SQL backends that support the generated aggregation queries.\nThe central workflow is:\nfrom duckreg import DBRegression\n\nmodel = DBRegression(\n    db_name=\"large_dataset.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + X\",\n    cluster_col=\"cluster_id\",\n    seed=42,\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.fit_vcov()\nmodel.summary()",
     "crumbs": [
       "Home",
       "duckreg"
@@ -796,7 +796,7 @@
     "href": "ibis.html#preferred-api",
     "title": "Ibis Backends",
     "section": "Preferred API",
-    "text": "Preferred API\nUse the DB* estimators for backend-neutral work:\n\n\nShow code\nimport ibis\nfrom duckreg import DBRegression\n\ncon = ibis.duckdb.connect(\"large_dataset.db\")\n\nmodel = DBRegression(\n    db_name=None,\n    connection=con,\n    table_name=\"data\",\n    formula=\"Y ~ D + X\",\n    cluster_col=\"cluster_id\",\n    seed=42,\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.fit_vcov()\nmodel.summary()\n\n\nFor local DuckDB use, db_name is still enough:\n\n\nShow code\nfrom duckreg import DBRegression\n\nmodel = DBRegression(\n    db_name=\"large_dataset.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + X\",\n    cluster_col=None,\n    seed=42,\n    n_bootstraps=0,\n)",
+    "text": "Preferred API\nUse the DB* estimators for backend-neutral work:\n\nimport ibis\nfrom duckreg import DBRegression\n\ncon = ibis.duckdb.connect(\"large_dataset.db\")\n\nmodel = DBRegression(\n    db_name=None,\n    connection=con,\n    table_name=\"data\",\n    formula=\"Y ~ D + X\",\n    cluster_col=\"cluster_id\",\n    seed=42,\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.fit_vcov()\nmodel.summary()\n\nFor local DuckDB use, db_name is still enough:\n\nfrom duckreg import DBRegression\n\nmodel = DBRegression(\n    db_name=\"large_dataset.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + X\",\n    cluster_col=None,\n    seed=42,\n    n_bootstraps=0,\n)",
     "crumbs": [
       "Home",
       "Ibis Backends"
@@ -807,7 +807,7 @@
     "href": "ibis.html#databricks",
     "title": "Ibis Backends",
     "section": "Databricks",
-    "text": "Databricks\nInstall the Databricks extra and pass a live Ibis backend:\nuv pip install \"duckreg[databricks]\"\n\n\nShow code\nimport ibis\nfrom duckreg import DBRegression\n\ncon = ibis.databricks.connect(\n    server_hostname=\"dbc-...\",\n    http_path=\"/sql/1.0/warehouses/...\",\n    access_token=\"...\",\n    catalog=\"main\",\n    schema=\"analytics\",\n)\n\nmodel = DBRegression(\n    db_name=None,\n    connection=con,\n    table_name=\"experiment_events\",\n    formula=\"Y ~ treatment + segment + period\",\n    cluster_col=\"user_id\",\n    seed=42,\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.fit_vcov()\n\n\nThe same pattern applies to any backend created by ibis.&lt;backend&gt;.connect(...).",
+    "text": "Databricks\nInstall the Databricks extra and pass a live Ibis backend:\nuv pip install \"duckreg[databricks]\"\n\nimport ibis\nfrom duckreg import DBRegression\n\ncon = ibis.databricks.connect(\n    server_hostname=\"dbc-...\",\n    http_path=\"/sql/1.0/warehouses/...\",\n    access_token=\"...\",\n    catalog=\"main\",\n    schema=\"analytics\",\n)\n\nmodel = DBRegression(\n    db_name=None,\n    connection=con,\n    table_name=\"experiment_events\",\n    formula=\"Y ~ treatment + segment + period\",\n    cluster_col=\"user_id\",\n    seed=42,\n    n_bootstraps=0,\n)\nmodel.fit()\nmodel.fit_vcov()\n\nThe same pattern applies to any backend created by ibis.&lt;backend&gt;.connect(...).",
     "crumbs": [
       "Home",
       "Ibis Backends"
@@ -840,7 +840,7 @@
     "href": "ibis.html#migration-from-duck-to-db",
     "title": "Ibis Backends",
     "section": "Migration From Duck* To DB*",
-    "text": "Migration From Duck* To DB*\nThe constructor shapes are intentionally close:\n\n\nShow code\nfrom duckreg import DuckRegression, DBRegression\n\nold = DuckRegression(\n    db_name=\"large_dataset.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + X\",\n    cluster_col=\"cluster_id\",\n    seed=42,\n    n_bootstraps=0,\n)\n\nnew = DBRegression(\n    db_name=\"large_dataset.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + X\",\n    cluster_col=\"cluster_id\",\n    seed=42,\n    n_bootstraps=0,\n)\n\n\nFor remote data, keep the estimator call the same but pass connection=con and db_name=None.",
+    "text": "Migration From Duck* To DB*\nThe constructor shapes are intentionally close:\n\nfrom duckreg import DuckRegression, DBRegression\n\nold = DuckRegression(\n    db_name=\"large_dataset.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + X\",\n    cluster_col=\"cluster_id\",\n    seed=42,\n    n_bootstraps=0,\n)\n\nnew = DBRegression(\n    db_name=\"large_dataset.db\",\n    table_name=\"data\",\n    formula=\"Y ~ D + X\",\n    cluster_col=\"cluster_id\",\n    seed=42,\n    n_bootstraps=0,\n)\n\nFor remote data, keep the estimator call the same but pass connection=con and db_name=None.",
     "crumbs": [
       "Home",
       "Ibis Backends"
@@ -851,7 +851,7 @@
     "href": "ibis.html#current-limits",
     "title": "Ibis Backends",
     "section": "Current Limits",
-    "text": "Current Limits\nDBRegression does not parse fixed effects in formulas like Y ~ D | unit + time. Use panel estimators instead:\n\n\nShow code\nfrom duckreg import DBMundlak, DBDoubleDemeaning\n\n\nGLM bootstraps are not implemented. Use fit_vcov() with n_bootstraps=0 for DBLogisticRegression, DBPoissonRegression, and DBMultinomialLogisticRegression.",
+    "text": "Current Limits\nDBRegression does not parse fixed effects in formulas like Y ~ D | unit + time. Use panel estimators instead:\n\nfrom duckreg import DBMundlak, DBDoubleDemeaning\n\nGLM bootstraps are not implemented. Use fit_vcov() with n_bootstraps=0 for DBLogisticRegression, DBPoissonRegression, and DBMultinomialLogisticRegression.",
     "crumbs": [
       "Home",
       "Ibis Backends"
@@ -873,7 +873,7 @@
     "href": "compression.html#lifecycle",
     "title": "Compression and Estimator Lifecycle",
     "section": "Lifecycle",
-    "text": "Lifecycle\nEvery estimator follows the same public lifecycle:\n\n\nShow code\nmodel.prepare_data()\nmodel.compress_data()\nmodel.point_estimate = model.estimate()\nif model.n_bootstraps &gt; 0:\n    model.vcov = model.bootstrap()\n\n\nThe user-facing call is simply:\n\n\nShow code\nmodel.fit()\nmodel.summary()\n\n\nEstimators with analytic covariance expose fit_vcov():\n\n\nShow code\nmodel.fit()\nmodel.fit_vcov()\nmodel.summary()",
+    "text": "Lifecycle\nEvery estimator follows the same public lifecycle:\n\nmodel.prepare_data()\nmodel.compress_data()\nmodel.point_estimate = model.estimate()\nif model.n_bootstraps &gt; 0:\n    model.vcov = model.bootstrap()\n\nThe user-facing call is simply:\n\nmodel.fit()\nmodel.summary()\n\nEstimators with analytic covariance expose fit_vcov():\n\nmodel.fit()\nmodel.fit_vcov()\nmodel.summary()",
     "crumbs": [
       "Home",
       "Compression and Estimator Lifecycle"
@@ -884,7 +884,7 @@
     "href": "compression.html#weighted-least-squares",
     "title": "Compression and Estimator Lifecycle",
     "section": "Weighted Least Squares",
-    "text": "Weighted Least Squares\nFor a linear model\n\\[\ny_i = x_i'\\beta + \\varepsilon_i,\n\\]\nsuppose rows are grouped by identical right-hand-side covariates. For cell \\(g\\), define\n\\[\nn_g = \\#\\{i:x_i=x_g\\},\n\\qquad\n\\bar{y}_g = \\frac{1}{n_g}\\sum_{i:x_i=x_g} y_i.\n\\]\nThe least-squares normal equations become\n\\[\n\\sum_i x_i(y_i - x_i'\\beta)\n=\n\\sum_g n_g x_g(\\bar{y}_g - x_g'\\beta).\n\\]\nSo the full-data OLS coefficient is exactly the weighted least-squares coefficient on compressed cells:\n\\[\n\\hat{\\beta}\n=\n\\left(\\sum_g n_g x_gx_g'\\right)^{-1}\n\\left(\\sum_g n_g x_g\\bar{y}_g\\right).\n\\]\nThe shared numerical helper applies frequency weights by premultiplying by \\(\\sqrt{n_g}\\):\n\n\nShow code\ndef wls(X, y, n):\n    weights = np.sqrt(n).reshape(-1, 1)\n    return np.linalg.lstsq(X * weights, y * weights, rcond=None)[0]",
+    "text": "Weighted Least Squares\nFor a linear model\n\\[\ny_i = x_i'\\beta + \\varepsilon_i,\n\\]\nsuppose rows are grouped by identical right-hand-side covariates. For cell \\(g\\), define\n\\[\nn_g = \\#\\{i:x_i=x_g\\},\n\\qquad\n\\bar{y}_g = \\frac{1}{n_g}\\sum_{i:x_i=x_g} y_i.\n\\]\nThe least-squares normal equations become\n\\[\n\\sum_i x_i(y_i - x_i'\\beta)\n=\n\\sum_g n_g x_g(\\bar{y}_g - x_g'\\beta).\n\\]\nSo the full-data OLS coefficient is exactly the weighted least-squares coefficient on compressed cells:\n\\[\n\\hat{\\beta}\n=\n\\left(\\sum_g n_g x_gx_g'\\right)^{-1}\n\\left(\\sum_g n_g x_g\\bar{y}_g\\right).\n\\]\nThe shared numerical helper applies frequency weights by premultiplying by \\(\\sqrt{n_g}\\):\n\ndef wls(X, y, n):\n    weights = np.sqrt(n).reshape(-1, 1)\n    return np.linalg.lstsq(X * weights, y * weights, rcond=None)[0]",
     "crumbs": [
       "Home",
       "Compression and Estimator Lifecycle"

@@ -4974,9 +4974,7 @@ border-radius: 6px;
 <section id="preferred-api" class="level2">
 <h2 class="anchored" data-anchor-id="preferred-api">Preferred API</h2>
 <p>Use the <code>DB*</code> estimators for backend-neutral work:</p>
-<div id="8ec50cc0" class="cell" data-execution_count="1">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="0c150a23" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> ibis</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBRegression</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -4994,12 +4992,9 @@ border-radius: 6px;
 <span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
 <span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>model.fit_vcov()</span>
 <span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>For local DuckDB use, <code>db_name</code> is still enough:</p>
-<div id="ff0d8acf" class="cell" data-execution_count="2">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="ad1e275e" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBRegression</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DBRegression(</span>
@@ -5010,16 +5005,13 @@ border-radius: 6px;
 <span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
 <span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 </section>
 <section id="databricks" class="level2">
 <h2 class="anchored" data-anchor-id="databricks">Databricks</h2>
 <p>Install the Databricks extra and pass a live Ibis backend:</p>
 <pre class="{bash}"><code>uv pip install &quot;duckreg[databricks]&quot;</code></pre>
-<div id="2d933bb6" class="cell" data-execution_count="3">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="d1a3df65" class="cell" data-execution_count="3">
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> ibis</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBRegression</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -5042,7 +5034,6 @@ border-radius: 6px;
 <span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
 <span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>model.fit_vcov()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>The same pattern applies to any backend created by <code>ibis.&lt;backend&gt;.connect(...)</code>.</p>
 </section>
@@ -5131,9 +5122,7 @@ border-radius: 6px;
 <section id="migration-from-duck-to-db" class="level2">
 <h2 class="anchored" data-anchor-id="migration-from-duck-to-db">Migration From <code>Duck*</code> To <code>DB*</code></h2>
 <p>The constructor shapes are intentionally close:</p>
-<div id="58a45a17" class="cell" data-execution_count="4">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="669075c1" class="cell" data-execution_count="4">
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DuckRegression, DBRegression</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>old <span class="op">=</span> DuckRegression(</span>
@@ -5153,18 +5142,14 @@ border-radius: 6px;
 <span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
 <span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
 <span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>For remote data, keep the estimator call the same but pass <code>connection=con</code> and <code>db_name=None</code>.</p>
 </section>
 <section id="current-limits" class="level2">
 <h2 class="anchored" data-anchor-id="current-limits">Current Limits</h2>
 <p><code>DBRegression</code> does not parse fixed effects in formulas like <code>Y ~ D | unit + time</code>. Use panel estimators instead:</p>
-<div id="936eeeb4" class="cell" data-execution_count="5">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="2dc10573" class="cell" data-execution_count="5">
 <div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBMundlak, DBDoubleDemeaning</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>GLM bootstraps are not implemented. Use <code>fit_vcov()</code> with <code>n_bootstraps=0</code> for <code>DBLogisticRegression</code>, <code>DBPoissonRegression</code>, and <code>DBMultinomialLogisticRegression</code>.</p>
 

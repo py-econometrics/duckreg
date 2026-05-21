@@ -5112,9 +5112,7 @@ border-radius: 6px;
 <p><code>DuckRidge</code> adds ridge regression to the compressed linear-regression workflow. It supports a single penalty, a full lambda path, and cross-validation over compressed folds.</p>
 <section id="constructor" class="level2">
 <h2 class="anchored" data-anchor-id="constructor">Constructor</h2>
-<div id="57b0e019" class="cell" data-execution_count="1">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="84f0a799" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>DuckRidge(</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    db_name: <span class="bu">str</span>,</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    table_name: <span class="bu">str</span>,</span>
@@ -5126,7 +5124,6 @@ border-radius: 6px;
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    rowid_col: <span class="bu">str</span> <span class="op">=</span> <span class="st">&quot;rowid&quot;</span>,</span>
 <span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    fitter: <span class="bu">str</span> <span class="op">=</span> <span class="st">&quot;ridge&quot;</span>,</span>
 <span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p><code>DuckRidge</code> currently supports one outcome variable and does not support formula fixed effects.</p>
 </section>
@@ -5166,9 +5163,7 @@ W^{1/2}\bar{y} \\
 </section>
 <section id="single-lambda" class="level2">
 <h2 class="anchored" data-anchor-id="single-lambda">Single Lambda</h2>
-<div id="b1b0fad3" class="cell" data-execution_count="2">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="8f04be1f" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DuckRidge</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -5182,14 +5177,11 @@ W^{1/2}\bar{y} \\
 <span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>model.fit(lambda_selection<span class="op">=</span><span class="st">&quot;single&quot;</span>)</span>
 <span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 </section>
 <section id="lambda-path" class="level2">
 <h2 class="anchored" data-anchor-id="lambda-path">Lambda Path</h2>
-<div id="aac28abc" class="cell" data-execution_count="3">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="e511b051" class="cell" data-execution_count="3">
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DuckRidge(</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;ridge.db&quot;</span>,</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;data&quot;</span>,</span>
@@ -5200,15 +5192,12 @@ W^{1/2}\bar{y} \\
 <span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>model.fit(lambda_selection<span class="op">=</span><span class="st">&quot;path&quot;</span>)</span>
 <span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>model.summary()[<span class="st">&quot;lambda_path_coefs&quot;</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 </section>
 <section id="cross-validation" class="level2">
 <h2 class="anchored" data-anchor-id="cross-validation">Cross-Validation</h2>
 <p>When <code>cv_folds &gt; 1</code>, the estimator creates fold assignments, includes <code>fold_id</code> in the compression, and evaluates validation weighted MSE on compressed test cells.</p>
-<div id="70bd6bb1" class="cell" data-execution_count="4">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="fbfb1477" class="cell" data-execution_count="4">
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DuckRidge(</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="st">&quot;ridge.db&quot;</span>,</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;data&quot;</span>,</span>
@@ -5219,7 +5208,6 @@ W^{1/2}\bar{y} \\
 <span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>model.fit(lambda_selection<span class="op">=</span><span class="st">&quot;cv&quot;</span>)</span>
 <span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>model.best_lambda</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 </section>
 <section id="current-limits" class="level2">

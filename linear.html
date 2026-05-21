@@ -5111,9 +5111,7 @@ border-radius: 6px;
 <p><code>DBRegression</code> is the preferred linear-regression interface. It compresses ordinary least squares by grouping on the right-hand-side variables, then solves weighted least squares on the compressed cells.</p>
 <section id="constructor" class="level2">
 <h2 class="anchored" data-anchor-id="constructor">Constructor</h2>
-<div id="224ac607" class="cell" data-execution_count="1">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="8f518b0e" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>DBRegression(</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    db_name: <span class="bu">str</span> <span class="op">|</span> <span class="va">None</span>,</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    table_name: <span class="bu">str</span>,</span>
@@ -5125,29 +5123,20 @@ border-radius: 6px;
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    fitter: <span class="bu">str</span> <span class="op">=</span> <span class="st">&quot;numpy&quot;</span>,</span>
 <span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    connection<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>The formula is a standard additive linear formula:</p>
-<div id="e5870c8e" class="cell" data-execution_count="2">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="80058fcd" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>formula <span class="op">=</span> <span class="st">&quot;Y ~ D + f1 + f2&quot;</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>Multiple outcomes are supported:</p>
-<div id="95cbc88e" class="cell" data-execution_count="3">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="b5ac6005" class="cell" data-execution_count="3">
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>formula <span class="op">=</span> <span class="st">&quot;Y + Y2 ~ D + f1 + f2&quot;</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>Fixed-effect separators such as <code>Y ~ D | unit + time</code> are intentionally rejected. Use <code>DBMundlak</code>, <code>DBDoubleDemeaning</code>, or <code>DBMundlakEventStudy</code> for those designs.</p>
 </section>
 <section id="basic-fit" class="level2">
 <h2 class="anchored" data-anchor-id="basic-fit">Basic Fit</h2>
-<div id="f0178610" class="cell" data-execution_count="4">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="604a6b12" class="cell" data-execution_count="4">
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBRegression</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DBRegression(</span>
@@ -5161,14 +5150,10 @@ border-radius: 6px;
 <span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
 <span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>model.fit_vcov()</span>
 <span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>The returned point estimate is ordered as intercept followed by the RHS variables:</p>
-<div id="5de50949" class="cell" data-execution_count="5">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="f6bef51c" class="cell" data-execution_count="5">
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>[<span class="st">&quot;Intercept&quot;</span>, <span class="st">&quot;D&quot;</span>, <span class="st">&quot;f1&quot;</span>, <span class="st">&quot;f2&quot;</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 </section>
 <section id="analytic-hc1-covariance" class="level2">
@@ -5222,11 +5207,8 @@ n_g \hat{y}_g^2
 <section id="backwards-compatibility" class="level2">
 <h2 class="anchored" data-anchor-id="backwards-compatibility">Backwards Compatibility</h2>
 <p><code>DuckRegression</code> has the same constructor shape and remains exported:</p>
-<div id="2e30c40d" class="cell" data-execution_count="6">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="a7b76528" class="cell" data-execution_count="6">
 <div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DuckRegression</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>For new code, prefer <code>DBRegression</code> unless you specifically need to preserve an older <code>DuckRegression</code> workflow.</p>
 

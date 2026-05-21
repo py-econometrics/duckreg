@@ -5112,32 +5112,23 @@ border-radius: 6px;
 <section id="lifecycle" class="level2">
 <h2 class="anchored" data-anchor-id="lifecycle">Lifecycle</h2>
 <p>Every estimator follows the same public lifecycle:</p>
-<div id="01612b48" class="cell" data-execution_count="1">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="2b096b43" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>model.prepare_data()</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>model.compress_data()</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>model.point_estimate <span class="op">=</span> model.estimate()</span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> model.n_bootstraps <span class="op">&gt;</span> <span class="dv">0</span>:</span>
 <span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    model.vcov <span class="op">=</span> model.bootstrap()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>The user-facing call is simply:</p>
-<div id="d7b7c1be" class="cell" data-execution_count="2">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="c7857204" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>Estimators with analytic covariance expose <code>fit_vcov()</code>:</p>
-<div id="8a66f1ed" class="cell" data-execution_count="3">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="f5b007cb" class="cell" data-execution_count="3">
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>model.fit()</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>model.fit_vcov()</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 </section>
 <section id="weighted-least-squares" class="level2">
@@ -5166,13 +5157,10 @@ n_g = \#\{i:x_i=x_g\},
 \left(\sum_g n_g x_g\bar{y}_g\right).
 \]</span></p>
 <p>The shared numerical helper applies frequency weights by premultiplying by <span class="math inline">\(\sqrt{n_g}\)</span>:</p>
-<div id="76173045" class="cell" data-execution_count="4">
-<details class="code-fold">
-<summary>Show code</summary>
+<div id="78603b9c" class="cell" data-execution_count="4">
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> wls(X, y, n):</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    weights <span class="op">=</span> np.sqrt(n).reshape(<span class="op">-</span><span class="dv">1</span>, <span class="dv">1</span>)</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.linalg.lstsq(X <span class="op">*</span> weights, y <span class="op">*</span> weights, rcond<span class="op">=</span><span class="va">None</span>)[<span class="dv">0</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 </section>
 <section id="sufficient-statistics" class="level2">

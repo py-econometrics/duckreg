@@ -4982,7 +4982,7 @@ border-radius: 6px;
 <h2 class="anchored" data-anchor-id="setup">Setup</h2>
 <div id="setup" class="cell" data-execution_count="1">
 <details class="code-fold">
-<summary>Show code</summary>
+<summary>Code</summary>
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> tempfile</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -5017,8 +5017,6 @@ border-radius: 6px;
 <section id="linear-regression" class="level2">
 <h2 class="anchored" data-anchor-id="linear-regression">Linear Regression</h2>
 <div id="cell-linear-data" class="cell" data-execution_count="2">
-<details class="code-fold">
-<summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="dv">8_000</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>linear <span class="op">=</span> pd.DataFrame(</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    {</span>
@@ -5058,7 +5056,6 @@ border-radius: 6px;
 <span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;std_error&quot;</span>: ols.summary()[<span class="st">&quot;standard_error&quot;</span>],</span>
 <span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>    }</span>
 <span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 <div id="linear-data" class="cell-output cell-output-display" data-execution_count="2">
 <div>
 
@@ -5105,8 +5102,6 @@ border-radius: 6px;
 </div>
 <p>Compression reduces 8,000 raw rows to one row per unique covariate cell.</p>
 <div id="cell-linear-compression" class="cell" data-execution_count="3">
-<details class="code-fold">
-<summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>pd.DataFrame(</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    {</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;raw_rows&quot;</span>: [<span class="bu">len</span>(linear)],</span>
@@ -5114,7 +5109,6 @@ border-radius: 6px;
 <span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;compression_ratio&quot;</span>: [<span class="bu">len</span>(linear) <span class="op">/</span> <span class="bu">len</span>(ols.df_compressed)],</span>
 <span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    }</span>
 <span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 <div id="linear-compression" class="cell-output cell-output-display" data-execution_count="3">
 <div>
 
@@ -5145,8 +5139,6 @@ border-radius: 6px;
 <section id="panel-mundlak" class="level2">
 <h2 class="anchored" data-anchor-id="panel-mundlak">Panel Mundlak</h2>
 <div id="cell-panel-example" class="cell" data-execution_count="4">
-<details class="code-fold">
-<summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>units, periods <span class="op">=</span> <span class="dv">160</span>, <span class="dv">6</span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>unit <span class="op">=</span> np.repeat(np.arange(units), periods)</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>time <span class="op">=</span> np.tile(np.arange(periods), units)</span>
@@ -5176,7 +5168,6 @@ border-radius: 6px;
 <span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>[<span class="st">&quot;Intercept&quot;</span>] <span class="op">+</span> mundlak.rhs,</span>
 <span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span>[<span class="st">&quot;estimate&quot;</span>],</span>
 <span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>).head(<span class="dv">8</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 <div id="panel-example" class="cell-output cell-output-display" data-execution_count="4">
 <div>
 
@@ -5227,8 +5218,6 @@ border-radius: 6px;
 <section id="double-demeaning" class="level2">
 <h2 class="anchored" data-anchor-id="double-demeaning">Double Demeaning</h2>
 <div id="cell-double-demeaning" class="cell" data-execution_count="5">
-<details class="code-fold">
-<summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>twfe <span class="op">=</span> DBDoubleDemeaning(</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="va">None</span>,</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    connection<span class="op">=</span>panel_con,</span>
@@ -5247,7 +5236,6 @@ border-radius: 6px;
 <span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>[<span class="st">&quot;Intercept&quot;</span>, <span class="st">&quot;ddot_D&quot;</span>],</span>
 <span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span>[<span class="st">&quot;estimate&quot;</span>],</span>
 <span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 <div id="double-demeaning" class="cell-output cell-output-display" data-execution_count="5">
 <div>
 
@@ -5278,8 +5266,6 @@ border-radius: 6px;
 <section id="dml-with-discrete-controls" class="level2">
 <h2 class="anchored" data-anchor-id="dml-with-discrete-controls">DML With Discrete Controls</h2>
 <div id="cell-dml-example" class="cell" data-execution_count="6">
-<details class="code-fold">
-<summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>dml_data <span class="op">=</span> linear.copy()</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>dml_data[<span class="st">&quot;X&quot;</span>] <span class="op">=</span> rng.normal(size<span class="op">=</span><span class="bu">len</span>(dml_data))</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>dml_data[<span class="st">&quot;Y&quot;</span>] <span class="op">=</span> (</span>
@@ -5302,7 +5288,6 @@ border-radius: 6px;
 <span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>dml.fit()</span>
 <span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>pd.DataFrame({<span class="st">&quot;term&quot;</span>: [<span class="st">&quot;D&quot;</span>, <span class="st">&quot;X&quot;</span>], <span class="st">&quot;estimate&quot;</span>: dml.point_estimate})</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 <div id="dml-example" class="cell-output cell-output-display" data-execution_count="6">
 <div>
 
@@ -5336,8 +5321,6 @@ border-radius: 6px;
 <section id="glms" class="level2">
 <h2 class="anchored" data-anchor-id="glms">GLMs</h2>
 <div id="cell-glm-example" class="cell" data-execution_count="7">
-<details class="code-fold">
-<summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>glm <span class="op">=</span> linear[[<span class="st">&quot;D&quot;</span>, <span class="st">&quot;f1&quot;</span>, <span class="st">&quot;f2&quot;</span>]].copy()</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>eta <span class="op">=</span> <span class="op">-</span><span class="fl">1.0</span> <span class="op">+</span> <span class="fl">1.1</span> <span class="op">*</span> glm[<span class="st">&quot;D&quot;</span>] <span class="op">+</span> <span class="fl">0.04</span> <span class="op">*</span> glm[<span class="st">&quot;f1&quot;</span>] <span class="op">-</span> <span class="fl">0.08</span> <span class="op">*</span> glm[<span class="st">&quot;f2&quot;</span>]</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>glm[<span class="st">&quot;y_binary&quot;</span>] <span class="op">=</span> rng.binomial(<span class="dv">1</span>, <span class="dv">1</span> <span class="op">/</span> (<span class="dv">1</span> <span class="op">+</span> np.exp(<span class="op">-</span>eta)))</span>
@@ -5376,7 +5359,6 @@ border-radius: 6px;
 <span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;poisson&quot;</span>: poisson.point_estimate,</span>
 <span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>    }</span>
 <span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 <div id="glm-example" class="cell-output cell-output-display" data-execution_count="7">
 <div>
 
@@ -5425,8 +5407,6 @@ border-radius: 6px;
 <section id="multinomial-labels" class="level2">
 <h2 class="anchored" data-anchor-id="multinomial-labels">Multinomial Labels</h2>
 <div id="cell-multinomial-example" class="cell" data-execution_count="8">
-<details class="code-fold">
-<summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>X_design <span class="op">=</span> np.c_[np.ones(<span class="bu">len</span>(glm)), glm[[<span class="st">&quot;D&quot;</span>, <span class="st">&quot;f1&quot;</span>, <span class="st">&quot;f2&quot;</span>]].to_numpy()]</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>beta <span class="op">=</span> np.array([[<span class="fl">0.2</span>, <span class="fl">0.5</span>, <span class="fl">0.03</span>, <span class="op">-</span><span class="fl">0.05</span>], [<span class="op">-</span><span class="fl">0.3</span>, <span class="op">-</span><span class="fl">0.2</span>, <span class="fl">0.01</span>, <span class="fl">0.06</span>]])</span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>eta <span class="op">=</span> np.c_[X_design <span class="op">@</span> beta.T, np.zeros(<span class="bu">len</span>(glm))]</span>
@@ -5454,7 +5434,6 @@ border-radius: 6px;
 <span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>multi.labels[:<span class="op">-</span><span class="dv">1</span>],</span>
 <span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a>    columns<span class="op">=</span>[<span class="st">&quot;Intercept&quot;</span>, <span class="st">&quot;D&quot;</span>, <span class="st">&quot;f1&quot;</span>, <span class="st">&quot;f2&quot;</span>],</span>
 <span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 <div id="multinomial-example" class="cell-output cell-output-display" data-execution_count="8">
 <div>
 
@@ -5494,8 +5473,6 @@ border-radius: 6px;
 <section id="many-label-counts" class="level2">
 <h2 class="anchored" data-anchor-id="many-label-counts">Many-Label Counts</h2>
 <div id="cell-poisson-multinomial-example" class="cell" data-execution_count="9">
-<details class="code-fold">
-<summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>rows <span class="op">=</span> []</span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>count_labels <span class="op">=</span> [<span class="ss">f&quot;label_</span><span class="sc">{</span>j<span class="sc">}</span><span class="ss">&quot;</span> <span class="cf">for</span> j <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">6</span>)]</span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> obs_id <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">500</span>):</span>
@@ -5520,7 +5497,6 @@ border-radius: 6px;
 <span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a>pm.fit()</span>
 <span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a>pm.summary()[<span class="st">&quot;point_estimate&quot;</span>].head()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 <div id="poisson-multinomial-example" class="cell-output cell-output-display" data-execution_count="9">
 <div>
 

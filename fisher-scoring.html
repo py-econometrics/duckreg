@@ -5125,11 +5125,8 @@ I(\beta^{(t)})^{-1} U(\beta^{(t)}),
 \]</span></p>
 <p>where <span class="math inline">\(U(\beta)\)</span> is the score and <span class="math inline">\(I(\beta)\)</span> is the expected Fisher information. In the code this appears as</p>
 <div id="code-shared-step" class="cell" data-execution_count="1">
-<details class="code-fold">
-<summary>Show implementation sketch</summary>
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>step <span class="op">=</span> solve(info, score)</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>beta_new <span class="op">=</span> beta <span class="op">+</span> step</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>The function <code>_solve_step</code> solves this linear system, with a small ridge fallback if the information matrix is singular. The logistic, Poisson, and multinomial routines differ only in how they compute <code>score</code> and <code>info</code>.</p>
 </section>
@@ -5189,14 +5186,11 @@ I(\beta)
 \]</span></p>
 <p>The implementation is the matrix version of these equations:</p>
 <div id="code-logit-score-info" class="cell" data-execution_count="2">
-<details class="code-fold">
-<summary>Show implementation sketch</summary>
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>p <span class="op">=</span> sigmoid(X <span class="op">@</span> beta)</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>score <span class="op">=</span> X.T <span class="op">@</span> (successes <span class="op">-</span> totals <span class="op">*</span> p)</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>info <span class="op">=</span> X.T <span class="op">@</span> ((totals <span class="op">*</span> p <span class="op">*</span> (<span class="dv">1</span> <span class="op">-</span> p))[:, <span class="va">None</span>] <span class="op">*</span> X)</span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>step <span class="op">=</span> solve(info, score)</span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>beta <span class="op">=</span> beta <span class="op">+</span> step</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>The IRLS wording is slightly hidden here because the code does not explicitly form the working response <span class="math inline">\(z\)</span>. Algebraically, this is the same Fisher scoring step as weighted least squares on the IRLS working outcome.</p>
 </section>
@@ -5231,14 +5225,11 @@ I(\beta)
 \]</span></p>
 <p>The code is the direct matrix implementation:</p>
 <div id="code-poisson-score-info" class="cell" data-execution_count="3">
-<details class="code-fold">
-<summary>Show implementation sketch</summary>
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>mu <span class="op">=</span> exp(X <span class="op">@</span> beta)</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>score <span class="op">=</span> X.T <span class="op">@</span> (y_sum <span class="op">-</span> totals <span class="op">*</span> mu)</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>info <span class="op">=</span> X.T <span class="op">@</span> ((totals <span class="op">*</span> mu)[:, <span class="va">None</span>] <span class="op">*</span> X)</span>
 <span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>step <span class="op">=</span> solve(info, score)</span>
 <span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>beta <span class="op">=</span> beta <span class="op">+</span> step</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 </section>
 <section id="one-step-fisher-scoring" class="level2">
@@ -5253,12 +5244,9 @@ I_N(\hat{\beta}_0)^{-1} U_N(\hat{\beta}_0).
 \]</span></p>
 <p>Here <span class="math inline">\(\hat{\beta}_0\)</span> is the pilot fit and <span class="math inline">\(U_N\)</span>, <span class="math inline">\(I_N\)</span> are computed on the compressed full data. This is a large-data shortcut: the expensive full-data pass only computes sufficient statistics, score, and information once.</p>
 <div id="code-one-step" class="cell" data-execution_count="4">
-<details class="code-fold">
-<summary>Show implementation sketch</summary>
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>beta0 <span class="op">=</span> fit_pilot_model(reservoir_sample)</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>score, info <span class="op">=</span> score_info(beta0, compressed_full_data)</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>beta_one_step <span class="op">=</span> beta0 <span class="op">+</span> solve(info, score)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>The exact and one-step estimators use the same score and information formulas. They differ in how many full-data Fisher scoring iterations they take.</p>
 </section>
@@ -5325,8 +5313,6 @@ x_g x_g&#39;.
 <p>This cross-label block structure is the main computational issue. The information matrix has dimension <span class="math inline">\(((K - 1)p) \times ((K - 1)p)\)</span>, where <span class="math inline">\(p\)</span> is the number of columns in <span class="math inline">\(X\)</span>. It is not label-separable because every softmax probability shares the same denominator.</p>
 <p>The implementation follows that block formula:</p>
 <div id="code-multinomial-block-info" class="cell" data-execution_count="5">
-<details class="code-fold">
-<summary>Show implementation sketch</summary>
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>eta <span class="op">=</span> X <span class="op">@</span> beta.T</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>probs <span class="op">=</span> softmax(column_bind(eta, zeros))</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -5341,7 +5327,6 @@ x_g x_g&#39;.
 <span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>step <span class="op">=</span> solve(info, vectorize(score))</span>
 <span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>beta <span class="op">=</span> beta <span class="op">+</span> unvectorize(step)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>This is the exact compressed multinomial Fisher scoring routine. Compression reduces the number of rows in the score and information sums, but the Hessian still couples labels.</p>
 </section>
@@ -5380,14 +5365,11 @@ I_j(\gamma_j)
 \]</span></p>
 <p>So the many-label path solves <span class="math inline">\(K\)</span> independent <span class="math inline">\(p \times p\)</span> systems rather than one coupled <span class="math inline">\(((K - 1)p) \times ((K - 1)p)\)</span> system:</p>
 <div id="code-many-label-poisson" class="cell" data-execution_count="6">
-<details class="code-fold">
-<summary>Show implementation sketch</summary>
 <div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>coefs <span class="op">=</span> []</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> label <span class="kw">in</span> labels:</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    X_label, y_sum_label, rows_label <span class="op">=</span> collect_label_data(label)</span>
 <span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    gamma_label <span class="op">=</span> poisson_irls(X_label, y_sum_label, rows_label)</span>
 <span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    coefs.append(gamma_label)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 <p>This is the distributed part of the design. Each label-wise Poisson fit can be run independently after the database has produced compressed <code>(label, covariates)</code> sufficient statistics.</p>
 </section>

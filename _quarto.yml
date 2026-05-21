@@ -52,8 +52,7 @@ format:
     theme: cosmo
     css: styles.css
     toc: true
-    code-fold: true
-    code-summary: "Show code"
+    code-fold: false
     embed-resources: true
     page-layout: full
 

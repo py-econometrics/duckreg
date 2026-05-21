@@ -4,8 +4,7 @@ format:
   html:
     embed-resources: true
     toc: true
-    code-fold: true
-    code-summary: "Show implementation sketch"
+    code-fold: false
     page-layout: full
 execute:
   echo: true

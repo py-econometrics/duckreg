@@ -74,7 +74,6 @@ pd.DataFrame(
 
 ```{python}
 #| label: perf-duckreg
-#| code-fold: true
 def run_duckreg():
     model = DBRegression(
         db_name=None,
@@ -108,7 +107,6 @@ This baseline materializes the whole design matrix in Python and runs ordinary l
 
 ```{python}
 #| label: perf-numpy
-#| code-fold: true
 def run_numpy_ols():
     X = np.c_[np.ones(len(df)), df[["D", "f1", "f2"]].to_numpy()]
     y = df["Y"].to_numpy()
@@ -123,7 +121,6 @@ If `pyfixest` is installed, the render also runs a package-level OLS baseline.
 
 ```{python}
 #| label: perf-pyfixest
-#| code-fold: true
 if importlib.util.find_spec("pyfixest") is not None:
     import pyfixest as pf
 

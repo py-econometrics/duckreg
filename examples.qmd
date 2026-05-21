@@ -48,7 +48,6 @@ def duckdb_backend(name, table, df):
 
 ```{python}
 #| label: linear-data
-#| code-fold: true
 n = 8_000
 linear = pd.DataFrame(
     {
@@ -107,7 +106,6 @@ pd.DataFrame(
 
 ```{python}
 #| label: panel-example
-#| code-fold: true
 units, periods = 160, 6
 unit = np.repeat(np.arange(units), periods)
 time = np.tile(np.arange(periods), units)
@@ -167,7 +165,6 @@ pd.DataFrame(
 
 ```{python}
 #| label: dml-example
-#| code-fold: true
 dml_data = linear.copy()
 dml_data["X"] = rng.normal(size=len(dml_data))
 dml_data["Y"] = (
@@ -196,7 +193,6 @@ pd.DataFrame({"term": ["D", "X"], "estimate": dml.point_estimate})
 
 ```{python}
 #| label: glm-example
-#| code-fold: true
 glm = linear[["D", "f1", "f2"]].copy()
 eta = -1.0 + 1.1 * glm["D"] + 0.04 * glm["f1"] - 0.08 * glm["f2"]
 glm["y_binary"] = rng.binomial(1, 1 / (1 + np.exp(-eta)))
@@ -241,7 +237,6 @@ pd.DataFrame(
 
 ```{python}
 #| label: multinomial-example
-#| code-fold: true
 X_design = np.c_[np.ones(len(glm)), glm[["D", "f1", "f2"]].to_numpy()]
 beta = np.array([[0.2, 0.5, 0.03, -0.05], [-0.3, -0.2, 0.01, 0.06]])
 eta = np.c_[X_design @ beta.T, np.zeros(len(glm))]
@@ -275,7 +270,6 @@ pd.DataFrame(
 
 ```{python}
 #| label: poisson-multinomial-example
-#| code-fold: true
 rows = []
 count_labels = [f"label_{j}" for j in range(6)]
 for obs_id in range(500):

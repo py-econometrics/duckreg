@@ -4983,7 +4983,7 @@ border-radius: 6px;
 <h2 class="anchored" data-anchor-id="setup">Setup</h2>
 <div id="perf-setup" class="cell" data-execution_count="1">
 <details class="code-fold">
-<summary>Show code</summary>
+<summary>Code</summary>
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> importlib.util</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> tempfile</span>
@@ -5011,7 +5011,7 @@ border-radius: 6px;
 <p>The benchmark uses 250,000 rows, but only 2,000 unique right-hand-side cells.</p>
 <div id="cell-perf-data" class="cell" data-execution_count="2">
 <details class="code-fold">
-<summary>Show code</summary>
+<summary>Code</summary>
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>n <span class="op">=</span> <span class="dv">250_000</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> pd.DataFrame(</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    {</span>
@@ -5067,8 +5067,6 @@ border-radius: 6px;
 <section id="compressed-regression" class="level2">
 <h2 class="anchored" data-anchor-id="compressed-regression">Compressed Regression</h2>
 <div id="cell-perf-duckreg" class="cell" data-execution_count="3">
-<details class="code-fold">
-<summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> run_duckreg():</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    model <span class="op">=</span> DBRegression(</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>        db_name<span class="op">=</span><span class="va">None</span>,</span>
@@ -5094,7 +5092,6 @@ border-radius: 6px;
 <span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;std_error&quot;</span>: duck_se,</span>
 <span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>    }</span>
 <span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 <div id="perf-duckreg" class="cell-output cell-output-display" data-execution_count="3">
 <div>
 
@@ -5144,23 +5141,18 @@ border-radius: 6px;
 <h2 class="anchored" data-anchor-id="full-numpy-baseline">Full NumPy Baseline</h2>
 <p>This baseline materializes the whole design matrix in Python and runs ordinary least squares directly. It is not a full replacement for a statistical package, but it shows the cost of solving on all rows instead of compressed cells.</p>
 <div id="perf-numpy" class="cell" data-execution_count="4">
-<details class="code-fold">
-<summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> run_numpy_ols():</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    X <span class="op">=</span> np.c_[np.ones(<span class="bu">len</span>(df)), df[[<span class="st">&quot;D&quot;</span>, <span class="st">&quot;f1&quot;</span>, <span class="st">&quot;f2&quot;</span>]].to_numpy()]</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    y <span class="op">=</span> df[<span class="st">&quot;Y&quot;</span>].to_numpy()</span>
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.linalg.lstsq(X, y, rcond<span class="op">=</span><span class="va">None</span>)[<span class="dv">0</span>]</span>
 <span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>numpy_label, numpy_time, numpy_estimate <span class="op">=</span> elapsed(<span class="st">&quot;NumPy full OLS&quot;</span>, run_numpy_ols)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 </section>
 <section id="optional-pyfixest-baseline" class="level2">
 <h2 class="anchored" data-anchor-id="optional-pyfixest-baseline">Optional pyfixest Baseline</h2>
 <p>If <code>pyfixest</code> is installed, the render also runs a package-level OLS baseline.</p>
 <div id="perf-pyfixest" class="cell" data-execution_count="5">
-<details class="code-fold">
-<summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> importlib.util.find_spec(<span class="st">&quot;pyfixest&quot;</span>) <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="im">import</span> pyfixest <span class="im">as</span> pf</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -5171,14 +5163,11 @@ border-radius: 6px;
 <span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    pyfixest_estimate <span class="op">=</span> pyfixest_fit.coef().reindex([<span class="st">&quot;Intercept&quot;</span>, <span class="st">&quot;D&quot;</span>, <span class="st">&quot;f1&quot;</span>, <span class="st">&quot;f2&quot;</span>]).to_numpy()</span>
 <span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="cf">else</span>:</span>
 <span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    pyfixest_label, pyfixest_time, pyfixest_estimate <span class="op">=</span> <span class="st">&quot;pyfixest&quot;</span>, np.nan, <span class="va">None</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 </div>
 </section>
 <section id="timing-summary" class="level2">
 <h2 class="anchored" data-anchor-id="timing-summary">Timing Summary</h2>
 <div id="cell-perf-summary" class="cell" data-execution_count="6">
-<details class="code-fold">
-<summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>summary <span class="op">=</span> pd.DataFrame(</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    {</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;method&quot;</span>: [duckreg_label, numpy_label, pyfixest_label],</span>
@@ -5188,7 +5177,6 @@ border-radius: 6px;
 <span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>summary[<span class="st">&quot;relative_to_duckreg&quot;</span>] <span class="op">=</span> summary[<span class="st">&quot;seconds&quot;</span>] <span class="op">/</span> duckreg_time</span>
 <span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>summary</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 <div id="perf-summary" class="cell-output cell-output-display" data-execution_count="6">
 <div>
 
@@ -5207,23 +5195,23 @@ border-radius: 6px;
 <tr class="odd">
 <td data-quarto-table-cell-role="th">0</td>
 <td>DBRegression</td>
-<td>0.033570</td>
+<td>0.039078</td>
 <td>2000</td>
 <td>1.000000</td>
 </tr>
 <tr class="even">
 <td data-quarto-table-cell-role="th">1</td>
 <td>NumPy full OLS</td>
-<td>0.010735</td>
+<td>0.014897</td>
 <td>250000</td>
-<td>0.319792</td>
+<td>0.381206</td>
 </tr>
 <tr class="odd">
 <td data-quarto-table-cell-role="th">2</td>
 <td>pyfixest</td>
-<td>1.511121</td>
+<td>1.359962</td>
 <td>250000</td>
-<td>45.013949</td>
+<td>34.801247</td>
 </tr>
 </tbody>
 </table>
@@ -5235,8 +5223,6 @@ border-radius: 6px;
 <section id="coefficient-check" class="level2">
 <h2 class="anchored" data-anchor-id="coefficient-check">Coefficient Check</h2>
 <div id="cell-perf-coef-check" class="cell" data-execution_count="7">
-<details class="code-fold">
-<summary>Show code</summary>
 <div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>coef_table <span class="op">=</span> pd.DataFrame(</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    {</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;term&quot;</span>: [<span class="st">&quot;Intercept&quot;</span>, <span class="st">&quot;D&quot;</span>, <span class="st">&quot;f1&quot;</span>, <span class="st">&quot;f2&quot;</span>],</span>
@@ -5247,7 +5233,6 @@ border-radius: 6px;
 <span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> pyfixest_estimate <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
 <span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    coef_table[<span class="st">&quot;pyfixest&quot;</span>] <span class="op">=</span> pyfixest_estimate</span>
 <span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>coef_table</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
 <div id="perf-coef-check" class="cell-output cell-output-display" data-execution_count="7">
 <div>
 
