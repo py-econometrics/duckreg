@@ -1,4 +1,7 @@
 import pytest
+import ibis
+import numpy as np
+import pandas as pd
 
 import duckreg
 from duckreg.estimators import DuckLogisticRegression, DuckRegression
@@ -32,3 +35,31 @@ def test_glm_bootstrap_fails_explicitly():
     )
     with pytest.raises(NotImplementedError, match="Bootstrap is not implemented"):
         model.bootstrap()
+
+
+def test_duck_regression_accepts_ibis_backend_connection(tmp_path):
+    df = pd.DataFrame(
+        {
+            "Y": [1.0, 2.0, 2.0, 4.0],
+            "D": [0.0, 1.0, 0.0, 1.0],
+            "f1": [0.0, 0.0, 1.0, 1.0],
+        }
+    )
+    con = ibis.duckdb.connect(tmp_path / "api.db")
+    con.create_table("data", df, overwrite=True)
+
+    model = DuckRegression(
+        db_name=None,
+        connection=con,
+        table_name="data",
+        formula="Y ~ D + f1",
+        cluster_col="",
+        seed=42,
+        n_bootstraps=0,
+    )
+    model.fit()
+
+    X = np.c_[np.ones(len(df)), df[["D", "f1"]].values]
+    expected = np.linalg.lstsq(X, df["Y"].values, rcond=None)[0]
+    np.testing.assert_allclose(model.point_estimate, expected)
+    assert "data" in con.list_tables()

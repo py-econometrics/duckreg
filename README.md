@@ -1,8 +1,8 @@
-# `duckreg` : very fast out-of-memory regressions with `duckdb`
+# `duckreg`: very fast out-of-memory regressions on SQL backends
 
-python package to run stratified/saturated regressions out-of-memory with duckdb. R users, check out [Grant McDermott's port of this package](https://github.com/grantmcdermott/duckreg). 
+python package to run stratified/saturated regressions out-of-memory through [Ibis](https://ibis-project.org/). DuckDB remains the default local backend for backwards compatibility, and the same estimators can run against any Ibis SQL backend that supports the generated aggregation queries. R users, check out [Grant McDermott's port of this package](https://github.com/grantmcdermott/duckreg). 
 
-The package is a wrapper around the `duckdb` package and provides a simple interface to run regressions on very large datasets that do not fit in memory by reducing the data to a set of summary statistics and runs weighted least squares with frequency weights. Robust standard errors are computed from sufficient statistics, while clustered standard errors are computed using the cluster bootstrap. Methodological details and benchmarks are provided in [this](https://arxiv.org/abs/2410.09952) paper. See examples in `notebooks/introduction.ipynb`.
+The package provides a simple interface to run regressions on very large datasets that do not fit in memory by reducing the data inside the database to a set of summary statistics and then running weighted least squares with frequency weights. Robust standard errors are computed from sufficient statistics, while clustered standard errors are computed using the cluster bootstrap. Methodological details and benchmarks are provided in [this](https://arxiv.org/abs/2410.09952) paper. See examples in `notebooks/introduction.ipynb`.
 
 <p align="center">
   <img src="https://static.independent.co.uk/s3fs-public/thumbnails/image/2016/02/14/12/duck-rabbit.png" width="350">
@@ -16,10 +16,52 @@ pip install duckreg
 
 - dev install (preferably in a `venv`) with
 ```
-(uv) pip install git+https://github.com/apoorvalal/duckreg.git
+uv pip install -e '.[test]'
 ```
 
-or git clone this repository and install in editable mode.
+or install from git with `uv pip install git+https://github.com/py-econometrics/duckreg.git`.
+
+By default, legacy DuckDB paths still work:
+
+```python
+from duckreg import DuckRegression
+
+model = DuckRegression(
+    db_name="large_dataset.db",
+    table_name="data",
+    formula="Y ~ D + X",
+    cluster_col="cluster_id",
+    seed=42,
+)
+model.fit()
+```
+
+For a remote database, create an Ibis backend and pass it through `connection`.
+For example, with Databricks:
+
+```python
+import ibis
+from duckreg import DuckRegression
+
+con = ibis.databricks.connect(
+    server_hostname="...",
+    http_path="...",
+    access_token="...",
+    catalog="main",
+    schema="analytics",
+)
+
+model = DuckRegression(
+    db_name=None,
+    connection=con,
+    table_name="large_experiment_table",
+    formula="Y ~ D + X",
+    cluster_col="cluster_id",
+    seed=42,
+    n_bootstraps=0,
+)
+model.fit()
+```
 
 ---
 
@@ -43,7 +85,7 @@ $$
 y \sim \psi\_i + \gamma\_t + \sum\_{k=1}^{T} \tau\_{k} D\_i 1(t = k)
 $$
 
-All the above regressions are run in compressed fashion with `duckdb`. Formula-level fixed effects are not part of `DuckRegression`; use the panel-specific `DuckMundlak` or `DuckDoubleDemeaning` estimators for fixed-effect style designs.
+All the above regressions are run in compressed fashion through the configured Ibis backend. Formula-level fixed effects are not part of `DuckRegression`; use the panel-specific `DuckMundlak` or `DuckDoubleDemeaning` estimators for fixed-effect style designs.
 
 Please cite the following paper if you use `duckreg` in your research: 
 

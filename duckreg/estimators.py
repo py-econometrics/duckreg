@@ -416,11 +416,12 @@ class _DuckCanonicalGLM(DuckReg):
     def _pilot_data(self):
         n = int(np.ceil(self.n_obs ** self.subsample_exponent))
         n = min(max(n, X_MIN_PILOT), self.n_obs)
-        cols = ", ".join([self.outcome_var] + self.covars)
-        df = self.conn.execute(
-            f"SELECT {cols} FROM {self.table_name} "
-            f"USING SAMPLE reservoir({n} ROWS) REPEATABLE ({self.seed})"
-        ).fetchdf()
+        cols = [self.outcome_var] + self.covars
+        fraction = min(1.0, n / max(self.n_obs, 1))
+        table = self.conn.table(self.table_name)
+        df = self.conn.to_pandas(
+            table.select(cols).sample(fraction, seed=self.seed).limit(n)
+        )
         X = _add_intercept(df[self.covars].values)
         y = df[self.outcome_var].values.astype(float)
         return X, y, np.ones(len(df))
