@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "duckreg"
-version = "0.3"
+version = "0.4"
 description = "Compressed regression estimators for Ibis-compatible database backends"
 readme = "README.md"
 requires-python = ">=3.10"
