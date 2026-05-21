@@ -6,7 +6,12 @@ from .duckreg import DuckReg, ridge_closed_form, ridge_closed_form_batch, wls
 from .dbreg import (
     DBDML,
     DBDoubleDemeaning,
+    DBLogisticRegression,
     DBMundlak,
+    DBMundlakEventStudy,
+    DBMultinomialLogisticRegression,
+    DBPoissonMultinomialRegression,
+    DBPoissonRegression,
     DBReg,
     DBRegression,
 )
@@ -26,7 +31,12 @@ from .regularized import DuckRidge
 __all__ = [
     "DBDML",
     "DBDoubleDemeaning",
+    "DBLogisticRegression",
     "DBMundlak",
+    "DBMundlakEventStudy",
+    "DBMultinomialLogisticRegression",
+    "DBPoissonMultinomialRegression",
+    "DBPoissonRegression",
     "DBReg",
     "DBRegression",
     "DuckDML",
