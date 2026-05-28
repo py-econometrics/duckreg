@@ -325,3 +325,10 @@ def test_db_event_study_matches_duck_event_study(tmp_path):
     assert new_est.keys() == old_est.keys()
     for cohort in old_est:
         pd.testing.assert_frame_equal(new_est[cohort], old_est[cohort], check_exact=False)
+
+    for estimator in (old, new):
+        assert "treatment_time_2_1" not in estimator.rhs_cols
+        assert "treatment_time_3_2" not in estimator.rhs_cols
+
+    assert old_est["2"].loc["treatment_time_2_1", "est"] == 0.0
+    assert old_est["3"].loc["treatment_time_3_2", "est"] == 0.0

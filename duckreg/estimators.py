@@ -1170,6 +1170,17 @@ class DuckMundlakEventStudy(DuckReg):
         self.cluster_col = cluster_col
         self.pre_treat_interactions = pre_treat_interactions
 
+    @staticmethod
+    def _reference_period(cohort):
+        """Absolute time period used as the event-study normalization.
+
+        Event-study coefficients are reported relative to period -1, i.e. the
+        period immediately before treatment begins for each adoption cohort.
+        With absolute time indexing, that reference period is ``cohort - 1``.
+        """
+
+        return cohort - 1
+
     def prepare_data(self):
         # Create cohort data using CTE instead of temp table
         self.cohort_cte = f"""
@@ -1213,7 +1224,10 @@ class DuckMundlakEventStudy(DuckReg):
         # generate_treatment_dummies
         treatment_dummies = []
         for cohort in self.cohorts:
+            reference_period = self._reference_period(cohort)
             for i in range(self.num_periods + 1):
+                if i == reference_period:
+                    continue
                 treatment_dummies.append(
                     f"""CASE WHEN cohort = {cohort} AND
                         {self.time_col} = {i}
@@ -1252,6 +1266,7 @@ class DuckMundlakEventStudy(DuckReg):
             f"treatment_time_{cohort}_{i}"
             for cohort in self.cohorts
             for i in range(self.num_periods + 1)
+            if i != self._reference_period(cohort)
         ]
 
         rhs_cols = ["intercept"] + cohort_cols + time_cols + treatment_cols
@@ -1286,6 +1301,25 @@ class DuckMundlakEventStudy(DuckReg):
         X = X.reshape(-1, 1) if X.ndim == 1 else X
         return y, X, n
 
+    def _event_study_from_res(self, res):
+        event_study_coefs = {}
+        for cohort in self.cohorts:
+            cohort_name = str(cohort)
+            reference_period = self._reference_period(cohort)
+            estimates = []
+            index = []
+            for i in range(self.num_periods + 1):
+                name = f"treatment_time_{cohort_name}_{i}"
+                index.append(name)
+                if i == reference_period:
+                    estimates.append(0.0)
+                else:
+                    estimates.append(float(res.loc[name, "est"]))
+            event_study_coefs[cohort_name] = pd.DataFrame(
+                {"est": estimates}, index=index
+            )
+        return event_study_coefs
+
     def estimate(self):
         y, X, n = self.collect_data(data=self.df_compressed)
         coef = wls(X, y, n)
@@ -1295,15 +1329,7 @@ class DuckMundlakEventStudy(DuckReg):
             },
             index=self._rhs_list,
         )
-        cohort_names = [x.split("_")[1] for x in self._rhs_list if "cohort_" in x]
-        event_study_coefs = {}
-        for c in cohort_names:
-            offset = res.filter(regex=f"^cohort_{c}", axis=0).values
-            event_study_coefs[c] = (
-                res.filter(regex=f"treatment_time_{c}_", axis=0) + offset
-            )
-
-        return event_study_coefs
+        return self._event_study_from_res(res)
 
     def bootstrap(self):
         # list all clusters
@@ -1362,12 +1388,7 @@ class DuckMundlakEventStudy(DuckReg):
                 },
                 index=self._rhs_list,
             )
-            cohort_names = [x.split("_")[1] for x in self._rhs_list if "cohort_" in x]
-            for c in cohort_names:
-                offset = res.filter(regex=f"^cohort_{c}", axis=0).values
-                event_study_coefs = (
-                    res.filter(regex=f"treatment_time_{c}_", axis=0) + offset
-                )
+            for c, event_study_coefs in self._event_study_from_res(res).items():
                 boot_coefs[c].append(event_study_coefs.values.flatten())
 
         # Calculate the covariance matrix for each cohort
