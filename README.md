@@ -1,6 +1,6 @@
 # `duckreg`: very fast out-of-memory regressions on SQL backends
 
-python package to run stratified/saturated regressions out-of-memory through [Ibis](https://ibis-project.org/). DuckDB remains the default local backend for backwards compatibility, and the same estimators can run against any Ibis SQL backend that supports the generated aggregation queries. R users, check out [Grant McDermott's port of this package](https://github.com/grantmcdermott/duckreg). 
+python package to run stratified/saturated regressions out-of-memory through [Ibis](https://ibis-project.org/). DuckDB remains the default local backend for backwards compatibility, and the same estimators can run against any Ibis SQL backend that supports the generated aggregation queries. R users, check out [Grant McDermott's port of this package](https://github.com/grantmcdermott/dbreg). 
 
 The package provides a simple interface to run regressions on very large datasets that do not fit in memory by reducing the data inside the database to a set of summary statistics and then running weighted least squares with frequency weights. Robust standard errors are computed from sufficient statistics, while clustered standard errors are computed using the cluster bootstrap. Methodological details and benchmarks are provided in [this](https://arxiv.org/abs/2410.09952) paper. See examples in `notebooks/introduction.ipynb`.
 
