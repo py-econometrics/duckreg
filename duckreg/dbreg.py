@@ -475,6 +475,17 @@ class DBMundlakEventStudy(DBReg):
         self.cluster_col = cluster_col
         self.pre_treat_interactions = pre_treat_interactions
 
+    @staticmethod
+    def _reference_period(cohort):
+        """Absolute time period used as the event-study normalization.
+
+        Event-study coefficients are reported relative to period -1, i.e. the
+        period immediately before treatment begins for each adoption cohort.
+        With absolute time indexing, that reference period is ``cohort - 1``.
+        """
+
+        return cohort - 1
+
     def prepare_data(self):
         t = self.table_expr()
         treated = (
@@ -501,7 +512,10 @@ class DBMundlakEventStudy(DBReg):
         }
         treatment_cols = {}
         for cohort in self.cohorts:
+            reference_period = self._reference_period(cohort)
             for i in range(int(self.num_periods) + 1):
+                if i == reference_period:
+                    continue
                 condition = (cohort_data.cohort == cohort) & (
                     cohort_data[self.time_col] == i
                 )
@@ -563,9 +577,18 @@ class DBMundlakEventStudy(DBReg):
         event_study_coefs = {}
         for cohort in self.cohorts:
             cohort_name = str(cohort)
-            offset = res.filter(regex=f"^cohort_{cohort_name}$", axis=0).values
-            event_study_coefs[cohort_name] = (
-                res.filter(regex=f"^treatment_time_{cohort_name}_", axis=0) + offset
+            reference_period = self._reference_period(cohort)
+            estimates = []
+            index = []
+            for i in range(int(self.num_periods) + 1):
+                name = f"treatment_time_{cohort_name}_{i}"
+                index.append(name)
+                if i == reference_period:
+                    estimates.append(0.0)
+                else:
+                    estimates.append(float(res.loc[name, "est"]))
+            event_study_coefs[cohort_name] = pd.DataFrame(
+                {"est": estimates}, index=index
             )
         return event_study_coefs
 

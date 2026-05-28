@@ -325,3 +325,116 @@ def test_db_event_study_matches_duck_event_study(tmp_path):
     assert new_est.keys() == old_est.keys()
     for cohort in old_est:
         pd.testing.assert_frame_equal(new_est[cohort], old_est[cohort], check_exact=False)
+
+    for estimator in (old, new):
+        assert "treatment_time_2_1" not in estimator.rhs_cols
+        assert "treatment_time_3_2" not in estimator.rhs_cols
+
+    assert old_est["2"].loc["treatment_time_2_1", "est"] == 0.0
+    assert old_est["3"].loc["treatment_time_3_2", "est"] == 0.0
+
+
+def test_db_event_study_ibis_materialization_omits_reference_periods(tmp_path):
+    rows = []
+    for unit, cohort in [(1, 2), (2, 3), (3, None), (4, 2), (5, None), (6, 3)]:
+        for time in range(5):
+            treated = int(cohort is not None and time >= cohort)
+            y = 1.0 + 0.2 * unit + 0.3 * time + 0.8 * treated
+            rows.append((unit, time, treated, y, unit))
+    df = pd.DataFrame(rows, columns=["unit", "time", "D", "Y", "cluster"])
+    con = _make_con(tmp_path, df)
+
+    model = DBMundlakEventStudy(
+        db_name=None,
+        connection=con,
+        table_name="data",
+        outcome_var="Y",
+        treatment_col="D",
+        unit_col="unit",
+        time_col="time",
+        cluster_col="cluster",
+        seed=43,
+        n_bootstraps=0,
+        pre_treat_interactions=True,
+    )
+    model.prepare_data()
+
+    assert isinstance(model.design_matrix, ibis.expr.types.Table)
+    assert "treatment_time_2_1" not in model.design_matrix.columns
+    assert "treatment_time_3_2" not in model.design_matrix.columns
+    assert "treatment_time_2_0" in model.design_matrix.columns
+    assert "treatment_time_3_1" in model.design_matrix.columns
+
+    model.compress_data()
+    assert "treatment_time_2_1" not in model.rhs_cols
+    assert "treatment_time_3_2" not in model.rhs_cols
+    assert all("treatment_time_2_1" not in col for col in model.df_compressed.columns)
+    assert all("treatment_time_3_2" not in col for col in model.df_compressed.columns)
+
+    model.point_estimate = model.estimate()
+    assert model.point_estimate["2"].loc["treatment_time_2_1", "est"] == 0.0
+    assert model.point_estimate["3"].loc["treatment_time_3_2", "est"] == 0.0
+
+
+def test_db_event_study_uses_ref_minus_one_normalization(tmp_path):
+    rows = []
+    for unit, cohort in [(1, 2), (2, 3), (3, None), (4, 2), (5, None), (6, 3)]:
+        unit_fe = 0.25 * unit
+        for time in range(5):
+            treated = int(cohort is not None and time >= cohort)
+            rel_time = time - cohort if cohort is not None else None
+            effect = (
+                0.0
+                if not treated
+                else {0: 0.7, 1: 1.1, 2: 1.4}.get(rel_time, 1.4)
+            )
+            y = 2.0 + unit_fe + 0.4 * time + effect
+            rows.append((unit, time, treated, y, unit))
+    df = pd.DataFrame(rows, columns=["unit", "time", "D", "Y", "cluster"])
+    con = _make_con(tmp_path, df)
+
+    model = DBMundlakEventStudy(
+        db_name=None,
+        connection=con,
+        table_name="data",
+        outcome_var="Y",
+        treatment_col="D",
+        unit_col="unit",
+        time_col="time",
+        cluster_col="cluster",
+        seed=44,
+        n_bootstraps=0,
+        pre_treat_interactions=True,
+    )
+    model.fit()
+    estimates = model.summary()["point_estimate"]
+
+    assert estimates["2"].index.tolist() == [
+        "treatment_time_2_0",
+        "treatment_time_2_1",
+        "treatment_time_2_2",
+        "treatment_time_2_3",
+        "treatment_time_2_4",
+    ]
+    assert estimates["3"].index.tolist() == [
+        "treatment_time_3_0",
+        "treatment_time_3_1",
+        "treatment_time_3_2",
+        "treatment_time_3_3",
+        "treatment_time_3_4",
+    ]
+    assert estimates["2"].loc["treatment_time_2_1", "est"] == 0.0
+    assert estimates["3"].loc["treatment_time_3_2", "est"] == 0.0
+    np.testing.assert_allclose(
+        estimates["2"].loc[
+            ["treatment_time_2_2", "treatment_time_2_3", "treatment_time_2_4"],
+            "est",
+        ],
+        [0.7, 1.1, 1.4],
+        atol=1e-12,
+    )
+    np.testing.assert_allclose(
+        estimates["3"].loc[["treatment_time_3_3", "treatment_time_3_4"], "est"],
+        [0.7, 1.1],
+        atol=1e-12,
+    )
