@@ -604,7 +604,7 @@ wheels = [
 
 [[package]]
 name = "duckreg"
-version = "0.4"
+version = "0.4.1"
 source = { editable = "." }
 dependencies = [
     { name = "ibis-framework", extra = ["duckdb"] },
