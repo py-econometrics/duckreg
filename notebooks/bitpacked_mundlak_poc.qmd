@@ -88,6 +88,9 @@ import numpy as np
 import pandas as pd
 import pyfixest as pf
 
+pd.set_option("display.max_rows", 200)
+pd.set_option("display.max_columns", 20)
+
 candidate_roots = [Path.cwd(), Path.cwd().parent]
 repo_root = next(
     root
@@ -96,13 +99,14 @@ repo_root = next(
 )
 sys.path.insert(0, str(repo_root))
 
-from duckreg import BitmapMundlak
+from duckreg import BitmapMundlak, BitmapMundlakEventStudy
 from duckreg.bitmap_utils import (
     LongPanelBitPacker,
     STATIC_MUNDLAK_DIRECT_SQL,
     bitmap_translation_table,
     make_five_period_demo_long_panel,
     make_one_shot_binary_adoption_panel,
+    make_staggered_binary_adoption_panel,
 )
 from duckreg.dbreg import DBMundlak
 ```
@@ -289,6 +293,144 @@ The query runs on four bitmap tables:
 - `time_outcome_bits`: outcome bitplanes by time period, 64-unit chunk, and nonzero outcome value.
 
 The output is not a compressed cell table. It is the small set of scalar moments needed to solve the Mundlak normal equations.
+
+## Unit-Cluster Bootstrap
+
+The same representation also makes unit-cluster bootstrap inference straightforward. A bootstrap draw is a multiplicity vector $m_i$ over units. The static estimator recomputes the unit-additive pieces by weighted sums over units and recomputes the time margins as
+
+$$
+d_t^* = \sum_i m_i W_{it},
+\quad
+y_t^* = \sum_i m_i Y_{it}.
+$$
+
+The event-study estimator uses the same multiplicities to recompute cohort-time cell counts and outcome sums. In neither case does the bootstrap materialize a resampled long table or rerun the long-format groupby compression.
+
+```{python}
+#| label: bootstrap-example
+#| code-fold: true
+bootstrap_config = {
+    "num_units": 20_000,
+    "num_periods": 30,
+    "treatment_start_cohorts": (10, 15, 20),
+    "num_treated": (4_000, 6_000, 4_000),
+    "seed": 20260701,
+}
+num_bootstraps = 200
+
+bootstrap_long = make_staggered_binary_adoption_panel(**bootstrap_config)
+bootstrap_panel = LongPanelBitPacker().fit_transform(bootstrap_long)
+
+static_boot = BitmapMundlak(
+    bootstrap_panel,
+    seed=20260702,
+    n_bootstraps=num_bootstraps,
+).fit()
+
+event_boot = BitmapMundlakEventStudy(
+    bootstrap_panel,
+    seed=20260702,
+    n_bootstraps=num_bootstraps,
+).fit()
+```
+
+```{python}
+#| label: static-bootstrap-table
+#| code-fold: true
+static_summary = static_boot.summary()
+static_coef_se = pd.DataFrame(
+    {
+        "term": static_summary["point_estimate"].index,
+        "estimate": static_summary["point_estimate"].to_numpy(),
+        "se": static_summary["standard_error"].to_numpy(),
+    }
+)
+static_coef_se["coef(se)"] = static_coef_se.apply(
+    lambda row: f"{row['estimate']:.4f} ({row['se']:.4f})",
+    axis=1,
+)
+static_coef_se
+```
+
+```{python}
+#| label: event-bootstrap-table
+#| code-fold: true
+def tidy_event_summary(summary):
+    rows = []
+    for cohort, table in summary.items():
+        cohort_int = int(cohort)
+        for term, row in table.iterrows():
+            time_index = int(term.split("_")[-1])
+            rows.append(
+                {
+                    "cohort": cohort_int,
+                    "time_index": time_index,
+                    "event_time": time_index - cohort_int,
+                    "estimate": row["point_estimate"],
+                    "se": row["se"],
+                }
+            )
+    frame = pd.DataFrame(rows).sort_values(["cohort", "time_index"])
+    frame["coef(se)"] = frame.apply(
+        lambda row: f"{row['estimate']:.4f} ({row['se']:.4f})",
+        axis=1,
+    )
+    return frame
+
+
+event_coef_se = tidy_event_summary(event_boot.summary())
+event_coef_se
+```
+
+```{python}
+#| label: event-bootstrap-pointrange
+#| code-fold: true
+plot_df = event_coef_se.copy()
+plot_df["lower"] = plot_df["estimate"] - 1.96 * plot_df["se"]
+plot_df["upper"] = plot_df["estimate"] + 1.96 * plot_df["se"]
+
+fig, ax = plt.subplots(figsize=(9.5, 5.2), constrained_layout=True)
+colors = {
+    10: "#4C78A8",
+    15: "#59A14F",
+    20: "#E15759",
+}
+offsets = {
+    10: -0.16,
+    15: 0.0,
+    20: 0.16,
+}
+for cohort, group in plot_df.groupby("cohort"):
+    x = group["event_time"] + offsets.get(cohort, 0.0)
+    yerr = np.vstack(
+        [
+            group["estimate"] - group["lower"],
+            group["upper"] - group["estimate"],
+        ]
+    )
+    ax.errorbar(
+        x,
+        group["estimate"],
+        yerr=yerr,
+        fmt="o-",
+        markersize=3.5,
+        linewidth=1.1,
+        elinewidth=0.9,
+        capsize=2,
+        label=f"cohort {cohort}",
+        color=colors.get(cohort),
+    )
+
+ax.axhline(0, color="#333333", linewidth=0.9)
+ax.axvline(0, color="#333333", linewidth=0.8, linestyle=":")
+ax.set_xlabel("event time")
+ax.set_ylabel("estimate with 95% bootstrap interval")
+ax.set_title("Bitmap unit-cluster bootstrap event-study estimates")
+ax.legend(title="first treated period", frameon=False, ncol=3)
+ax.grid(axis="y", alpha=0.25)
+ax.set_axisbelow(True)
+plt.show()
+```
 
 ## Large Runtime Benchmark
 

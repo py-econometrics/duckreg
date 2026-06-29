@@ -163,6 +163,26 @@ def test_bitmap_mundlak_matches_dbmundlak_for_low_cardinality_outcome(tmp_path):
     )
 
 
+def test_bitmap_mundlak_unit_cluster_bootstrap_summary():
+    data = make_one_shot_binary_adoption_panel(
+        num_units=120,
+        num_treated=60,
+        num_periods=12,
+        treatment_start=5,
+        seed=321,
+    )
+    bitmap = BitmapMundlak.from_long(
+        data,
+        seed=1234,
+        n_bootstraps=10,
+    ).fit()
+    summary = bitmap.summary()
+
+    assert list(summary["standard_error"].index) == list(bitmap.point_estimate.index)
+    assert np.isfinite(summary["standard_error"]).all()
+    assert (summary["standard_error"] >= 0).all()
+
+
 def test_bitmap_event_study_matches_dbmundlak_event_study(tmp_path):
     data = make_staggered_binary_adoption_panel(
         num_units=120,
@@ -200,3 +220,27 @@ def test_bitmap_event_study_matches_dbmundlak_event_study(tmp_path):
             rtol=1e-10,
             atol=1e-10,
         )
+
+
+def test_bitmap_event_study_unit_cluster_bootstrap_summary():
+    data = make_staggered_binary_adoption_panel(
+        num_units=160,
+        num_periods=12,
+        treatment_start_cohorts=(4, 7),
+        num_treated=(50, 60),
+        seed=987,
+    )
+    bitmap = BitmapMundlakEventStudy.from_long(
+        data,
+        pre_treat_interactions=True,
+        seed=1234,
+        n_bootstraps=10,
+    ).fit()
+    summary = bitmap.summary()
+
+    assert set(summary) == set(bitmap.point_estimate)
+    for cohort, table in summary.items():
+        assert list(table.columns) == ["point_estimate", "se"]
+        assert list(table.index) == list(bitmap.point_estimate[cohort].index)
+        assert np.isfinite(table["se"]).all()
+        assert (table["se"] >= 0).all()
