@@ -18,9 +18,13 @@ jupyter: python3
 
 ## Point
 
-For dense balanced panels with binary outcome $Y_{it}$ and binary treatment $W_{it}$, the useful bitmap path is not "rebuild the usual compressed strata table with `bit_count`." The useful path is to compute the estimator's low-dimensional moments directly from packed bitmaps.
+This memo benchmarks three ways to estimate the same binary-treatment, binary-outcome two-way panel model on a dense balanced panel:
 
-For the static two-way Mundlak LPM,
+1. `pyfixest` on the full long table;
+2. `DBMundlak` using the current sufficient-statistic groupby compression;
+3. a bitmap implementation that computes the Mundlak normal-equation moments directly from packed unit-major and time-major bitmaps.
+
+The target model is the static two-way Mundlak LPM,
 
 $$
 Y_{it}
@@ -31,7 +35,7 @@ Y_{it}
 + u_{it},
 $$
 
-the direct bitmap path computes $X'X$ and $X'Y$ from unit and time margins. This is the path worth benchmarking against the original long-data two-way FE fit and the current `duckreg` groupby-compression route.
+where $Y_{it}$ and $W_{it}$ are binary. The bitmap implementation stores panel histories in fixed-width integer words and computes $X'X$ and $X'Y$ from unit and time margins. The benchmark isolates estimator runtime from one-time layout costs so the comparison separates the computational kernel from data ingestion.
 
 The large benchmark below uses the one-shot adoption dimensions from `notebooks/event_study.ipynb`:
 
