@@ -51,6 +51,17 @@ $$
 
 The bitmap layer is useful because the Mundlak normal equations reduce the regression to a handful of counts and intersections. For binary panels those counts can be computed with bitwise `AND` and `popcount` over packed machine words.
 
+The estimator-facing API is deliberately small:
+
+```python
+from duckreg import BitmapMundlak, BitmapMundlakEventStudy
+
+static_fit = BitmapMundlak.from_long(data).fit()
+event_fit = BitmapMundlakEventStudy.from_long(data).fit()
+```
+
+The lower-level packing classes and display helpers live in `duckreg.bitmap_utils`. Use them directly only when the packed layout is itself part of the workflow, for example when the same bitmap tables will feed repeated moment queries.
+
 The large benchmark below uses the one-shot adoption dimensions from `notebooks/event_study.ipynb`:
 
 ```text
@@ -85,15 +96,15 @@ repo_root = next(
 )
 sys.path.insert(0, str(repo_root))
 
-from duckreg.dbreg import DBMundlak
-from duckreg.bitpacking import (
-    BitmapMundlak,
+from duckreg import BitmapMundlak
+from duckreg.bitmap_utils import (
     LongPanelBitPacker,
     STATIC_MUNDLAK_DIRECT_SQL,
     bitmap_translation_table,
     make_five_period_demo_long_panel,
     make_one_shot_binary_adoption_panel,
 )
+from duckreg.dbreg import DBMundlak
 ```
 
 ### Bitmap Representation And Scaling

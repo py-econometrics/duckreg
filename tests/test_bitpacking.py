@@ -6,11 +6,12 @@ import duckreg
 from duckreg.bitpacking import (
     BitmapMundlak,
     BitmapMundlakEventStudy,
+)
+from duckreg.bitmap_utils import (
     LongPanelBitPacker,
     bitmap_translation_table,
     make_one_shot_binary_adoption_panel,
     make_staggered_binary_adoption_panel,
-    pack_long_panel_to_bitmaps,
 )
 from duckreg.dbreg import DBMundlak, DBMundlakEventStudy
 
@@ -24,7 +25,6 @@ def _make_con(tmp_path, data, table="data"):
 def test_bitpacking_exports():
     assert duckreg.BitmapMundlak is BitmapMundlak
     assert duckreg.BitmapMundlakEventStudy is BitmapMundlakEventStudy
-    assert duckreg.LongPanelBitPacker is LongPanelBitPacker
 
 
 def test_long_panel_bitpacker_supports_low_cardinality_outcomes():
@@ -96,8 +96,7 @@ def test_bitmap_mundlak_matches_dbmundlak_for_binary_outcome(tmp_path):
         treatment_start=5,
         seed=123,
     )
-    panel = pack_long_panel_to_bitmaps(data)
-    bitmap = BitmapMundlak(panel).fit()
+    bitmap = BitmapMundlak.from_long(data).fit()
 
     con = _make_con(tmp_path, data)
     db = DBMundlak(
@@ -172,8 +171,10 @@ def test_bitmap_event_study_matches_dbmundlak_event_study(tmp_path):
         num_treated=(35, 45),
         seed=789,
     )
-    panel = pack_long_panel_to_bitmaps(data)
-    bitmap = BitmapMundlakEventStudy(panel, pre_treat_interactions=True).fit()
+    bitmap = BitmapMundlakEventStudy.from_long(
+        data,
+        pre_treat_interactions=True,
+    ).fit()
 
     con = _make_con(tmp_path, data)
     db = DBMundlakEventStudy(
