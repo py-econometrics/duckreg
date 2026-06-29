@@ -220,14 +220,14 @@ def make_staggered_binary_adoption_panel(
 
 
 def _arrays_to_long_panel(y: np.ndarray, w: np.ndarray) -> pd.DataFrame:
-    unit_id = np.repeat(np.arange(y.shape[0]), y.shape[1])
-    time_id = np.tile(np.arange(y.shape[1]), y.shape[0])
+    unit_id = np.repeat(np.arange(y.shape[0], dtype=np.int32), y.shape[1])
+    time_id = np.tile(np.arange(y.shape[1], dtype=np.int16), y.shape[0])
     return pd.DataFrame(
         {
             "unit_id": unit_id,
             "time_id": time_id,
-            "Y_it": y.reshape(-1).astype(int),
-            "W_it": w.reshape(-1).astype(int),
+            "Y_it": y.reshape(-1).astype(np.int8),
+            "W_it": w.reshape(-1).astype(np.int8),
         }
     )
 

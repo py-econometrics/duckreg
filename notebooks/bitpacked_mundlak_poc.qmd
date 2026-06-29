@@ -1,6 +1,6 @@
 ---
 title: "Direct Bitmap Moments for Binary Panel Mundlak Designs"
-subtitle: "Static Mundlak and event-study estimators without materializing the full unit-time table"
+subtitle: "Runtime comparison on a 15 million row one-shot adoption problem"
 format:
   html:
     embed-resources: true
@@ -31,13 +31,17 @@ Y_{it}
 + u_{it},
 $$
 
-the direct bitmap path computes $X'X$ and $X'Y$ from unit and time margins. For the event-study designs, the direct bitmap path computes the cohort-time sufficient table. That table has at most `(number of cohorts + never-treated group) * number of periods` rows, not $N T$ rows.
+the direct bitmap path computes $X'X$ and $X'Y$ from unit and time margins. This is the path worth benchmarking against the original long-data two-way FE fit and the current `duckreg` groupby-compression route.
 
-This note checks the direct bitmap approach against the current `duckreg` estimators for:
+The large benchmark below uses the one-shot adoption dimensions from `notebooks/event_study.ipynb`:
 
-1. static Mundlak under one-shot adoption;
-2. one-shot adoption event study with pre-treatment interactions;
-3. staggered adoption event study with post-treatment interactions.
+```text
+num_units = 500_000
+num_treated = 250_000
+num_periods = 30
+```
+
+That is a 15 million row long panel.
 
 ## Setup
 
@@ -45,13 +49,15 @@ This note checks the direct bitmap approach against the current `duckreg` estima
 #| label: setup
 #| code-fold: true
 from pathlib import Path
+import gc
 import sys
 import time
 
-import duckdb
 import ibis
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pyfixest as pf
 
 candidate_roots = [Path.cwd(), Path.cwd().parent]
 repo_root = next(
@@ -61,55 +67,15 @@ repo_root = next(
 )
 sys.path.insert(0, str(repo_root))
 
-from duckreg.dbreg import DBMundlak, DBMundlakEventStudy
+from duckreg.dbreg import DBMundlak
 from benchmarks.bitpacked_mundlak_poc import (
-    COHORT_TIME_SUMS_SQL,
     STATIC_MUNDLAK_DIRECT_SQL,
     bitmap_translation_table,
-    fit_event_study_bitmap_panel,
     fit_static_mundlak_bitmap_panel,
     make_five_period_demo_long_panel,
     make_one_shot_binary_adoption_panel,
-    make_staggered_binary_adoption_panel,
     pack_long_panel_to_bitmaps,
 )
-
-
-def ibis_table(df: pd.DataFrame, table_name: str):
-    con = ibis.duckdb.connect()
-    con.create_table(table_name, df, overwrite=True)
-    return con
-
-
-def compare_event_paths(reference: dict[str, pd.DataFrame], bitmap: dict[str, pd.DataFrame]):
-    rows = []
-    for cohort in sorted(reference, key=lambda x: int(x)):
-        ref_values = reference[cohort]["est"].to_numpy()
-        bitmap_values = bitmap[cohort]["est"].to_numpy()
-        rows.append(
-            {
-                "cohort": cohort,
-                "max_abs_difference": np.max(np.abs(ref_values - bitmap_values)),
-                "mean_abs_difference": np.mean(np.abs(ref_values - bitmap_values)),
-            }
-        )
-    return pd.DataFrame(rows)
-
-
-def joined_event_path(
-    reference: dict[str, pd.DataFrame],
-    bitmap: dict[str, pd.DataFrame],
-    cohort: str,
-):
-    out = pd.DataFrame(
-        {
-            "time": np.arange(len(reference[cohort])),
-            "duckreg": reference[cohort]["est"].to_numpy(),
-            "bitmap": bitmap[cohort]["est"].to_numpy(),
-        }
-    )
-    out["abs_difference"] = (out["duckreg"] - out["bitmap"]).abs()
-    return out
 ```
 
 ## Five-Period Translation
@@ -133,9 +99,9 @@ bitmap_translation_table(demo_panel)
 
 The packed table has one row per unit because five periods fit in one 64-bit word. With 365 periods, the same layout has six rows per unit.
 
-## Direct Bitmap Queries
+## Direct Bitmap Query
 
-The static Mundlak query computes the seven scalar margins needed for $X'X$ and $X'Y$:
+The static Mundlak bitmap query computes the seven scalar margins needed for $X'X$ and $X'Y$:
 
 ```{python}
 #| label: display-static-sql
@@ -146,48 +112,62 @@ print(STATIC_MUNDLAK_DIRECT_SQL.strip())
 print("```")
 ```
 
-For event studies, the bitmap query extracts outcome sums by adoption cohort and calendar time:
+The query runs on two bitmap tables:
+
+- `unit_bits`: one row per unit and 64-period chunk;
+- `time_bits`: one row per time period and 64-unit chunk.
+
+The output is not a compressed cell table. It is the small set of scalar moments needed to solve the Mundlak normal equations.
+
+## Large Runtime Benchmark
+
+The benchmark compares:
+
+1. `pyfixest` on the full 15 million row long table, estimating `Y_it ~ W_it | unit_id + time_id`;
+2. `DBMundlak`, which computes sufficient statistics by grouping the long table's Mundlak design rows in DuckDB;
+3. direct bitmap moments, which assumes the panel is available in packed unit-major and time-major bitmap layouts.
+
+The main runtime bars exclude data-generation time. They also exclude one-time layout creation, because each method's natural storage assumption differs. The second panel reports those layout costs separately.
 
 ```{python}
-#| label: display-event-sql
-#| echo: false
-#| results: asis
-print("```sql")
-print(COHORT_TIME_SUMS_SQL.strip())
-print("```")
-```
-
-The event-study design matrix is then evaluated only on these cohort-time cells. For a staggered example with three treated cohorts and one never-treated group over 30 periods, the solve uses $4 \times 30 = 120$ weighted rows.
-
-## Static Mundlak: One-Shot Adoption
-
-This reproduces the static Mundlak coefficient from the event-study notebook's one-shot adoption design, using a binary outcome version of the same setup. The reference is `DBMundlak`; the bitmap path uses the direct scalar moment query above.
-
-```{python}
-#| label: static-one-shot
+#| label: large-benchmark
 #| code-fold: true
-one_shot = make_one_shot_binary_adoption_panel(
-    num_units=5_000,
-    num_periods=30,
-    num_treated=2_500,
-    treatment_start=15,
-    seed=20260629,
+large_config = {
+    "num_units": 500_000,
+    "num_treated": 250_000,
+    "num_periods": 30,
+    "treatment_start": 15,
+    "seed": 20260629,
+}
+
+start = time.perf_counter()
+large_panel_long = make_one_shot_binary_adoption_panel(**large_config)
+data_generation_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+large_bitmap_panel = pack_long_panel_to_bitmaps(large_panel_long)
+bitmap_layout_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+duckdb_backend = ibis.duckdb.connect()
+duckdb_backend.create_table("large_one_shot", large_panel_long, overwrite=True)
+duckdb_layout_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+pyfixest_fit = pf.feols(
+    "Y_it ~ W_it | unit_id + time_id",
+    data=large_panel_long,
+    lean=True,
 )
+pyfixest_seconds = time.perf_counter() - start
+
+gc.collect()
 
 start = time.perf_counter()
-one_shot_panel = pack_long_panel_to_bitmaps(one_shot)
-one_shot_pack_seconds = time.perf_counter() - start
-
-start = time.perf_counter()
-bitmap_static = fit_static_mundlak_bitmap_panel(one_shot_panel)
-bitmap_static_seconds = time.perf_counter() - start
-
-con = ibis_table(one_shot, "one_shot")
-start = time.perf_counter()
-duckreg_static_model = DBMundlak(
+dbmundlak = DBMundlak(
     db_name=None,
-    connection=con,
-    table_name="one_shot",
+    connection=duckdb_backend,
+    table_name="large_one_shot",
     outcome_var="Y_it",
     covariates=["W_it"],
     unit_col="unit_id",
@@ -196,207 +176,111 @@ duckreg_static_model = DBMundlak(
     seed=42,
     n_bootstraps=0,
 )
-duckreg_static_model.fit()
-duckreg_static_seconds = time.perf_counter() - start
+dbmundlak.fit()
+dbmundlak_seconds = time.perf_counter() - start
 
-duckreg_static = pd.Series(
-    np.asarray(duckreg_static_model.point_estimate).reshape(-1),
-    index=bitmap_static.index,
-)
-static_comparison = pd.DataFrame(
+start = time.perf_counter()
+bitmap_static = fit_static_mundlak_bitmap_panel(large_bitmap_panel)
+bitmap_seconds = time.perf_counter() - start
+
+runtime_df = pd.DataFrame(
     {
-        "duckreg": duckreg_static,
-        "bitmap_direct": bitmap_static,
+        "method": [
+            "pyfixest full data",
+            "DBMundlak groupby",
+            "bitmap direct moments",
+        ],
+        "seconds": [
+            pyfixest_seconds,
+            dbmundlak_seconds,
+            bitmap_seconds,
+        ],
     }
 )
-static_comparison["abs_difference"] = (
-    static_comparison["duckreg"] - static_comparison["bitmap_direct"]
-).abs()
-static_comparison
-```
 
-```{python}
-#| label: static-one-shot-timing
-#| code-fold: true
-pd.DataFrame(
+layout_df = pd.DataFrame(
     {
-        "step": [
+        "stage": [
+            "data generation",
+            "DuckDB table creation",
+            "long panel to bitmap layout",
+        ],
+        "seconds": [
+            data_generation_seconds,
+            duckdb_layout_seconds,
+            bitmap_layout_seconds,
+        ],
+    }
+)
+
+size_df = pd.DataFrame(
+    {
+        "quantity": [
             "long panel rows",
+            "long panel memory MB",
             "unit-major bitmap rows",
             "time-major bitmap rows",
-            "bitmap translation seconds",
-            "bitmap direct static solve seconds",
-            "DBMundlak reference fit seconds",
         ],
         "value": [
-            f"{len(one_shot):,}",
-            f"{len(one_shot_panel.unit_bits):,}",
-            f"{len(one_shot_panel.time_bits):,}",
-            f"{one_shot_pack_seconds:.4f}",
-            f"{bitmap_static_seconds:.4f}",
-            f"{duckreg_static_seconds:.4f}",
+            f"{len(large_panel_long):,}",
+            f"{large_panel_long.memory_usage(deep=True).sum() / 1e6:.1f}",
+            f"{len(large_bitmap_panel.unit_bits):,}",
+            f"{len(large_bitmap_panel.time_bits):,}",
         ],
     }
 )
 ```
 
-## Event Study: One-Shot Adoption
-
-This reproduces the single-cohort event-study surface from the event-study notebook. The reference estimator is `DBMundlakEventStudy` with `pre_treat_interactions=True`, which includes treated-cohort-by-time interactions before and after treatment and normalizes the period immediately before adoption to zero.
-
 ```{python}
-#| label: one-shot-event-study
+#| label: runtime-figure
 #| code-fold: true
-start = time.perf_counter()
-bitmap_one_event = fit_event_study_bitmap_panel(
-    one_shot_panel,
-    pre_treat_interactions=True,
-)
-bitmap_one_event_seconds = time.perf_counter() - start
+fig, axes = plt.subplots(1, 2, figsize=(13, 4.8), constrained_layout=True)
 
-con = ibis_table(one_shot, "one_shot_event")
-start = time.perf_counter()
-duckreg_one_event_model = DBMundlakEventStudy(
-    db_name=None,
-    connection=con,
-    table_name="one_shot_event",
-    outcome_var="Y_it",
-    treatment_col="W_it",
-    unit_col="unit_id",
-    time_col="time_id",
-    cluster_col="unit_id",
-    seed=42,
-    n_bootstraps=0,
-    pre_treat_interactions=True,
-)
-duckreg_one_event_model.fit()
-duckreg_one_event_seconds = time.perf_counter() - start
-duckreg_one_event = duckreg_one_event_model.summary()["point_estimate"]
+runtime_colors = ["#4C78A8", "#59A14F", "#E15759"]
+axes[0].bar(runtime_df["method"], runtime_df["seconds"], color=runtime_colors)
+axes[0].set_yscale("log")
+axes[0].set_ylabel("seconds, log scale")
+axes[0].set_title("Estimator runtime on 15M rows")
+axes[0].tick_params(axis="x", rotation=20)
+for i, value in enumerate(runtime_df["seconds"]):
+    axes[0].text(i, value * 1.10, f"{value:.3f}s", ha="center", va="bottom")
 
-compare_event_paths(duckreg_one_event, bitmap_one_event)
+layout_colors = ["#9C755F", "#BAB0AC", "#F28E2B"]
+axes[1].bar(layout_df["stage"], layout_df["seconds"], color=layout_colors)
+axes[1].set_yscale("log")
+axes[1].set_ylabel("seconds, log scale")
+axes[1].set_title("One-time setup from generated long data")
+axes[1].tick_params(axis="x", rotation=20)
+for i, value in enumerate(layout_df["seconds"]):
+    axes[1].text(i, value * 1.10, f"{value:.3f}s", ha="center", va="bottom")
+
+for ax in axes:
+    ax.grid(axis="y", which="both", alpha=0.25)
+    ax.set_axisbelow(True)
+
+plt.show()
 ```
 
 ```{python}
-#| label: one-shot-event-study-path
+#| label: runtime-tables
 #| code-fold: true
-joined_event_path(duckreg_one_event, bitmap_one_event, "15")
+runtime_df
 ```
 
 ```{python}
-#| label: one-shot-event-study-timing
+#| label: layout-table
 #| code-fold: true
-pd.DataFrame(
-    {
-        "step": [
-            "bitmap direct event-study solve seconds",
-            "DBMundlakEventStudy reference fit seconds",
-            "weighted bitmap event-study rows",
-        ],
-        "value": [
-            f"{bitmap_one_event_seconds:.4f}",
-            f"{duckreg_one_event_seconds:.4f}",
-            f"{len(one_shot_panel.all_cohorts) * one_shot_panel.n_times:,}",
-        ],
-    }
-)
-```
-
-## Event Study: Staggered Adoption
-
-This reproduces the staggered adoption event-study surface from the event-study notebook. The reference estimator is `DBMundlakEventStudy` with `pre_treat_interactions=False`, matching the notebook's staggered example.
-
-```{python}
-#| label: staggered-event-study
-#| code-fold: true
-staggered = make_staggered_binary_adoption_panel(
-    num_units=6_000,
-    num_periods=30,
-    treatment_start_cohorts=(10, 15, 20),
-    num_treated=(1_000, 2_000, 1_000),
-    seed=20260630,
-)
-
-start = time.perf_counter()
-staggered_panel = pack_long_panel_to_bitmaps(staggered)
-staggered_pack_seconds = time.perf_counter() - start
-
-start = time.perf_counter()
-bitmap_staggered_event = fit_event_study_bitmap_panel(
-    staggered_panel,
-    pre_treat_interactions=False,
-)
-bitmap_staggered_seconds = time.perf_counter() - start
-
-con = ibis_table(staggered, "staggered_event")
-start = time.perf_counter()
-duckreg_staggered_model = DBMundlakEventStudy(
-    db_name=None,
-    connection=con,
-    table_name="staggered_event",
-    outcome_var="Y_it",
-    treatment_col="W_it",
-    unit_col="unit_id",
-    time_col="time_id",
-    cluster_col="unit_id",
-    seed=42,
-    n_bootstraps=0,
-    pre_treat_interactions=False,
-)
-duckreg_staggered_model.fit()
-duckreg_staggered_seconds = time.perf_counter() - start
-duckreg_staggered_event = duckreg_staggered_model.summary()["point_estimate"]
-
-compare_event_paths(duckreg_staggered_event, bitmap_staggered_event)
+layout_df
 ```
 
 ```{python}
-#| label: staggered-event-selected-paths
+#| label: size-table
 #| code-fold: true
-pd.concat(
-    [
-        joined_event_path(duckreg_staggered_event, bitmap_staggered_event, cohort)
-        .assign(cohort=cohort)
-        .query("time in [0, 5, 9, 10, 14, 15, 19, 20, 25, 29]")
-        for cohort in ["10", "15", "20"]
-    ],
-    ignore_index=True,
-)
+size_df
 ```
 
-```{python}
-#| label: staggered-event-timing
-#| code-fold: true
-pd.DataFrame(
-    {
-        "step": [
-            "long panel rows",
-            "unit-major bitmap rows",
-            "time-major bitmap rows",
-            "bitmap translation seconds",
-            "bitmap direct staggered event-study solve seconds",
-            "DBMundlakEventStudy reference fit seconds",
-            "weighted bitmap event-study rows",
-        ],
-        "value": [
-            f"{len(staggered):,}",
-            f"{len(staggered_panel.unit_bits):,}",
-            f"{len(staggered_panel.time_bits):,}",
-            f"{staggered_pack_seconds:.4f}",
-            f"{bitmap_staggered_seconds:.4f}",
-            f"{duckreg_staggered_seconds:.4f}",
-            f"{len(staggered_panel.all_cohorts) * staggered_panel.n_times:,}",
-        ],
-    }
-)
-```
+## Interpretation
 
-## Takeaway
+The `pyfixest` bar is the full-data fixed-effect solve. The `DBMundlak` bar is the current `duckreg` sufficient-statistic route: create Mundlak-generated regressors, group identical design rows, and solve weighted least squares. The bitmap bar is the direct moment route on already packed unit-major and time-major bitmaps.
 
-The static bitmap estimator solves from scalar margins. The event-study bitmap estimator solves from cohort-time moments. Both reproduce the existing `duckreg` estimators to floating-point tolerance while replacing the full long-panel compression step with a packed representation plus low-dimensional moment extraction.
-
-The practical implementation target is therefore:
-
-1. store or create unit-major and time-major bitmaps for binary $Y_{it}$ and $W_{it}$;
-2. derive adoption cohort masks once from the treatment bitmaps;
-3. compute scalar Mundlak moments or cohort-time event-study moments with `bit_count`;
-4. solve the same least-squares problem on the resulting low-dimensional sufficient statistics.
+The second panel is the caution. If the data arrive as a normal long panel, Python-side bitmap layout construction is expensive in this prototype. The kernel is fast when the panel is already stored or produced in bitmap form. That is the implementation target: do not use bitmaps as a late conversion step after materializing a long table; use them as the physical representation for dense binary panels.

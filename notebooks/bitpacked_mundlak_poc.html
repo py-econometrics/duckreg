@@ -3231,11 +3231,9 @@ window.Quarto = {
   <li><a href="#point" id="toc-point" class="nav-link active" data-scroll-target="#point">Point</a></li>
   <li><a href="#setup" id="toc-setup" class="nav-link" data-scroll-target="#setup">Setup</a></li>
   <li><a href="#five-period-translation" id="toc-five-period-translation" class="nav-link" data-scroll-target="#five-period-translation">Five-Period Translation</a></li>
-  <li><a href="#direct-bitmap-queries" id="toc-direct-bitmap-queries" class="nav-link" data-scroll-target="#direct-bitmap-queries">Direct Bitmap Queries</a></li>
-  <li><a href="#static-mundlak-one-shot-adoption" id="toc-static-mundlak-one-shot-adoption" class="nav-link" data-scroll-target="#static-mundlak-one-shot-adoption">Static Mundlak: One-Shot Adoption</a></li>
-  <li><a href="#event-study-one-shot-adoption" id="toc-event-study-one-shot-adoption" class="nav-link" data-scroll-target="#event-study-one-shot-adoption">Event Study: One-Shot Adoption</a></li>
-  <li><a href="#event-study-staggered-adoption" id="toc-event-study-staggered-adoption" class="nav-link" data-scroll-target="#event-study-staggered-adoption">Event Study: Staggered Adoption</a></li>
-  <li><a href="#takeaway" id="toc-takeaway" class="nav-link" data-scroll-target="#takeaway">Takeaway</a></li>
+  <li><a href="#direct-bitmap-query" id="toc-direct-bitmap-query" class="nav-link" data-scroll-target="#direct-bitmap-query">Direct Bitmap Query</a></li>
+  <li><a href="#large-runtime-benchmark" id="toc-large-runtime-benchmark" class="nav-link" data-scroll-target="#large-runtime-benchmark">Large Runtime Benchmark</a></li>
+  <li><a href="#interpretation" id="toc-interpretation" class="nav-link" data-scroll-target="#interpretation">Interpretation</a></li>
   </ul>
 </nav>
 </div>
@@ -3244,7 +3242,7 @@ window.Quarto = {
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
 <h1 class="title">Direct Bitmap Moments for Binary Panel Mundlak Designs</h1>
-<p class="subtitle lead">Static Mundlak and event-study estimators without materializing the full unit-time table</p>
+<p class="subtitle lead">Runtime comparison on a 15 million row one-shot adoption problem</p>
 </div>
 
 
@@ -3273,85 +3271,46 @@ Y_{it}
 + \delta \bar W_{\cdot t}
 + u_{it},
 \]</span></p>
-<p>the direct bitmap path computes <span class="math inline">\(X&#39;X\)</span> and <span class="math inline">\(X&#39;Y\)</span> from unit and time margins. For the event-study designs, the direct bitmap path computes the cohort-time sufficient table. That table has at most <code>(number of cohorts + never-treated group) * number of periods</code> rows, not <span class="math inline">\(N T\)</span> rows.</p>
-<p>This note checks the direct bitmap approach against the current <code>duckreg</code> estimators for:</p>
-<ol type="1">
-<li>static Mundlak under one-shot adoption;</li>
-<li>one-shot adoption event study with pre-treatment interactions;</li>
-<li>staggered adoption event study with post-treatment interactions.</li>
-</ol>
+<p>the direct bitmap path computes <span class="math inline">\(X&#39;X\)</span> and <span class="math inline">\(X&#39;Y\)</span> from unit and time margins. This is the path worth benchmarking against the original long-data two-way FE fit and the current <code>duckreg</code> groupby-compression route.</p>
+<p>The large benchmark below uses the one-shot adoption dimensions from <code>notebooks/event_study.ipynb</code>:</p>
+<pre class="text"><code>num_units = 500_000
+num_treated = 250_000
+num_periods = 30</code></pre>
+<p>That is a 15 million row long panel.</p>
 </section>
 <section id="setup" class="level2">
 <h2 class="anchored" data-anchor-id="setup">Setup</h2>
 <div id="setup" class="cell" data-execution_count="1">
 <details class="code-fold">
 <summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> time</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> duckdb</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> ibis</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>candidate_roots <span class="op">=</span> [Path.cwd(), Path.cwd().parent]</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>repo_root <span class="op">=</span> <span class="bu">next</span>(</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    root</span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> root <span class="kw">in</span> candidate_roots</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (root <span class="op">/</span> <span class="st">&quot;benchmarks&quot;</span> <span class="op">/</span> <span class="st">&quot;bitpacked_mundlak_poc.py&quot;</span>).exists()</span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>sys.path.insert(<span class="dv">0</span>, <span class="bu">str</span>(repo_root))</span>
-<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg.dbreg <span class="im">import</span> DBMundlak, DBMundlakEventStudy</span>
-<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> benchmarks.bitpacked_mundlak_poc <span class="im">import</span> (</span>
-<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    COHORT_TIME_SUMS_SQL,</span>
-<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    STATIC_MUNDLAK_DIRECT_SQL,</span>
-<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>    bitmap_translation_table,</span>
-<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    fit_event_study_bitmap_panel,</span>
-<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    fit_static_mundlak_bitmap_panel,</span>
-<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    make_five_period_demo_long_panel,</span>
-<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>    make_one_shot_binary_adoption_panel,</span>
-<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>    make_staggered_binary_adoption_panel,</span>
-<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    pack_long_panel_to_bitmaps,</span>
-<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> ibis_table(df: pd.DataFrame, table_name: <span class="bu">str</span>):</span>
-<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    con <span class="op">=</span> ibis.duckdb.<span class="ex">connect</span>()</span>
-<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>    con.create_table(table_name, df, overwrite<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> con</span>
-<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> compare_event_paths(reference: <span class="bu">dict</span>[<span class="bu">str</span>, pd.DataFrame], bitmap: <span class="bu">dict</span>[<span class="bu">str</span>, pd.DataFrame]):</span>
-<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>    rows <span class="op">=</span> []</span>
-<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> cohort <span class="kw">in</span> <span class="bu">sorted</span>(reference, key<span class="op">=</span><span class="kw">lambda</span> x: <span class="bu">int</span>(x)):</span>
-<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>        ref_values <span class="op">=</span> reference[cohort][<span class="st">&quot;est&quot;</span>].to_numpy()</span>
-<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>        bitmap_values <span class="op">=</span> bitmap[cohort][<span class="st">&quot;est&quot;</span>].to_numpy()</span>
-<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>        rows.append(</span>
-<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>            {</span>
-<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>                <span class="st">&quot;cohort&quot;</span>: cohort,</span>
-<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>                <span class="st">&quot;max_abs_difference&quot;</span>: np.<span class="bu">max</span>(np.<span class="bu">abs</span>(ref_values <span class="op">-</span> bitmap_values)),</span>
-<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>                <span class="st">&quot;mean_abs_difference&quot;</span>: np.mean(np.<span class="bu">abs</span>(ref_values <span class="op">-</span> bitmap_values)),</span>
-<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>            }</span>
-<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>        )</span>
-<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> pd.DataFrame(rows)</span>
-<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> joined_event_path(</span>
-<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>    reference: <span class="bu">dict</span>[<span class="bu">str</span>, pd.DataFrame],</span>
-<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>    bitmap: <span class="bu">dict</span>[<span class="bu">str</span>, pd.DataFrame],</span>
-<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>    cohort: <span class="bu">str</span>,</span>
-<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a>):</span>
-<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>    out <span class="op">=</span> pd.DataFrame(</span>
-<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>        {</span>
-<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;time&quot;</span>: np.arange(<span class="bu">len</span>(reference[cohort])),</span>
-<span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;duckreg&quot;</span>: reference[cohort][<span class="st">&quot;est&quot;</span>].to_numpy(),</span>
-<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;bitmap&quot;</span>: bitmap[cohort][<span class="st">&quot;est&quot;</span>].to_numpy(),</span>
-<span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a>        }</span>
-<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a>    out[<span class="st">&quot;abs_difference&quot;</span>] <span class="op">=</span> (out[<span class="st">&quot;duckreg&quot;</span>] <span class="op">-</span> out[<span class="st">&quot;bitmap&quot;</span>]).<span class="bu">abs</span>()</span>
-<span id="cb1-66"><a href="#cb1-66" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> out</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> gc</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> time</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> ibis</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pyfixest <span class="im">as</span> pf</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>candidate_roots <span class="op">=</span> [Path.cwd(), Path.cwd().parent]</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>repo_root <span class="op">=</span> <span class="bu">next</span>(</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    root</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> root <span class="kw">in</span> candidate_roots</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (root <span class="op">/</span> <span class="st">&quot;benchmarks&quot;</span> <span class="op">/</span> <span class="st">&quot;bitpacked_mundlak_poc.py&quot;</span>).exists()</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>sys.path.insert(<span class="dv">0</span>, <span class="bu">str</span>(repo_root))</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg.dbreg <span class="im">import</span> DBMundlak</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> benchmarks.bitpacked_mundlak_poc <span class="im">import</span> (</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    STATIC_MUNDLAK_DIRECT_SQL,</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    bitmap_translation_table,</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    fit_static_mundlak_bitmap_panel,</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    make_five_period_demo_long_panel,</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    make_one_shot_binary_adoption_panel,</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>    pack_long_panel_to_bitmaps,</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 </section>
@@ -3361,10 +3320,10 @@ Y_{it}
 <div id="cell-five-period-demo" class="cell" data-execution_count="2">
 <details class="code-fold">
 <summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>demo_long <span class="op">=</span> make_five_period_demo_long_panel()</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>demo_panel <span class="op">=</span> pack_long_panel_to_bitmaps(demo_long)</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>demo_long.head(<span class="dv">20</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>demo_long <span class="op">=</span> make_five_period_demo_long_panel()</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>demo_panel <span class="op">=</span> pack_long_panel_to_bitmaps(demo_long)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>demo_long.head(<span class="dv">20</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div id="five-period-demo" class="cell-output cell-output-display" data-execution_count="2">
 <div>
@@ -3530,7 +3489,7 @@ Y_{it}
 <div id="cell-five-period-bitmaps" class="cell" data-execution_count="3">
 <details class="code-fold">
 <summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>bitmap_translation_table(demo_panel)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>bitmap_translation_table(demo_panel)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div id="five-period-bitmaps" class="cell-output cell-output-display" data-execution_count="3">
 <div>
@@ -3588,9 +3547,9 @@ Y_{it}
 </div>
 <p>The packed table has one row per unit because five periods fit in one 64-bit word. With 365 periods, the same layout has six rows per unit.</p>
 </section>
-<section id="direct-bitmap-queries" class="level2">
-<h2 class="anchored" data-anchor-id="direct-bitmap-queries">Direct Bitmap Queries</h2>
-<p>The static Mundlak query computes the seven scalar margins needed for <span class="math inline">\(X&#39;X\)</span> and <span class="math inline">\(X&#39;Y\)</span>:</p>
+<section id="direct-bitmap-query" class="level2">
+<h2 class="anchored" data-anchor-id="direct-bitmap-query">Direct Bitmap Query</h2>
+<p>The static Mundlak bitmap query computes the seven scalar margins needed for <span class="math inline">\(X&#39;X\)</span> and <span class="math inline">\(X&#39;Y\)</span>:</p>
 <div id="display-static-sql" class="cell" data-results="asis" data-execution_count="4">
 <div class="cell-output cell-output-stdout">
 <pre><code>```sql
@@ -3622,79 +3581,167 @@ SELECT
 ```</code></pre>
 </div>
 </div>
-<p>For event studies, the bitmap query extracts outcome sums by adoption cohort and calendar time:</p>
-<div id="display-event-sql" class="cell" data-results="asis" data-execution_count="5">
-<div class="cell-output cell-output-stdout">
-<pre><code>```sql
-SELECT
-    m.cohort::INTEGER AS cohort,
-    t.time_index::INTEGER AS time_index,
-    SUM(bit_count(t.y_bits &amp; m.mask))::DOUBLE AS sum_y,
-    SUM(bit_count(m.mask))::DOUBLE AS n_units
-FROM time_bits AS t
-JOIN cohort_masks AS m USING (chunk)
-GROUP BY m.cohort, t.time_index
-ORDER BY m.cohort, t.time_index
-```</code></pre>
-</div>
-</div>
-<p>The event-study design matrix is then evaluated only on these cohort-time cells. For a staggered example with three treated cohorts and one never-treated group over 30 periods, the solve uses <span class="math inline">\(4 \times 30 = 120\)</span> weighted rows.</p>
+<p>The query runs on two bitmap tables:</p>
+<ul>
+<li><code>unit_bits</code>: one row per unit and 64-period chunk;</li>
+<li><code>time_bits</code>: one row per time period and 64-unit chunk.</li>
+</ul>
+<p>The output is not a compressed cell table. It is the small set of scalar moments needed to solve the Mundlak normal equations.</p>
 </section>
-<section id="static-mundlak-one-shot-adoption" class="level2">
-<h2 class="anchored" data-anchor-id="static-mundlak-one-shot-adoption">Static Mundlak: One-Shot Adoption</h2>
-<p>This reproduces the static Mundlak coefficient from the event-study notebook’s one-shot adoption design, using a binary outcome version of the same setup. The reference is <code>DBMundlak</code>; the bitmap path uses the direct scalar moment query above.</p>
-<div id="cell-static-one-shot" class="cell" data-execution_count="6">
+<section id="large-runtime-benchmark" class="level2">
+<h2 class="anchored" data-anchor-id="large-runtime-benchmark">Large Runtime Benchmark</h2>
+<p>The benchmark compares:</p>
+<ol type="1">
+<li><code>pyfixest</code> on the full 15 million row long table, estimating <code>Y_it ~ W_it | unit_id + time_id</code>;</li>
+<li><code>DBMundlak</code>, which computes sufficient statistics by grouping the long table’s Mundlak design rows in DuckDB;</li>
+<li>direct bitmap moments, which assumes the panel is available in packed unit-major and time-major bitmap layouts.</li>
+</ol>
+<p>The main runtime bars exclude data-generation time. They also exclude one-time layout creation, because each method’s natural storage assumption differs. The second panel reports those layout costs separately.</p>
+<div id="large-benchmark" class="cell" data-execution_count="5">
 <details class="code-fold">
 <summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>one_shot <span class="op">=</span> make_one_shot_binary_adoption_panel(</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    num_units<span class="op">=</span><span class="dv">5_000</span>,</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    num_periods<span class="op">=</span><span class="dv">30</span>,</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    num_treated<span class="op">=</span><span class="dv">2_500</span>,</span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    treatment_start<span class="op">=</span><span class="dv">15</span>,</span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">20260629</span>,</span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>large_config <span class="op">=</span> {</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;num_units&quot;</span>: <span class="dv">500_000</span>,</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;num_treated&quot;</span>: <span class="dv">250_000</span>,</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;num_periods&quot;</span>: <span class="dv">30</span>,</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;treatment_start&quot;</span>: <span class="dv">15</span>,</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;seed&quot;</span>: <span class="dv">20260629</span>,</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>}</span>
 <span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>start <span class="op">=</span> time.perf_counter()</span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>one_shot_panel <span class="op">=</span> pack_long_panel_to_bitmaps(one_shot)</span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>one_shot_pack_seconds <span class="op">=</span> time.perf_counter() <span class="op">-</span> start</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>large_panel_long <span class="op">=</span> make_one_shot_binary_adoption_panel(<span class="op">**</span>large_config)</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>data_generation_seconds <span class="op">=</span> time.perf_counter() <span class="op">-</span> start</span>
 <span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>start <span class="op">=</span> time.perf_counter()</span>
-<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>bitmap_static <span class="op">=</span> fit_static_mundlak_bitmap_panel(one_shot_panel)</span>
-<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>bitmap_static_seconds <span class="op">=</span> time.perf_counter() <span class="op">-</span> start</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>large_bitmap_panel <span class="op">=</span> pack_long_panel_to_bitmaps(large_panel_long)</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>bitmap_layout_seconds <span class="op">=</span> time.perf_counter() <span class="op">-</span> start</span>
 <span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>con <span class="op">=</span> ibis_table(one_shot, <span class="st">&quot;one_shot&quot;</span>)</span>
-<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>start <span class="op">=</span> time.perf_counter()</span>
-<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>duckreg_static_model <span class="op">=</span> DBMundlak(</span>
-<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>    connection<span class="op">=</span>con,</span>
-<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;one_shot&quot;</span>,</span>
-<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>    outcome_var<span class="op">=</span><span class="st">&quot;Y_it&quot;</span>,</span>
-<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>    covariates<span class="op">=</span>[<span class="st">&quot;W_it&quot;</span>],</span>
-<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>    unit_col<span class="op">=</span><span class="st">&quot;unit_id&quot;</span>,</span>
-<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>    time_col<span class="op">=</span><span class="st">&quot;time_id&quot;</span>,</span>
-<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>    cluster_col<span class="op">=</span><span class="st">&quot;unit_id&quot;</span>,</span>
-<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
-<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
-<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>duckreg_static_model.fit()</span>
-<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>duckreg_static_seconds <span class="op">=</span> time.perf_counter() <span class="op">-</span> start</span>
-<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>duckreg_static <span class="op">=</span> pd.Series(</span>
-<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>    np.asarray(duckreg_static_model.point_estimate).reshape(<span class="op">-</span><span class="dv">1</span>),</span>
-<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>    index<span class="op">=</span>bitmap_static.index,</span>
-<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a>static_comparison <span class="op">=</span> pd.DataFrame(</span>
-<span id="cb6-39"><a href="#cb6-39" aria-hidden="true" tabindex="-1"></a>    {</span>
-<span id="cb6-40"><a href="#cb6-40" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;duckreg&quot;</span>: duckreg_static,</span>
-<span id="cb6-41"><a href="#cb6-41" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;bitmap_direct&quot;</span>: bitmap_static,</span>
-<span id="cb6-42"><a href="#cb6-42" aria-hidden="true" tabindex="-1"></a>    }</span>
-<span id="cb6-43"><a href="#cb6-43" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb6-44"><a href="#cb6-44" aria-hidden="true" tabindex="-1"></a>static_comparison[<span class="st">&quot;abs_difference&quot;</span>] <span class="op">=</span> (</span>
-<span id="cb6-45"><a href="#cb6-45" aria-hidden="true" tabindex="-1"></a>    static_comparison[<span class="st">&quot;duckreg&quot;</span>] <span class="op">-</span> static_comparison[<span class="st">&quot;bitmap_direct&quot;</span>]</span>
-<span id="cb6-46"><a href="#cb6-46" aria-hidden="true" tabindex="-1"></a>).<span class="bu">abs</span>()</span>
-<span id="cb6-47"><a href="#cb6-47" aria-hidden="true" tabindex="-1"></a>static_comparison</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>start <span class="op">=</span> time.perf_counter()</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>duckdb_backend <span class="op">=</span> ibis.duckdb.<span class="ex">connect</span>()</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>duckdb_backend.create_table(<span class="st">&quot;large_one_shot&quot;</span>, large_panel_long, overwrite<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>duckdb_layout_seconds <span class="op">=</span> time.perf_counter() <span class="op">-</span> start</span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>start <span class="op">=</span> time.perf_counter()</span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>pyfixest_fit <span class="op">=</span> pf.feols(</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;Y_it ~ W_it | unit_id + time_id&quot;</span>,</span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>    data<span class="op">=</span>large_panel_long,</span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>    lean<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>pyfixest_seconds <span class="op">=</span> time.perf_counter() <span class="op">-</span> start</span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>gc.collect()</span>
+<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>start <span class="op">=</span> time.perf_counter()</span>
+<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>dbmundlak <span class="op">=</span> DBMundlak(</span>
+<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb6-35"><a href="#cb6-35" aria-hidden="true" tabindex="-1"></a>    connection<span class="op">=</span>duckdb_backend,</span>
+<span id="cb6-36"><a href="#cb6-36" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;large_one_shot&quot;</span>,</span>
+<span id="cb6-37"><a href="#cb6-37" aria-hidden="true" tabindex="-1"></a>    outcome_var<span class="op">=</span><span class="st">&quot;Y_it&quot;</span>,</span>
+<span id="cb6-38"><a href="#cb6-38" aria-hidden="true" tabindex="-1"></a>    covariates<span class="op">=</span>[<span class="st">&quot;W_it&quot;</span>],</span>
+<span id="cb6-39"><a href="#cb6-39" aria-hidden="true" tabindex="-1"></a>    unit_col<span class="op">=</span><span class="st">&quot;unit_id&quot;</span>,</span>
+<span id="cb6-40"><a href="#cb6-40" aria-hidden="true" tabindex="-1"></a>    time_col<span class="op">=</span><span class="st">&quot;time_id&quot;</span>,</span>
+<span id="cb6-41"><a href="#cb6-41" aria-hidden="true" tabindex="-1"></a>    cluster_col<span class="op">=</span><span class="st">&quot;unit_id&quot;</span>,</span>
+<span id="cb6-42"><a href="#cb6-42" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb6-43"><a href="#cb6-43" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb6-44"><a href="#cb6-44" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-45"><a href="#cb6-45" aria-hidden="true" tabindex="-1"></a>dbmundlak.fit()</span>
+<span id="cb6-46"><a href="#cb6-46" aria-hidden="true" tabindex="-1"></a>dbmundlak_seconds <span class="op">=</span> time.perf_counter() <span class="op">-</span> start</span>
+<span id="cb6-47"><a href="#cb6-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-48"><a href="#cb6-48" aria-hidden="true" tabindex="-1"></a>start <span class="op">=</span> time.perf_counter()</span>
+<span id="cb6-49"><a href="#cb6-49" aria-hidden="true" tabindex="-1"></a>bitmap_static <span class="op">=</span> fit_static_mundlak_bitmap_panel(large_bitmap_panel)</span>
+<span id="cb6-50"><a href="#cb6-50" aria-hidden="true" tabindex="-1"></a>bitmap_seconds <span class="op">=</span> time.perf_counter() <span class="op">-</span> start</span>
+<span id="cb6-51"><a href="#cb6-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-52"><a href="#cb6-52" aria-hidden="true" tabindex="-1"></a>runtime_df <span class="op">=</span> pd.DataFrame(</span>
+<span id="cb6-53"><a href="#cb6-53" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb6-54"><a href="#cb6-54" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;method&quot;</span>: [</span>
+<span id="cb6-55"><a href="#cb6-55" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;pyfixest full data&quot;</span>,</span>
+<span id="cb6-56"><a href="#cb6-56" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;DBMundlak groupby&quot;</span>,</span>
+<span id="cb6-57"><a href="#cb6-57" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;bitmap direct moments&quot;</span>,</span>
+<span id="cb6-58"><a href="#cb6-58" aria-hidden="true" tabindex="-1"></a>        ],</span>
+<span id="cb6-59"><a href="#cb6-59" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;seconds&quot;</span>: [</span>
+<span id="cb6-60"><a href="#cb6-60" aria-hidden="true" tabindex="-1"></a>            pyfixest_seconds,</span>
+<span id="cb6-61"><a href="#cb6-61" aria-hidden="true" tabindex="-1"></a>            dbmundlak_seconds,</span>
+<span id="cb6-62"><a href="#cb6-62" aria-hidden="true" tabindex="-1"></a>            bitmap_seconds,</span>
+<span id="cb6-63"><a href="#cb6-63" aria-hidden="true" tabindex="-1"></a>        ],</span>
+<span id="cb6-64"><a href="#cb6-64" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb6-65"><a href="#cb6-65" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-66"><a href="#cb6-66" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-67"><a href="#cb6-67" aria-hidden="true" tabindex="-1"></a>layout_df <span class="op">=</span> pd.DataFrame(</span>
+<span id="cb6-68"><a href="#cb6-68" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb6-69"><a href="#cb6-69" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;stage&quot;</span>: [</span>
+<span id="cb6-70"><a href="#cb6-70" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;data generation&quot;</span>,</span>
+<span id="cb6-71"><a href="#cb6-71" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;DuckDB table creation&quot;</span>,</span>
+<span id="cb6-72"><a href="#cb6-72" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;long panel to bitmap layout&quot;</span>,</span>
+<span id="cb6-73"><a href="#cb6-73" aria-hidden="true" tabindex="-1"></a>        ],</span>
+<span id="cb6-74"><a href="#cb6-74" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;seconds&quot;</span>: [</span>
+<span id="cb6-75"><a href="#cb6-75" aria-hidden="true" tabindex="-1"></a>            data_generation_seconds,</span>
+<span id="cb6-76"><a href="#cb6-76" aria-hidden="true" tabindex="-1"></a>            duckdb_layout_seconds,</span>
+<span id="cb6-77"><a href="#cb6-77" aria-hidden="true" tabindex="-1"></a>            bitmap_layout_seconds,</span>
+<span id="cb6-78"><a href="#cb6-78" aria-hidden="true" tabindex="-1"></a>        ],</span>
+<span id="cb6-79"><a href="#cb6-79" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb6-80"><a href="#cb6-80" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-81"><a href="#cb6-81" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-82"><a href="#cb6-82" aria-hidden="true" tabindex="-1"></a>size_df <span class="op">=</span> pd.DataFrame(</span>
+<span id="cb6-83"><a href="#cb6-83" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb6-84"><a href="#cb6-84" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;quantity&quot;</span>: [</span>
+<span id="cb6-85"><a href="#cb6-85" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;long panel rows&quot;</span>,</span>
+<span id="cb6-86"><a href="#cb6-86" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;long panel memory MB&quot;</span>,</span>
+<span id="cb6-87"><a href="#cb6-87" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;unit-major bitmap rows&quot;</span>,</span>
+<span id="cb6-88"><a href="#cb6-88" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;time-major bitmap rows&quot;</span>,</span>
+<span id="cb6-89"><a href="#cb6-89" aria-hidden="true" tabindex="-1"></a>        ],</span>
+<span id="cb6-90"><a href="#cb6-90" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;value&quot;</span>: [</span>
+<span id="cb6-91"><a href="#cb6-91" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span><span class="bu">len</span>(large_panel_long)<span class="sc">:,}</span><span class="ss">&quot;</span>,</span>
+<span id="cb6-92"><a href="#cb6-92" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span>large_panel_long<span class="sc">.</span>memory_usage(deep<span class="op">=</span><span class="va">True</span>)<span class="sc">.</span><span class="bu">sum</span>() <span class="op">/</span> <span class="fl">1e6</span><span class="sc">:.1f}</span><span class="ss">&quot;</span>,</span>
+<span id="cb6-93"><a href="#cb6-93" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span><span class="bu">len</span>(large_bitmap_panel.unit_bits)<span class="sc">:,}</span><span class="ss">&quot;</span>,</span>
+<span id="cb6-94"><a href="#cb6-94" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span><span class="bu">len</span>(large_bitmap_panel.time_bits)<span class="sc">:,}</span><span class="ss">&quot;</span>,</span>
+<span id="cb6-95"><a href="#cb6-95" aria-hidden="true" tabindex="-1"></a>        ],</span>
+<span id="cb6-96"><a href="#cb6-96" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb6-97"><a href="#cb6-97" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<div id="static-one-shot" class="cell-output cell-output-display" data-execution_count="6">
+</div>
+<div id="cell-runtime-figure" class="cell" data-execution_count="6">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">13</span>, <span class="fl">4.8</span>), constrained_layout<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>runtime_colors <span class="op">=</span> [<span class="st">&quot;#4C78A8&quot;</span>, <span class="st">&quot;#59A14F&quot;</span>, <span class="st">&quot;#E15759&quot;</span>]</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].bar(runtime_df[<span class="st">&quot;method&quot;</span>], runtime_df[<span class="st">&quot;seconds&quot;</span>], color<span class="op">=</span>runtime_colors)</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_yscale(<span class="st">&quot;log&quot;</span>)</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_ylabel(<span class="st">&quot;seconds, log scale&quot;</span>)</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].set_title(<span class="st">&quot;Estimator runtime on 15M rows&quot;</span>)</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">0</span>].tick_params(axis<span class="op">=</span><span class="st">&quot;x&quot;</span>, rotation<span class="op">=</span><span class="dv">20</span>)</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, value <span class="kw">in</span> <span class="bu">enumerate</span>(runtime_df[<span class="st">&quot;seconds&quot;</span>]):</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">0</span>].text(i, value <span class="op">*</span> <span class="fl">1.10</span>, <span class="ss">f&quot;</span><span class="sc">{</span>value<span class="sc">:.3f}</span><span class="ss">s&quot;</span>, ha<span class="op">=</span><span class="st">&quot;center&quot;</span>, va<span class="op">=</span><span class="st">&quot;bottom&quot;</span>)</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>layout_colors <span class="op">=</span> [<span class="st">&quot;#9C755F&quot;</span>, <span class="st">&quot;#BAB0AC&quot;</span>, <span class="st">&quot;#F28E2B&quot;</span>]</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].bar(layout_df[<span class="st">&quot;stage&quot;</span>], layout_df[<span class="st">&quot;seconds&quot;</span>], color<span class="op">=</span>layout_colors)</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_yscale(<span class="st">&quot;log&quot;</span>)</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_ylabel(<span class="st">&quot;seconds, log scale&quot;</span>)</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].set_title(<span class="st">&quot;One-time setup from generated long data&quot;</span>)</span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>axes[<span class="dv">1</span>].tick_params(axis<span class="op">=</span><span class="st">&quot;x&quot;</span>, rotation<span class="op">=</span><span class="dv">20</span>)</span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, value <span class="kw">in</span> <span class="bu">enumerate</span>(layout_df[<span class="st">&quot;seconds&quot;</span>]):</span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">1</span>].text(i, value <span class="op">*</span> <span class="fl">1.10</span>, <span class="ss">f&quot;</span><span class="sc">{</span>value<span class="sc">:.3f}</span><span class="ss">s&quot;</span>, ha<span class="op">=</span><span class="st">&quot;center&quot;</span>, va<span class="op">=</span><span class="st">&quot;bottom&quot;</span>)</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> ax <span class="kw">in</span> axes:</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>    ax.grid(axis<span class="op">=</span><span class="st">&quot;y&quot;</span>, which<span class="op">=</span><span class="st">&quot;both&quot;</span>, alpha<span class="op">=</span><span class="fl">0.25</span>)</span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>    ax.set_axisbelow(<span class="va">True</span>)</span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img role="img" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABOsAAAHXCAYAAADtHN41AAAAOnRFWHRTb2Z0d2FyZQBNYXRwbG90bGliIHZlcnNpb24zLjEwLjksIGh0dHBzOi8vbWF0cGxvdGxpYi5vcmcvJkbTWQAAAAlwSFlzAAAOxAAADsQBlSsOGwAA0iNJREFUeJzs3Xd4FFXbx/HfhhTSSFmQ3iQUEZAuvfeOBUREEDQoNlQQpUi3AXaQNygIWEBRVECqUqVIk6agdPABgSWEQDaknfcPnuzDkgQSSLKb5Pu5rr00s1PuGc7u3HvPzDkWY4wRAAAAAAAAAJfzcHUAAAAAAAAAAK6iWAcAAAAAAAC4CYp1AAAAAAAAgJugWAcAAAAAAAC4CYp1AAAAAAAAgJugWAcAAAAAAAC4CYp1AAAAAAAAgJugWAcAAAAAAAC4CYp1AAAAAAAAgJugWAe4yGeffSaLxZLqKzg4ON3rOXr0qMaMGaPDhw+neK9MmTLq169f5gWdTmPGjNEvv/yS7dvNDu+9956+++67FNPHjBkji8XigohcZ/jw4WrTpo2sVqssFos+++yzVOdr1qxZqu38vffeS3W+Bg0apLqexx57TBaLRSVKlMjkPQEAuNqKFSvUvn17Wa1W5c+fXxUqVNCwYcMUGRnpknjcMb/KSp999plmzpzpsu0nJSVp8ODBKlq0qDw8PNStWzeXxZLXrVmzRmPGjFFSUlKmrje9uXJO/HytWbNGFotFa9asyfCyufl3E24PxTrAxb755htt2rTJ6bVq1ap0L3/06FGNHTs21WRy4cKFGjVqVGaGmy5jx47NtSedtIp1jz/+uDZt2uSCiFznww8/lN1uV6dOnW46b7Vq1VK084ceeijFfIGBgdq0aZMOHjzoND0mJkYLFixQYGBgpsUPAHAPr7/+utq2bav8+fPrk08+0fLly/Xkk0/qs88+U506dXTixIlsj8kd86us5Opi3YIFC/T+++9r6NCh+vXXX/X222+7LJa8bs2aNRo7dmymF+uQutz8uwm3x9PVAQB5XfXq1RUWFpYl665Ro0aWrDe7GWMUHx8vb2/vdM2fmJgoY4w8PbPvK65EiRJ57o6vqKgoeXh46ODBg5ozZ84N5w0MDFS9evVuus5q1arp33//1eeff64xY8Y4picXSNu2bXtLRdGMtiEAQPZYvXq1Ro4cqcGDB+vdd991TG/atKm6d++uWrVq6dFHH9Xq1atdGKWz3JJfuZM///xTkjR48GB5eKR9P0l8fLw8PT3z3NMMt8MVeTGA28eddYCbO336tPr27atixYrJx8dHRYsWVadOnXTmzBmtWbNGzZs3lyS1bt3a8Xhh8i3Y199Gnvzo7caNG9WjRw8FBgaqcOHCeuONNyRJy5YtU40aNeTv7686depo+/btTrGsWLFCHTp0UNGiReXn56cqVapoypQpSkxMdMyTnDxNnDjREc+1RZfPP/9c99xzj/Lnz6+CBQuqT58+OnXqlNN2ypQpo0ceeUQzZ85UpUqV5O3trSVLlqR5jCwWi0aMGKE333xTZcuWlbe3t/bs2ePY36NHjzrNn9pt+BaLRSNHjtQHH3ygsmXLKjAwUE2bNtW+ffuc4jp27Ji++OILx74lH98brXPKlCkqXbq0/Pz81LFjR505c0ZnzpxRjx49FBQUpJIlS+qtt95KsV9HjhxR7969VahQIfn4+Kh69epauHBhmsfhWr/99ptatWqlgIAA+fv7q2XLlvrtt9+c5unXr59KlCihnTt3qnHjxvLz81P58uU1ffr0dG3jRsn07ejTp48+//xzp2lz5szRfffdJ39//3St40ZtaNmyZapfv758fX0VFBSkbt266cCBA45lp0yZIj8/P8XFxTmm3X///bJYLE53vc6YMUOenp66ePGiJGnr1q1q3bq1rFarfH19deedd2rQoEG3fBwAIC94++23FRoa6shFrlW2bFm98sorWrNmjbZs2eKYnp5zdrLvvvtO9erVk5+fn4KDg/Xggw/q+PHjN4wpu/OrW41TkpYvX64GDRooKChIAQEBqlixosaNG+c0z65du9SlSxeFhITI19dXDRs21Pr16x3vN2vWTGvXrtWvv/7q2NdmzZpJSvvRxX79+qlMmTKOv48ePSqLxaJp06bpxRdf1B133CE/Pz916tQpRR52vTJlyjhyxXz58jm61rh2nS+//LIjF75w4YKMMXr33XdVsWJFeXt7q2jRonrmmWcc5+Rkt5uLpWbHjh1q3LixfH19VbJkSb3++usaPXp0iuOUkJCgN954Q5UqVZKPj4+KFSuml156SbGxsSmO2//93//ptddeU9GiRRUcHKzOnTvr5MmTKbYdERHhlEcPGDBA58+fT7HPqeXFsbGxeuGFF1SlShUFBASo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+R566CF5enqmyHVuNRdLzebNm1WvXj2nfop9fX3VsWNHp/mWLVsmb29vPfDAA07/rm3atJGkFMe+Q4cOTn9f355XrlyppKSkFO3k3nvvVWBgYIr1pZUXf/3117r33nsVHBwsT09P+fv769KlS07dgaRl2bJlKl26tBo0aJBin+Lj47V582ZJV9t0vXr1VLJkScey/v7+6ty58023kZrMzms3b96sDh06yM/PzzGtaNGiatCgwU1j2bRpk/Lly6f777/faXpqg6bdzu8mSbp48aKGDRumcuXKycfHR15eXurTp4+MMfr7779vujxyPop1gItVqVJFtWvXdnpdO+DE/Pnz1aVLF7399tuqVq2aihcvrnHjxt1WMhkSEuL0t7e3d6rTJDn61UhKSlKXLl20ePFijRw5Ur/88ou2bt2qESNGOM2XluT+NIoWLZrivSJFiqTobyO1+W4ko/OnJjQ01OlvHx8fSTfftxtJ67imNv3a7Zw5c0Zz5syRl5eX02vo0KGSJJvNluY2z58/n+ZxjoyMvGF80tX9vp19To9evXopNjZWe/bsSfX9Bx98UHa7XePGjdO+ffv06KOPZngb1x+DyMhIGWPS1QabN2+uzZs3y263a/Xq1WrevLnq1Kmj/Pnza/369Vq9erW8vLzUqFEjSVJQUJBWr16tYsWKadCgQSpVqpSqVKmib7/9NsNxA0BeYbValT9//hv2aZb83rU//KWbn7OTfwy3atUqxbl0z549jvNo//79nd7r37//Le/PreRX6Y0zNWFhYVq+fLmSkpLUp08fFSlSRPXq1XMUMM6fP6/ExESNHz8+xbo/+ugjRUZGZvqIn4ULF0512j///HPL67z+vJ1WTunp6Smr1Zoip7zVXCw1p06d0h133JFi+vX7febMGcXFxcnf39/puCcve/2/a3rbc1hYWIp/y+jo6BTrSy3XWbRokXr27Km77rpLX375pbZs2aKtW7eqUKFC6cr7zpw5o2PHjqXYft26dZ326dSpU2m2g1uR2Xltev8NU3Pq1CmFhIQ4XShIbdnb/d0kSY899pimT5+u5557TitXrtTWrVs1derUdC+PnI8hYQA3d8cdd2jq1KmaOnWqDhw4oNmzZ2v06NEqVKiQnnrqqWyL49ChQ9q2bZvmzp3rdCVz0aJF6Vo+OQk5ffp0ivdOnz6tWrVqOU3L6Chfqc2fP39+SXIaKEC6caHLXVitVjVu3FjDhg1L9f1ixYqluWxoaGiaxzm1JMaV0vp3DgoKUteuXfXmm2+qdu3auuuuu2573SEhIbJYLGkem2sT5ebNmysuLk7r1q3TunXrFB4eLk9PTzVu3Fi//PKLjhw5orp16zoNeFG9enV9++23SkhI0LZt2/TGG2+oR48e2rVrl6pUqZLh+AEgt/P09FTTpk21cuVKxcbGOs7b1/rxxx8lSS1atMjQuq1Wq6Srgz/cfffdKd4PDAyUdLVD/WeeecYxvWDBghnazu1Kb5xpad68uZo3b64rV67o119/1WuvvaaOHTvq6NGjCg4OloeHh55++uk0L3rd7K71a3Opa0dUTyuX+vfff1OdVr169Rtu50auP59fm1Nee8wSEhJks9lSFL4yU9GiRVO9K+r6/U4uRF87kMe1bpTHpSa5naxYsSLVXC75/WSp5Vfz5s1TWFiYPvvsM8e0+Pj4FMXNG8VQtmxZff3116m+nzw4Q9GiRdNsB7cis/Pa9P4bprVsZGSk4uPjnQp21y97u7+bYmNj9cMPP2jMmDF6/vnnHdPTusiN3IliHZCDVKxYUa+//rqmT5+uvXv3SvrflbesHhkoJiZGkpxOTPHx8friiy9SzOvt7Z0inooVK6pw4cKaN2+eBgwY4Ji+ceNGHTt2TC+99FKmx1y6dGlJ0t69e1WhQgVJVxO5FStW3PI6fXx8smUUpnbt2mnTpk26++67M/x4b9OmTfXTTz8pOjrakeRHR0dr0aJFjtHdXO2LL76Qr6+v4zGP1DzzzDOKjY1N8ej0rfL391etWrX0zTffaMyYMcqXL58k6dixY9q4caOeffZZx7xVqlRRoUKFNGnSJF2+fFlNmzaVdPXH4hdffKETJ06kWSz39PRUvXr1NH78eP3444/6888/KdYBQBqGDBmi1q1ba/jw4XrnnXec3jty5IjeeustNWnSRPfee2+G1tugQQMFBgbq4MGD6tu3b5rzlSlTJtURILMrv0pvnDfj4+OjFi1a6NKlS+ratauOHDmiOnXqqHHjxtq1a5dq1qx5w8Kcj4+PoqOjU0y/NpeqWbOmJOnChQvauHFjqoXEBQsWaMyYMY5t/frrrzp58qTq169/y/t2vXr16snb21vz5s1Ty5YtHdPnz5+vhISELM116tWrp8mTJ+vkyZOOR2HtdrtjxPlk7dq101tvvaWoqCinGG9V69at5eHhoePHj6t169a3tI6YmBinx4Elae7cuU6jk0rObf/af+N27drp22+/VUBAgONR4tTUr19fkyZN0okTJxx3xF6+fDndharrZXZeW69ePf3000+KiYlxPAp76tQp/frrrzd9Uqd+/fpKTEzUt99+6/To67x585zmu93fTVeuXFFiYmKKO/iuLbQi96NYB7jY77//rnPnzqWYXrt2bV2+fFmtWrVS7969ValSJXl5eemHH35QZGSko8+LChUqyNPTUzNnzlRoaKh8fHxUsWLFm16Jzai77rpLpUuX1ogRI5QvXz55eXnp3XffTXXeypUra8mSJWrXrp1CQkJUrFgxFStWTOPGjdPAgQP1yCOP6JFHHtE///yjESNGqHz58rf12Ela6tSpo3Llymno0KFKSkqSj4+Ppk2bpitXrtzyOitXrqz169dr8eLFKlKkiAoWLJiuYd4zaty4capbt66aNGmiZ555RmXKlFFkZKT27t2rw4cPa+bMmWkuO2rUKC1evFgtW7bUsGHDZLFY9NZbbykmJkavvfZapsW4du1anT171nG1c9u2bQoICJB0tc8aSVq/fr3efPNN3XfffSpTpoyioqI0e/Zs/fjjj3rzzTed7ky7XqNGjRyPmWaW8ePHq2PHjurUqZMGDRqkS5cuafTo0QoKCnIqGFssFjVr1kzffPON6tSpowIFCki6egdD8qPI197lsXjxYkVERKhbt24qW7asLl++rA8++ECBgYGZ+gMFAHKbVq1aaezYsRo9erSOHj2qRx99VCEhIdqxY4fefPNNBQUFae7cuRleb4ECBTRp0iQ9/fTTOnv2rNq3b6+goCD9888/Wrt2rZo1a6aHH344zeWzK7+6nTinT5+udevWqUOHDipZsqTOnTunN954Q8WKFXNcJHrnnXfUpEkTtW3bVgMGDFDRokV17tw57dixQ4mJiXrzzTclXc1vpk2bpvnz56tcuXIKDAxUxYoVHfE88cQTGjt2rK5cuaK3337bcb6/XnR0tLp166aBAwfq7NmzevXVV1W+fPlb6s4iLaGhoXrppZf0xhtvyN/fXx06dNCff/6pkSNHqlGjRin6j8tML774oj7++GO1bdtWo0ePlo+Pj9555x35+Pg43c3WrFkz9erVSw888IBefPFF1a1bVx4eHjp69Kh++uknvfXWW44LyelRrlw5DRs2TM8884wOHDigpk2bKn/+/Dpx4oRWrlypxx9/3KmvttS0a9dO33//vV544QV16tRJ27Zt04cffujUF5x0tS1I0pQpU9S+fXvly5dPtWvXVu/evTVr1iy1bNlSL730ku655x7FxcXp0KFD+vHHH/X999/Lz89PL7zwgqZNm6Y2bdpozJgx8vHx0aRJk265b+nMzmtHjhypBQsWqG3bthoyZIiuXLmi8ePHq3Dhwje907R169Zq1KiRBg4cqHPnzql8+fKaP3++4yaKZJnxu6levXqaMmWKihYtqoIFC2rmzJm39Tg5ciDXjm8B5F03Gg1Wkjl79qyJjY014eHhpnLlysbf398EBgaa2rVrmy+++MJpXdOnTzdly5Y1+fLlcxqJKK3Ryv7++2+n5VMbASx5dKoZM2Y4pu3cudM0bNjQ+Pr6muLFi5tRo0aZGTNmpBhxdcOGDaZmzZrGx8fHSDKjR492vDd37lxTrVo14+3tbUJDQ80jjzxi/vOf/zhtO60RV9OiG4yitHfvXtO0aVPj7+9vSpYsaaZMmZLmyK3XryP5GFw7yumff/5pGjVqZHx9fY0kx/FN7zoz8m9w4sQJM2DAAFOsWDHj5eVlihQpYlq1amXmzp1702OyefNm07JlS+Pv72/8/PxMixYtzJYtW5zmSWtk1aZNm6YYlSw1TZs2TbP9Jvv7779Nu3btTLFixYy3t7fx9/c39evXN19++WWq60ttJLr0xHy9G7WhpUuXmnr16pn8+fObAgUKmC5dupj9+/enmG/atGlGkmPEV2P+N1Ksj4+Psdvtjun79+83PXr0MGXKlDE+Pj6mYMGCpn379mbz5s03jRUAcPW7uU2bNiY4ONh4e3ubsLAwM2TIEGOz2VLMm95ztjHGLFmyxDRr1swEBgYaX19fExYWZh577DGzb9++m8aUXfnVrca5ceNG06VLF1OiRAnj7e1tihQpYh544IEU57Q//vjD9OzZ0xQqVMh4e3ub4sWLm86dO5slS5Y45jl16pRp3769CQgISDE66fr1603t2rWNr6+vKV++vJk7d26ao8FOnTrVvPDCC6ZgwYLG19fXdOjQwWk03LTcaDTY64+VMVdHx3znnXdMhQoVHDnSoEGDUoyMe7u5WGq2b99uGjZsaHx8fEyxYsXMuHHjzHPPPWeCg4Od5ktMTDTvvfeeqVatmvHx8TEFChQw1apVM0OHDjUXLly44T4mj0Z8/eiic+bMMffee6/x8/Mz/v7+plKlSubpp592Gp02rbw4MTHRjBgxwhQtWtT4+vqaJk2amB07dqRozwkJCWbQoEGmUKFCxmKxOP272O12M3r0aFOxYkXj7e1tQkJCTO3atc3o0aOdRo/dvn27adSokdMxeu21125pNFhjMj+vXbFihbnnnnuMt7e3KVu2rJk+fbrp1q2bqV69+k3jO3PmjHnooYdMQECACQoKMn369DHff/99in+v2/3ddOTIEdOuXTsTEBBgChUqZJ5++mmzePHiG446i9zFYkwmDC0JAAAAAMiTjh49qrJly2rGjBl6/PHHXR1OtkpMTFTNmjVVsGBB/fzzz64OB7fg0qVLCgsLU8eOHfXpp5+6OhxAEo/BAgAAAACQLqNGjVJYWJhKly4tm82mTz75RLt379ZPP/3k6tCQTs8++6waNGigYsWK6T//+Y/ef/99RUZGOg3mALjajR/KBgAAAAAAkq72aztu3Di1b99effr0UWRkpL7//nu1b9/e1aEhnWJjYzVs2DC1adNG4eHh8vf316pVq1StWjWXxTRv3jw1btxYBQoUkMViUUJCgtP7u3fvVpMmTeTv769ixYppzJgxutFDknPmzFHDhg0VGhoqq9WqZs2a6ddff3Wa5++//1bnzp1VsGBBhYaGqnXr1tq9e7fj/V27dql9+/YqUqSILBaLVq1albk7jRviMVgAAAAAAAAXWb58uc6fPy+73a4BAwYoPj7eMXpvdHS0KlSooH79+um1117TwYMH1b59e7300kt64YUXUl3f1KlTFRYWpgYNGih//vyaOnWqRo0apT///NMxknGtWrV05513aubMmfL29tYrr7yib775RsePH5eHh4f+/PNPbdiwQTVq1FCdOnW0cuVKtWrVKtuOSV5HsQ4AAAAAAMDF1qxZo+bNmzsV62bPnq2hQ4fqP//5j2Pa+++/rw8++ECHDh1K97qDg4M1a9Ysde/eXZIUFBSkOXPmqGvXrpKkvXv3qmrVqjp9+rQKFy7stKzFYklRrIuLi9PgwYP13Xff6fLly7JarXrppZf07LPP3tYxwFU8BotM8e+//+rhhx9W4cKFFRwcrPr162vt2rVpzr9p0yY1btxYwcHBKly4sF566SXFx8c73k/vLbefffaZqlatKn9/f91xxx167rnnMn3fAAAAAABwhd9//101atRwFOokqU6dOjp8+LAuXryYrnVs2bJFly5d0j333OOYNmLECM2dO1cXLlxQTEyM/u///k8NGzZMUahLy+zZs7Vp0ybt3btX0dHR2rx5sxo2bJixnUOaGGDiOklJSbpw4YLy588vi8Xi6nByjIEDB+rs2bPaunWrQkND9dFHH6lTp07av3+/QkNDneY9ceKE2rZtqwkTJuinn37S8ePH9cADDyg+Pl5vvfWWpKv/Dp06ddKIESPUuHFjXblyRXa73Wk977//vqZPn65PPvlE9957r65cuaK//vorxXwAAORWxhjFxsYqODhYHh558xosuRsAILe4cuWKJMlutzuKc+fPn1dgYKDT71xfX19JV2+a8fLyuuE6T548qR49euill15S0aJFHetp2rSpvv32W4WGhspisah06dL67rvv0vw9ndpv8ujoaO3cuVP33nuvgoKCFBQUxO/xm0hv7sZjsNc5f/68rFarq8MAAABIN5vNluLiWF5B7gYAAHKam+Vu3Fl3nfz580u6euCSq9W4ufnz52vWrFmaNWuWChYsqA8++ECzZs3S1q1bUxzH//u//9O0adO0a9cux7RPP/1Uzz77rH777TdVqVLFaX4/Pz8tXrxYLVq0cExbsWKFunXrpjfeeEOffPKJLl68qHvuuUcTJkxwjOJTrlw5jR49Wn369FF8fLx27typKlWqyN/fPwuPBAAA2cdut8tqtTryl7yI3A0AkFusW7dO7dq108WLFx131n3++ecaMWKEDh065Jg2bdo0TZ06Vfv27UtzXXv27FGXLl0UHh6uV1991em9HTt2qFGjRvrnn38UEhLimF68eHG9//77euCBB5zmT+03+bUuXbqk8ePH69tvv9XBgwdvad/zivTmbrm2WJeUlKSmTZvqzz//1JNPPqkJEyaka7nkxyd8fX1J+DKgefPmmj9/vsqVK6d8+fIpNDRUCxcuTLVS3LlzZ7366qv69NNPFR4erqNHj2ratGmSrnZSmdpx9/HxcZoeHR0tSVqyZInWrl2r0NBQjRkzRt26ddP+/fsVFBQkHx8fnThxQpGRkSpevLiaNWuWNTsPAICL5eXHP8ndAAA5XWJiouLj4x3nNA8PD1ksFnl7e+uhhx7Sa6+9pjfffFMj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31EAeYZbDjDhCowohpyIUcWQ29Cms9bs2bM1dOhQNW7cWNLVzri//PJLrVu3Tn369HGa99ixY1q1apV27typChUqSJLef/991ahRQ5cvX1apUqVSrP/LL79U3bp11bJly3SvY/Xq1Xr55Zf1999/y9PTU5UqVdKiRYsUEhKSlYci16BYBwDOfZ4n372W3Of59ec3SVq2bJn279/vuEsuPj5eklSkSBFNmTJFffv21bZt2zRnzhwVK1ZMktSoUSM1btxYixcvVseOHbVs2TJduHDBUfCLiYlRfHy8ChYsqM2bNyssLEz9+/dX//79deXKFU2dOlWdO3fW2bNnFRgYmB2HBUAORrEuDYwohpyANorchjaddZL787n33nsdx9nLy0s1atTQ77//rkcffdRp/l27dsnHx0fVq1d3TKtevbq8vb21a9culS5d2mn+ixcv6ssvv9RHH33kWH961tGnTx9NmDBB/fr1U3x8vLZv3y4fHx/aQjpxnADgquQ+z1u0aKFy5cppwoQJafZ5/u6772rChAmOvzdt2qQePXpo+/btKliwoCSpcePG+vTTT9WwYUMVKlRIW7Zs0dq1a/XWW29JkjZv3qyEhATHOt555x1t2LBB3333nYoUKaLffvtNsbGxqlOnjvLnz6/AwEBZLBbly5cvi48EgNyAYh0AAHlARvvzuXjxooKCglJMDw4OTnX+OXPmyMfHRz179szQOry9vXXo0CH95z//UfHixenPBwBwS4YMGaLo6Gi1atVKFy9eVO3atR19nh8/flyVK1fW0qVL1bhxY4WEhDjdwV2oUCFJUvHixR2DTcyaNUtDhw7VPffco0uXLqlIkSJ68cUXNWDAAEly3JWXrECBAvL29laJEiUkXe3T7uWXX9aBAwfk4eGhChUqaOHChan2bwcA16NYBwBAHpDR/nwKFCigqKioFNMvXLjgWNe1Pv74Yz322GPKnz9/htbx448/6o033lCtWrUUEBCg3r17a9SoUamOzAcAQFpu1Od5qVKldOnSpTSXbdasWYoBewoXLqw5c+ake/tjxozRmDFjHH+3aNFC27ZtS/fyAHAtl40GCwAAss+1/fkkS+7Pp0aNGinmr169uq5cuaLdu3c7pu3evVtxcXFOj7VK0po1a/Tnn3/qqaeeyvA6qlatqi+//FKnT5/WggULNH36dM2aNSsT9hgA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o0cPSVLHjh01a9YsHT9+XNu3b9f999+vffv2adCgQTpy5IjL9gXITVI7N91xxx164403nN43xujrr79WhQoV1KFDBw0ePFitW7dWZGSkSpQooZYtW+ry5csKDg6WJPn6+qpGjRqy2+1asWJFtu0PkBWu/Rwka9Wqle677z6n+S5fvqwRI0aoUKFCCg8PV+fOnTVp0iSdP39eZcqU0b333qvg4GDHuTAkJET333+/Pv30U0kp71oFcpLkfugkad26dTpx4oSMMcqXL59KlCghDw8P/fzzz475q1evrpCQEP3www+Srl7kuXjxojZu3ChJOnHiROZ/JgwAM2jQINOkSRPzxx9/OKbZbDbz2muvmTJlyphKlSqZtm3bmm+//dbxfr9+/UyPHj1MVFSUY9qGDRtM7dq1zS+//GKMMeb48eOmQYMGpkSJEuaLL77Ivh0CbkFiYqLT3ydPnjRbt2418fHxjmldunQxFovF/Prrr45pK1asMCVKlDDr1683xhgTGxtrxowZYypVqmTKlCljPvnkk+zZAeAWJSUlpZhms9nM1q1bTalSpUzRokVN5cqVzUcffWQSEhKMMcbUrVvXDB482NhsNmPM/z4/167riy++MI0bNzYXLlzIhr0A8o7o6GhjjPPn7dpz1YkTJ0yjRo3M/PnzjTHGHDhwwFSpUsX07dvXnD171hw4cMDcfffd5sMPP3Qsc/DgQfPggw+aPn36ZNNeAFknNjbWGGNMXFyc0/Rr/543b55p06aN2b17tzHGmLfffts0aNDAjBgxwhhjzMyZM01wcLDTOWzr1q3G09PT7Nq1K6t3AchU1+d60dHRZuTIkcZqtZpq1aqZWrVqmZdeesnY7XYTGRlpOnbsaHr37u2YPyYmxjz55JOmZcuWjmmDBw82tWrVMlWqVDEWi8Vs3LgxU2PmzjrkWcYYx6MOPXr0kMVi0dq1ayVJkZGRevXVV7V3715FRERo/fr1Klu2rN544w1HH1333HOPzp49q61btzrWmZiYqCtXrujTTz/VgAED1KFDBz3yyCOaPn16iqtZgDu49vZvDw8PJSQkaPv27erevbsqVKigQYMGqVevXtqzZ48kqVu3bgoICFBYWJhjudatW+vSpUs6ffq0JMnHx0ejRo1S69atdezYMZ05c0YSj0vAvZhrHn+4/krojz/+qLCwMM2aNUszZszQ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" id="runtime-figure" class="img-fluid figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<div id="cell-runtime-tables" class="cell" data-execution_count="7">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>runtime_df</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div id="runtime-tables" class="cell-output cell-output-display" data-execution_count="7">
 <div>
 
 
@@ -3702,35 +3749,25 @@ ORDER BY m.cohort, t.time_index
 <thead>
 <tr class="header">
 <th data-quarto-table-cell-role="th"></th>
-<th data-quarto-table-cell-role="th">duckreg</th>
-<th data-quarto-table-cell-role="th">bitmap_direct</th>
-<th data-quarto-table-cell-role="th">abs_difference</th>
+<th data-quarto-table-cell-role="th">method</th>
+<th data-quarto-table-cell-role="th">seconds</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td data-quarto-table-cell-role="th">Intercept</td>
-<td>0.344080</td>
-<td>0.344080</td>
-<td>5.551115e-16</td>
+<td data-quarto-table-cell-role="th">0</td>
+<td>pyfixest full data</td>
+<td>8.916424</td>
 </tr>
 <tr class="even">
-<td data-quarto-table-cell-role="th">W_it</td>
-<td>0.073147</td>
-<td>0.073147</td>
-<td>5.412337e-16</td>
+<td data-quarto-table-cell-role="th">1</td>
+<td>DBMundlak groupby</td>
+<td>0.169028</td>
 </tr>
 <tr class="odd">
-<td data-quarto-table-cell-role="th">avg_W_it_unit</td>
-<td>0.001973</td>
-<td>0.001973</td>
-<td>1.023487e-15</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">avg_W_it_time</td>
-<td>-0.057333</td>
-<td>-0.057333</td>
-<td>1.054712e-15</td>
+<td data-quarto-table-cell-role="th">2</td>
+<td>bitmap direct moments</td>
+<td>0.069995</td>
 </tr>
 </tbody>
 </table>
@@ -3738,31 +3775,12 @@ ORDER BY m.cohort, t.time_index
 </div>
 </div>
 </div>
-<div id="cell-static-one-shot-timing" class="cell" data-execution_count="7">
+<div id="cell-layout-table" class="cell" data-execution_count="8">
 <details class="code-fold">
 <summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>pd.DataFrame(</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    {</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;step&quot;</span>: [</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;long panel rows&quot;</span>,</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;unit-major bitmap rows&quot;</span>,</span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;time-major bitmap rows&quot;</span>,</span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;bitmap translation seconds&quot;</span>,</span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;bitmap direct static solve seconds&quot;</span>,</span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;DBMundlak reference fit seconds&quot;</span>,</span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>        ],</span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;value&quot;</span>: [</span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span><span class="bu">len</span>(one_shot)<span class="sc">:,}</span><span class="ss">&quot;</span>,</span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span><span class="bu">len</span>(one_shot_panel.unit_bits)<span class="sc">:,}</span><span class="ss">&quot;</span>,</span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span><span class="bu">len</span>(one_shot_panel.time_bits)<span class="sc">:,}</span><span class="ss">&quot;</span>,</span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span>one_shot_pack_seconds<span class="sc">:.4f}</span><span class="ss">&quot;</span>,</span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span>bitmap_static_seconds<span class="sc">:.4f}</span><span class="ss">&quot;</span>,</span>
-<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span>duckreg_static_seconds<span class="sc">:.4f}</span><span class="ss">&quot;</span>,</span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>        ],</span>
-<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    }</span>
-<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>layout_df</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
-<div id="static-one-shot-timing" class="cell-output cell-output-display" data-execution_count="7">
+<div id="layout-table" class="cell-output cell-output-display" data-execution_count="8">
 <div>
 
 
@@ -3770,7 +3788,46 @@ ORDER BY m.cohort, t.time_index
 <thead>
 <tr class="header">
 <th data-quarto-table-cell-role="th"></th>
-<th data-quarto-table-cell-role="th">step</th>
+<th data-quarto-table-cell-role="th">stage</th>
+<th data-quarto-table-cell-role="th">seconds</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">0</td>
+<td>data generation</td>
+<td>0.862785</td>
+</tr>
+<tr class="even">
+<td data-quarto-table-cell-role="th">1</td>
+<td>DuckDB table creation</td>
+<td>0.483738</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">2</td>
+<td>long panel to bitmap layout</td>
+<td>10.281121</td>
+</tr>
+</tbody>
+</table>
+
+</div>
+</div>
+</div>
+<div id="cell-size-table" class="cell" data-execution_count="9">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>size_df</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div id="size-table" class="cell-output cell-output-display" data-execution_count="9">
+<div>
+
+
+<table class="dataframe caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
+<thead>
+<tr class="header">
+<th data-quarto-table-cell-role="th"></th>
+<th data-quarto-table-cell-role="th">quantity</th>
 <th data-quarto-table-cell-role="th">value</th>
 </tr>
 </thead>
@@ -3778,32 +3835,22 @@ ORDER BY m.cohort, t.time_index
 <tr class="odd">
 <td data-quarto-table-cell-role="th">0</td>
 <td>long panel rows</td>
-<td>150,000</td>
+<td>15,000,000</td>
 </tr>
 <tr class="even">
 <td data-quarto-table-cell-role="th">1</td>
+<td>long panel memory MB</td>
+<td>120.0</td>
+</tr>
+<tr class="odd">
+<td data-quarto-table-cell-role="th">2</td>
 <td>unit-major bitmap rows</td>
-<td>5,000</td>
+<td>500,000</td>
 </tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">2</td>
+<tr class="even">
+<td data-quarto-table-cell-role="th">3</td>
 <td>time-major bitmap rows</td>
-<td>2,370</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">3</td>
-<td>bitmap translation seconds</td>
-<td>0.1010</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">4</td>
-<td>bitmap direct static solve seconds</td>
-<td>0.0225</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">5</td>
-<td>DBMundlak reference fit seconds</td>
-<td>0.0250</td>
+<td>234,390</td>
 </tr>
 </tbody>
 </table>
@@ -3812,805 +3859,10 @@ ORDER BY m.cohort, t.time_index
 </div>
 </div>
 </section>
-<section id="event-study-one-shot-adoption" class="level2">
-<h2 class="anchored" data-anchor-id="event-study-one-shot-adoption">Event Study: One-Shot Adoption</h2>
-<p>This reproduces the single-cohort event-study surface from the event-study notebook. The reference estimator is <code>DBMundlakEventStudy</code> with <code>pre_treat_interactions=True</code>, which includes treated-cohort-by-time interactions before and after treatment and normalizes the period immediately before adoption to zero.</p>
-<div id="cell-one-shot-event-study" class="cell" data-execution_count="8">
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>start <span class="op">=</span> time.perf_counter()</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>bitmap_one_event <span class="op">=</span> fit_event_study_bitmap_panel(</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    one_shot_panel,</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    pre_treat_interactions<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>bitmap_one_event_seconds <span class="op">=</span> time.perf_counter() <span class="op">-</span> start</span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>con <span class="op">=</span> ibis_table(one_shot, <span class="st">&quot;one_shot_event&quot;</span>)</span>
-<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>start <span class="op">=</span> time.perf_counter()</span>
-<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>duckreg_one_event_model <span class="op">=</span> DBMundlakEventStudy(</span>
-<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>    connection<span class="op">=</span>con,</span>
-<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;one_shot_event&quot;</span>,</span>
-<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>    outcome_var<span class="op">=</span><span class="st">&quot;Y_it&quot;</span>,</span>
-<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>    treatment_col<span class="op">=</span><span class="st">&quot;W_it&quot;</span>,</span>
-<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>    unit_col<span class="op">=</span><span class="st">&quot;unit_id&quot;</span>,</span>
-<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>    time_col<span class="op">=</span><span class="st">&quot;time_id&quot;</span>,</span>
-<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>    cluster_col<span class="op">=</span><span class="st">&quot;unit_id&quot;</span>,</span>
-<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
-<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
-<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>    pre_treat_interactions<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a>duckreg_one_event_model.fit()</span>
-<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a>duckreg_one_event_seconds <span class="op">=</span> time.perf_counter() <span class="op">-</span> start</span>
-<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a>duckreg_one_event <span class="op">=</span> duckreg_one_event_model.summary()[<span class="st">&quot;point_estimate&quot;</span>]</span>
-<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a>compare_event_paths(duckreg_one_event, bitmap_one_event)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div id="one-shot-event-study" class="cell-output cell-output-display" data-execution_count="8">
-<div>
-
-
-<table class="dataframe caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
-<thead>
-<tr class="header">
-<th data-quarto-table-cell-role="th"></th>
-<th data-quarto-table-cell-role="th">cohort</th>
-<th data-quarto-table-cell-role="th">max_abs_difference</th>
-<th data-quarto-table-cell-role="th">mean_abs_difference</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">0</td>
-<td>15</td>
-<td>1.262879e-15</td>
-<td>4.803449e-16</td>
-</tr>
-</tbody>
-</table>
-
-</div>
-</div>
-</div>
-<div id="cell-one-shot-event-study-path" class="cell" data-execution_count="9">
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>joined_event_path(duckreg_one_event, bitmap_one_event, <span class="st">&quot;15&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div id="one-shot-event-study-path" class="cell-output cell-output-display" data-execution_count="9">
-<div>
-
-
-<table class="dataframe caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
-<thead>
-<tr class="header">
-<th data-quarto-table-cell-role="th"></th>
-<th data-quarto-table-cell-role="th">time</th>
-<th data-quarto-table-cell-role="th">duckreg</th>
-<th data-quarto-table-cell-role="th">bitmap</th>
-<th data-quarto-table-cell-role="th">abs_difference</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">0</td>
-<td>0</td>
-<td>-0.0116</td>
-<td>-0.0116</td>
-<td>3.122502e-17</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">1</td>
-<td>1</td>
-<td>0.0004</td>
-<td>0.0004</td>
-<td>1.262879e-15</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">2</td>
-<td>2</td>
-<td>0.0240</td>
-<td>0.0240</td>
-<td>5.689893e-16</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">3</td>
-<td>3</td>
-<td>-0.0036</td>
-<td>-0.0036</td>
-<td>1.804112e-16</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">4</td>
-<td>4</td>
-<td>-0.0096</td>
-<td>-0.0096</td>
-<td>4.163336e-17</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">5</td>
-<td>5</td>
-<td>0.0048</td>
-<td>0.0048</td>
-<td>1.526557e-16</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">6</td>
-<td>6</td>
-<td>-0.0168</td>
-<td>-0.0168</td>
-<td>8.673617e-16</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">7</td>
-<td>7</td>
-<td>-0.0104</td>
-<td>-0.0104</td>
-<td>1.734723e-16</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">8</td>
-<td>8</td>
-<td>0.0056</td>
-<td>0.0056</td>
-<td>3.226586e-16</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">9</td>
-<td>9</td>
-<td>0.0056</td>
-<td>0.0056</td>
-<td>2.081668e-16</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">10</td>
-<td>10</td>
-<td>-0.0160</td>
-<td>-0.0160</td>
-<td>8.777701e-16</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">11</td>
-<td>11</td>
-<td>-0.0108</td>
-<td>-0.0108</td>
-<td>8.951173e-16</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">12</td>
-<td>12</td>
-<td>-0.0172</td>
-<td>-0.0172</td>
-<td>6.314393e-16</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">13</td>
-<td>13</td>
-<td>0.0164</td>
-<td>0.0164</td>
-<td>1.047773e-15</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">14</td>
-<td>14</td>
-<td>0.0000</td>
-<td>0.0000</td>
-<td>0.000000e+00</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">15</td>
-<td>15</td>
-<td>0.0404</td>
-<td>0.0404</td>
-<td>4.649059e-16</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">16</td>
-<td>16</td>
-<td>0.1068</td>
-<td>0.1068</td>
-<td>7.494005e-16</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">17</td>
-<td>17</td>
-<td>0.1112</td>
-<td>0.1112</td>
-<td>4.440892e-16</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">18</td>
-<td>18</td>
-<td>0.1312</td>
-<td>0.1312</td>
-<td>3.885781e-16</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">19</td>
-<td>19</td>
-<td>0.1672</td>
-<td>0.1672</td>
-<td>9.992007e-16</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">20</td>
-<td>20</td>
-<td>0.1824</td>
-<td>0.1824</td>
-<td>8.326673e-17</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">21</td>
-<td>21</td>
-<td>0.1764</td>
-<td>0.1764</td>
-<td>3.053113e-16</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">22</td>
-<td>22</td>
-<td>0.1588</td>
-<td>0.1588</td>
-<td>2.498002e-16</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">23</td>
-<td>23</td>
-<td>-0.0212</td>
-<td>-0.0212</td>
-<td>2.081668e-16</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">24</td>
-<td>24</td>
-<td>0.0208</td>
-<td>0.0208</td>
-<td>1.804112e-16</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">25</td>
-<td>25</td>
-<td>0.0052</td>
-<td>0.0052</td>
-<td>9.714451e-16</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">26</td>
-<td>26</td>
-<td>-0.0056</td>
-<td>-0.0056</td>
-<td>3.903128e-16</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">27</td>
-<td>27</td>
-<td>0.0036</td>
-<td>0.0036</td>
-<td>1.318390e-16</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">28</td>
-<td>28</td>
-<td>-0.0036</td>
-<td>-0.0036</td>
-<td>6.869505e-16</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">29</td>
-<td>29</td>
-<td>-0.0156</td>
-<td>-0.0156</td>
-<td>8.951173e-16</td>
-</tr>
-</tbody>
-</table>
-
-</div>
-</div>
-</div>
-<div id="cell-one-shot-event-study-timing" class="cell" data-execution_count="10">
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>pd.DataFrame(</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    {</span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;step&quot;</span>: [</span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;bitmap direct event-study solve seconds&quot;</span>,</span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;DBMundlakEventStudy reference fit seconds&quot;</span>,</span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;weighted bitmap event-study rows&quot;</span>,</span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>        ],</span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;value&quot;</span>: [</span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span>bitmap_one_event_seconds<span class="sc">:.4f}</span><span class="ss">&quot;</span>,</span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span>duckreg_one_event_seconds<span class="sc">:.4f}</span><span class="ss">&quot;</span>,</span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span><span class="bu">len</span>(one_shot_panel.all_cohorts) <span class="op">*</span> one_shot_panel<span class="sc">.</span>n_times<span class="sc">:,}</span><span class="ss">&quot;</span>,</span>
-<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>        ],</span>
-<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>    }</span>
-<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div id="one-shot-event-study-timing" class="cell-output cell-output-display" data-execution_count="10">
-<div>
-
-
-<table class="dataframe caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
-<thead>
-<tr class="header">
-<th data-quarto-table-cell-role="th"></th>
-<th data-quarto-table-cell-role="th">step</th>
-<th data-quarto-table-cell-role="th">value</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">0</td>
-<td>bitmap direct event-study solve seconds</td>
-<td>0.0246</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">1</td>
-<td>DBMundlakEventStudy reference fit seconds</td>
-<td>0.1214</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">2</td>
-<td>weighted bitmap event-study rows</td>
-<td>60</td>
-</tr>
-</tbody>
-</table>
-
-</div>
-</div>
-</div>
-</section>
-<section id="event-study-staggered-adoption" class="level2">
-<h2 class="anchored" data-anchor-id="event-study-staggered-adoption">Event Study: Staggered Adoption</h2>
-<p>This reproduces the staggered adoption event-study surface from the event-study notebook. The reference estimator is <code>DBMundlakEventStudy</code> with <code>pre_treat_interactions=False</code>, matching the notebook’s staggered example.</p>
-<div id="cell-staggered-event-study" class="cell" data-execution_count="11">
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>staggered <span class="op">=</span> make_staggered_binary_adoption_panel(</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    num_units<span class="op">=</span><span class="dv">6_000</span>,</span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    num_periods<span class="op">=</span><span class="dv">30</span>,</span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    treatment_start_cohorts<span class="op">=</span>(<span class="dv">10</span>, <span class="dv">15</span>, <span class="dv">20</span>),</span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    num_treated<span class="op">=</span>(<span class="dv">1_000</span>, <span class="dv">2_000</span>, <span class="dv">1_000</span>),</span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">20260630</span>,</span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>start <span class="op">=</span> time.perf_counter()</span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>staggered_panel <span class="op">=</span> pack_long_panel_to_bitmaps(staggered)</span>
-<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>staggered_pack_seconds <span class="op">=</span> time.perf_counter() <span class="op">-</span> start</span>
-<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>start <span class="op">=</span> time.perf_counter()</span>
-<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>bitmap_staggered_event <span class="op">=</span> fit_event_study_bitmap_panel(</span>
-<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>    staggered_panel,</span>
-<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>    pre_treat_interactions<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>bitmap_staggered_seconds <span class="op">=</span> time.perf_counter() <span class="op">-</span> start</span>
-<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>con <span class="op">=</span> ibis_table(staggered, <span class="st">&quot;staggered_event&quot;</span>)</span>
-<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>start <span class="op">=</span> time.perf_counter()</span>
-<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a>duckreg_staggered_model <span class="op">=</span> DBMundlakEventStudy(</span>
-<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a>    db_name<span class="op">=</span><span class="va">None</span>,</span>
-<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>    connection<span class="op">=</span>con,</span>
-<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>    table_name<span class="op">=</span><span class="st">&quot;staggered_event&quot;</span>,</span>
-<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a>    outcome_var<span class="op">=</span><span class="st">&quot;Y_it&quot;</span>,</span>
-<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a>    treatment_col<span class="op">=</span><span class="st">&quot;W_it&quot;</span>,</span>
-<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a>    unit_col<span class="op">=</span><span class="st">&quot;unit_id&quot;</span>,</span>
-<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a>    time_col<span class="op">=</span><span class="st">&quot;time_id&quot;</span>,</span>
-<span id="cb11-30"><a href="#cb11-30" aria-hidden="true" tabindex="-1"></a>    cluster_col<span class="op">=</span><span class="st">&quot;unit_id&quot;</span>,</span>
-<span id="cb11-31"><a href="#cb11-31" aria-hidden="true" tabindex="-1"></a>    seed<span class="op">=</span><span class="dv">42</span>,</span>
-<span id="cb11-32"><a href="#cb11-32" aria-hidden="true" tabindex="-1"></a>    n_bootstraps<span class="op">=</span><span class="dv">0</span>,</span>
-<span id="cb11-33"><a href="#cb11-33" aria-hidden="true" tabindex="-1"></a>    pre_treat_interactions<span class="op">=</span><span class="va">False</span>,</span>
-<span id="cb11-34"><a href="#cb11-34" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb11-35"><a href="#cb11-35" aria-hidden="true" tabindex="-1"></a>duckreg_staggered_model.fit()</span>
-<span id="cb11-36"><a href="#cb11-36" aria-hidden="true" tabindex="-1"></a>duckreg_staggered_seconds <span class="op">=</span> time.perf_counter() <span class="op">-</span> start</span>
-<span id="cb11-37"><a href="#cb11-37" aria-hidden="true" tabindex="-1"></a>duckreg_staggered_event <span class="op">=</span> duckreg_staggered_model.summary()[<span class="st">&quot;point_estimate&quot;</span>]</span>
-<span id="cb11-38"><a href="#cb11-38" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-39"><a href="#cb11-39" aria-hidden="true" tabindex="-1"></a>compare_event_paths(duckreg_staggered_event, bitmap_staggered_event)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div id="staggered-event-study" class="cell-output cell-output-display" data-execution_count="11">
-<div>
-
-
-<table class="dataframe caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
-<thead>
-<tr class="header">
-<th data-quarto-table-cell-role="th"></th>
-<th data-quarto-table-cell-role="th">cohort</th>
-<th data-quarto-table-cell-role="th">max_abs_difference</th>
-<th data-quarto-table-cell-role="th">mean_abs_difference</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">0</td>
-<td>10</td>
-<td>1.710437e-15</td>
-<td>4.118378e-16</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">1</td>
-<td>15</td>
-<td>2.884845e-15</td>
-<td>5.514469e-16</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">2</td>
-<td>20</td>
-<td>1.734723e-15</td>
-<td>1.972959e-16</td>
-</tr>
-</tbody>
-</table>
-
-</div>
-</div>
-</div>
-<div id="cell-staggered-event-selected-paths" class="cell" data-execution_count="12">
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>pd.concat(</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    [</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>        joined_event_path(duckreg_staggered_event, bitmap_staggered_event, cohort)</span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>        .assign(cohort<span class="op">=</span>cohort)</span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>        .query(<span class="st">&quot;time in [0, 5, 9, 10, 14, 15, 19, 20, 25, 29]&quot;</span>)</span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> cohort <span class="kw">in</span> [<span class="st">&quot;10&quot;</span>, <span class="st">&quot;15&quot;</span>, <span class="st">&quot;20&quot;</span>]</span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    ],</span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    ignore_index<span class="op">=</span><span class="va">True</span>,</span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div id="staggered-event-selected-paths" class="cell-output cell-output-display" data-execution_count="12">
-<div>
-
-
-<table class="dataframe caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
-<thead>
-<tr class="header">
-<th data-quarto-table-cell-role="th"></th>
-<th data-quarto-table-cell-role="th">time</th>
-<th data-quarto-table-cell-role="th">duckreg</th>
-<th data-quarto-table-cell-role="th">bitmap</th>
-<th data-quarto-table-cell-role="th">abs_difference</th>
-<th data-quarto-table-cell-role="th">cohort</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">0</td>
-<td>0</td>
-<td>1.301043e-17</td>
-<td>2.949030e-17</td>
-<td>1.647987e-17</td>
-<td>10</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">1</td>
-<td>5</td>
-<td>-2.688821e-17</td>
-<td>-1.387779e-17</td>
-<td>1.301043e-17</td>
-<td>10</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">2</td>
-<td>9</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>10</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">3</td>
-<td>10</td>
-<td>1.485400e-01</td>
-<td>1.485400e-01</td>
-<td>1.942890e-16</td>
-<td>10</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">4</td>
-<td>14</td>
-<td>8.274000e-02</td>
-<td>8.274000e-02</td>
-<td>4.024558e-16</td>
-<td>10</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">5</td>
-<td>15</td>
-<td>7.949556e-02</td>
-<td>7.949556e-02</td>
-<td>2.081668e-16</td>
-<td>10</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">6</td>
-<td>19</td>
-<td>3.316222e-02</td>
-<td>3.316222e-02</td>
-<td>4.579670e-16</td>
-<td>10</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">7</td>
-<td>20</td>
-<td>-4.142944e-02</td>
-<td>-4.142944e-02</td>
-<td>2.220446e-16</td>
-<td>10</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">8</td>
-<td>25</td>
-<td>-6.429444e-03</td>
-<td>-6.429444e-03</td>
-<td>6.591949e-16</td>
-<td>10</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">9</td>
-<td>29</td>
-<td>1.357056e-02</td>
-<td>1.357056e-02</td>
-<td>4.302114e-16</td>
-<td>10</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">10</td>
-<td>0</td>
-<td>-6.938894e-18</td>
-<td>0.000000e+00</td>
-<td>6.938894e-18</td>
-<td>15</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">11</td>
-<td>5</td>
-<td>-6.938894e-18</td>
-<td>2.775558e-17</td>
-<td>3.469447e-17</td>
-<td>15</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">12</td>
-<td>9</td>
-<td>1.127570e-17</td>
-<td>-1.517883e-18</td>
-<td>1.279359e-17</td>
-<td>15</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">13</td>
-<td>10</td>
-<td>8.673617e-19</td>
-<td>-3.469447e-18</td>
-<td>4.336809e-18</td>
-<td>15</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">14</td>
-<td>14</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>15</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">15</td>
-<td>15</td>
-<td>3.238889e-02</td>
-<td>3.238889e-02</td>
-<td>1.249001e-15</td>
-<td>15</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">16</td>
-<td>19</td>
-<td>1.470556e-01</td>
-<td>1.470556e-01</td>
-<td>6.938894e-16</td>
-<td>15</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">17</td>
-<td>20</td>
-<td>1.219639e-01</td>
-<td>1.219639e-01</td>
-<td>1.651457e-15</td>
-<td>15</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">18</td>
-<td>25</td>
-<td>-1.153611e-02</td>
-<td>-1.153611e-02</td>
-<td>8.187895e-16</td>
-<td>15</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">19</td>
-<td>29</td>
-<td>-3.036111e-03</td>
-<td>-3.036111e-03</td>
-<td>1.554312e-15</td>
-<td>15</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">20</td>
-<td>0</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>20</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">21</td>
-<td>5</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>20</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">22</td>
-<td>9</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>20</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">23</td>
-<td>10</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>20</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">24</td>
-<td>14</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>20</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">25</td>
-<td>15</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>20</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">26</td>
-<td>19</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>0.000000e+00</td>
-<td>20</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">27</td>
-<td>20</td>
-<td>5.122500e-02</td>
-<td>5.122500e-02</td>
-<td>7.840950e-16</td>
-<td>20</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">28</td>
-<td>25</td>
-<td>-4.777500e-02</td>
-<td>-4.777500e-02</td>
-<td>5.551115e-17</td>
-<td>20</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">29</td>
-<td>29</td>
-<td>-1.477500e-02</td>
-<td>-1.477500e-02</td>
-<td>1.908196e-16</td>
-<td>20</td>
-</tr>
-</tbody>
-</table>
-
-</div>
-</div>
-</div>
-<div id="cell-staggered-event-timing" class="cell" data-execution_count="13">
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>pd.DataFrame(</span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>    {</span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;step&quot;</span>: [</span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;long panel rows&quot;</span>,</span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;unit-major bitmap rows&quot;</span>,</span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;time-major bitmap rows&quot;</span>,</span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;bitmap translation seconds&quot;</span>,</span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;bitmap direct staggered event-study solve seconds&quot;</span>,</span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;DBMundlakEventStudy reference fit seconds&quot;</span>,</span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;weighted bitmap event-study rows&quot;</span>,</span>
-<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>        ],</span>
-<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>        <span class="st">&quot;value&quot;</span>: [</span>
-<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span><span class="bu">len</span>(staggered)<span class="sc">:,}</span><span class="ss">&quot;</span>,</span>
-<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span><span class="bu">len</span>(staggered_panel.unit_bits)<span class="sc">:,}</span><span class="ss">&quot;</span>,</span>
-<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span><span class="bu">len</span>(staggered_panel.time_bits)<span class="sc">:,}</span><span class="ss">&quot;</span>,</span>
-<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span>staggered_pack_seconds<span class="sc">:.4f}</span><span class="ss">&quot;</span>,</span>
-<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span>bitmap_staggered_seconds<span class="sc">:.4f}</span><span class="ss">&quot;</span>,</span>
-<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span>duckreg_staggered_seconds<span class="sc">:.4f}</span><span class="ss">&quot;</span>,</span>
-<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>            <span class="ss">f&quot;</span><span class="sc">{</span><span class="bu">len</span>(staggered_panel.all_cohorts) <span class="op">*</span> staggered_panel<span class="sc">.</span>n_times<span class="sc">:,}</span><span class="ss">&quot;</span>,</span>
-<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>        ],</span>
-<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>    }</span>
-<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div id="staggered-event-timing" class="cell-output cell-output-display" data-execution_count="13">
-<div>
-
-
-<table class="dataframe caption-top table table-sm table-striped small" data-quarto-postprocess="true" data-border="1">
-<thead>
-<tr class="header">
-<th data-quarto-table-cell-role="th"></th>
-<th data-quarto-table-cell-role="th">step</th>
-<th data-quarto-table-cell-role="th">value</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">0</td>
-<td>long panel rows</td>
-<td>180,000</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">1</td>
-<td>unit-major bitmap rows</td>
-<td>6,000</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">2</td>
-<td>time-major bitmap rows</td>
-<td>2,820</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">3</td>
-<td>bitmap translation seconds</td>
-<td>0.1261</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">4</td>
-<td>bitmap direct staggered event-study solve seconds</td>
-<td>0.0257</td>
-</tr>
-<tr class="even">
-<td data-quarto-table-cell-role="th">5</td>
-<td>DBMundlakEventStudy reference fit seconds</td>
-<td>0.2635</td>
-</tr>
-<tr class="odd">
-<td data-quarto-table-cell-role="th">6</td>
-<td>weighted bitmap event-study rows</td>
-<td>120</td>
-</tr>
-</tbody>
-</table>
-
-</div>
-</div>
-</div>
-</section>
-<section id="takeaway" class="level2">
-<h2 class="anchored" data-anchor-id="takeaway">Takeaway</h2>
-<p>The static bitmap estimator solves from scalar margins. The event-study bitmap estimator solves from cohort-time moments. Both reproduce the existing <code>duckreg</code> estimators to floating-point tolerance while replacing the full long-panel compression step with a packed representation plus low-dimensional moment extraction.</p>
-<p>The practical implementation target is therefore:</p>
-<ol type="1">
-<li>store or create unit-major and time-major bitmaps for binary <span class="math inline">\(Y_{it}\)</span> and <span class="math inline">\(W_{it}\)</span>;</li>
-<li>derive adoption cohort masks once from the treatment bitmaps;</li>
-<li>compute scalar Mundlak moments or cohort-time event-study moments with <code>bit_count</code>;</li>
-<li>solve the same least-squares problem on the resulting low-dimensional sufficient statistics.</li>
-</ol>
+<section id="interpretation" class="level2">
+<h2 class="anchored" data-anchor-id="interpretation">Interpretation</h2>
+<p>The <code>pyfixest</code> bar is the full-data fixed-effect solve. The <code>DBMundlak</code> bar is the current <code>duckreg</code> sufficient-statistic route: create Mundlak-generated regressors, group identical design rows, and solve weighted least squares. The bitmap bar is the direct moment route on already packed unit-major and time-major bitmaps.</p>
+<p>The second panel is the caution. If the data arrive as a normal long panel, Python-side bitmap layout construction is expensive in this prototype. The kernel is fast when the panel is already stored or produced in bitmap form. That is the implementation target: do not use bitmaps as a late conversion step after materializing a long table; use them as the physical representation for dense binary panels.</p>
 </section>
 
 </main>
