@@ -21,6 +21,100 @@ from duckreg.duckreg import wls
 CHUNK_BITS = 64
 
 
+MATERIALIZED_COMPRESSION_SQL = """
+WITH unit_counts AS (
+    SELECT unit, SUM(w)::INTEGER AS c
+    FROM long_panel
+    GROUP BY unit
+),
+time_counts AS (
+    SELECT time_index, SUM(w)::INTEGER AS d
+    FROM long_panel
+    GROUP BY time_index
+)
+SELECT
+    p.w::INTEGER AS w,
+    u.c::INTEGER AS c,
+    t.d::INTEGER AS d,
+    COUNT(*)::BIGINT AS count,
+    SUM(p.y)::BIGINT AS sum_y
+FROM long_panel AS p
+JOIN unit_counts AS u USING (unit)
+JOIN time_counts AS t USING (time_index)
+GROUP BY p.w, u.c, t.d
+ORDER BY w, c, d
+"""
+
+
+BITPACKED_COMPRESSION_SQL = """
+WITH unit_counts AS (
+    SELECT
+        unit,
+        SUM(bit_count(w_bits & valid_mask))::INTEGER AS c
+    FROM unit_bits
+    GROUP BY unit
+),
+packed_cells AS (
+    SELECT
+        1::INTEGER AS w,
+        u.c::INTEGER AS c,
+        m.d::INTEGER AS d,
+        SUM(bit_count(b.w_bits & m.mask))::BIGINT AS count,
+        SUM(bit_count(b.y_bits & b.w_bits & m.mask))::BIGINT AS sum_y
+    FROM unit_bits AS b
+    JOIN unit_counts AS u USING (unit)
+    JOIN time_masks AS m USING (chunk)
+    GROUP BY u.c, m.d
+
+    UNION ALL
+
+    SELECT
+        0::INTEGER AS w,
+        u.c::INTEGER AS c,
+        m.d::INTEGER AS d,
+        SUM(bit_count((~b.w_bits) & m.mask))::BIGINT AS count,
+        SUM(bit_count(b.y_bits & (~b.w_bits) & m.mask))::BIGINT AS sum_y
+    FROM unit_bits AS b
+    JOIN unit_counts AS u USING (unit)
+    JOIN time_masks AS m USING (chunk)
+    GROUP BY u.c, m.d
+)
+SELECT w, c, d, count, sum_y
+FROM packed_cells
+WHERE count > 0
+ORDER BY w, c, d
+"""
+
+
+DIRECT_MOMENTS_SQL = """
+WITH unit_stats AS (
+    SELECT
+        unit,
+        SUM(bit_count(w_bits & valid_mask))::DOUBLE AS c,
+        SUM(bit_count(y_bits & valid_mask))::DOUBLE AS y_sum,
+        SUM(bit_count(y_bits & w_bits & valid_mask))::DOUBLE AS wy_sum
+    FROM unit_bits
+    GROUP BY unit
+),
+time_stats AS (
+    SELECT
+        time_index,
+        SUM(bit_count(w_bits & valid_mask))::DOUBLE AS d,
+        SUM(bit_count(y_bits & valid_mask))::DOUBLE AS y_sum
+    FROM time_bits
+    GROUP BY time_index
+)
+SELECT
+    (SELECT SUM(c) FROM unit_stats) AS sum_w,
+    (SELECT SUM(c * c) FROM unit_stats) AS sum_c2,
+    (SELECT SUM(y_sum) FROM unit_stats) AS sum_y,
+    (SELECT SUM(wy_sum) FROM unit_stats) AS sum_wy,
+    (SELECT SUM(c * y_sum) FROM unit_stats) AS sum_cy,
+    (SELECT SUM(d * d) FROM time_stats) AS sum_d2,
+    (SELECT SUM(d * y_sum) FROM time_stats) AS sum_dy
+"""
+
+
 @dataclass
 class PanelData:
     y: np.ndarray
@@ -136,74 +230,11 @@ def make_long_panel(panel: PanelData) -> pd.DataFrame:
 
 
 def materialized_compression(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
-    return con.execute(
-        """
-        WITH unit_counts AS (
-            SELECT unit, SUM(w)::INTEGER AS c
-            FROM long_panel
-            GROUP BY unit
-        ),
-        time_counts AS (
-            SELECT time_index, SUM(w)::INTEGER AS d
-            FROM long_panel
-            GROUP BY time_index
-        )
-        SELECT
-            p.w::INTEGER AS w,
-            u.c::INTEGER AS c,
-            t.d::INTEGER AS d,
-            COUNT(*)::BIGINT AS count,
-            SUM(p.y)::BIGINT AS sum_y
-        FROM long_panel AS p
-        JOIN unit_counts AS u USING (unit)
-        JOIN time_counts AS t USING (time_index)
-        GROUP BY p.w, u.c, t.d
-        ORDER BY w, c, d
-        """
-    ).fetchdf()
+    return con.execute(MATERIALIZED_COMPRESSION_SQL).fetchdf()
 
 
 def bitpacked_compression(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
-    return con.execute(
-        """
-        WITH unit_counts AS (
-            SELECT
-                unit,
-                SUM(bit_count(w_bits & valid_mask))::INTEGER AS c
-            FROM unit_bits
-            GROUP BY unit
-        ),
-        packed_cells AS (
-            SELECT
-                1::INTEGER AS w,
-                u.c::INTEGER AS c,
-                m.d::INTEGER AS d,
-                SUM(bit_count(b.w_bits & m.mask))::BIGINT AS count,
-                SUM(bit_count(b.y_bits & b.w_bits & m.mask))::BIGINT AS sum_y
-            FROM unit_bits AS b
-            JOIN unit_counts AS u USING (unit)
-            JOIN time_masks AS m USING (chunk)
-            GROUP BY u.c, m.d
-
-            UNION ALL
-
-            SELECT
-                0::INTEGER AS w,
-                u.c::INTEGER AS c,
-                m.d::INTEGER AS d,
-                SUM(bit_count((~b.w_bits) & m.mask))::BIGINT AS count,
-                SUM(bit_count(b.y_bits & (~b.w_bits) & m.mask))::BIGINT AS sum_y
-            FROM unit_bits AS b
-            JOIN unit_counts AS u USING (unit)
-            JOIN time_masks AS m USING (chunk)
-            GROUP BY u.c, m.d
-        )
-        SELECT w, c, d, count, sum_y
-        FROM packed_cells
-        WHERE count > 0
-        ORDER BY w, c, d
-        """
-    ).fetchdf()
+    return con.execute(BITPACKED_COMPRESSION_SQL).fetchdf()
 
 
 def fit_mundlak_from_compression(df: pd.DataFrame, n_units: int, n_times: int) -> np.ndarray:
@@ -224,35 +255,7 @@ def fit_mundlak_from_compression(df: pd.DataFrame, n_units: int, n_times: int) -
 def fit_mundlak_from_bitpacked_moments(
     con: duckdb.DuckDBPyConnection, n_units: int, n_times: int
 ) -> np.ndarray:
-    stats = con.execute(
-        """
-        WITH unit_stats AS (
-            SELECT
-                unit,
-                SUM(bit_count(w_bits & valid_mask))::DOUBLE AS c,
-                SUM(bit_count(y_bits & valid_mask))::DOUBLE AS y_sum,
-                SUM(bit_count(y_bits & w_bits & valid_mask))::DOUBLE AS wy_sum
-            FROM unit_bits
-            GROUP BY unit
-        ),
-        time_stats AS (
-            SELECT
-                time_index,
-                SUM(bit_count(w_bits & valid_mask))::DOUBLE AS d,
-                SUM(bit_count(y_bits & valid_mask))::DOUBLE AS y_sum
-            FROM time_bits
-            GROUP BY time_index
-        )
-        SELECT
-            (SELECT SUM(c) FROM unit_stats) AS sum_w,
-            (SELECT SUM(c * c) FROM unit_stats) AS sum_c2,
-            (SELECT SUM(y_sum) FROM unit_stats) AS sum_y,
-            (SELECT SUM(wy_sum) FROM unit_stats) AS sum_wy,
-            (SELECT SUM(c * y_sum) FROM unit_stats) AS sum_cy,
-            (SELECT SUM(d * d) FROM time_stats) AS sum_d2,
-            (SELECT SUM(d * y_sum) FROM time_stats) AS sum_dy
-        """
-    ).fetchone()
+    stats = con.execute(DIRECT_MOMENTS_SQL).fetchone()
 
     sum_w, sum_c2, sum_y, sum_wy, sum_cy, sum_d2, sum_dy = map(float, stats)
     n_units = float(n_units)

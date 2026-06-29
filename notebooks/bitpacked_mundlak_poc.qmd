@@ -1,0 +1,337 @@
+---
+title: "Bit-Packed Mundlak Compression for Dense Binary Panels"
+subtitle: "A DuckDB proof of concept for binary outcomes and binary treatments"
+format:
+  html:
+    embed-resources: true
+    page-layout: full
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-summary: "Show code"
+execute:
+  echo: true
+  warning: false
+  message: false
+jupyter: python3
+---
+
+## Summary
+
+For a dense balanced panel with binary outcome $Y_{it}$, binary treatment $W_{it}$, $N$ units, and $T$ fixed time periods, bit-packing is enough to recover the exact sufficient statistics for a two-way Mundlak linear probability model:
+
+$$
+Y_{it} = \alpha + \beta W_{it} + \gamma \bar W_{i \cdot} + \delta \bar W_{\cdot t} + u_{it}.
+$$
+
+Define the treatment margins
+
+$$
+C_i = \sum_t W_{it}, \qquad D_t = \sum_i W_{it}.
+$$
+
+The Mundlak regressors are
+
+$$
+1, \qquad W_{it}, \qquad C_i / T, \qquad D_t / N.
+$$
+
+The standard `duckreg` compression groups the long panel by the discrete design row
+
+$$
+(W_{it}, C_i, D_t)
+$$
+
+and keeps only `count` and `sum_y` in each cell. For binary $Y_{it}$, `sum_y` is a population count of ones, so it can be computed with `bit_count` over masked bitstrings.
+
+The important distinction is:
+
+- The algebra is SQL-dialect portable.
+- The implementation is not SQL-dialect agnostic. Each engine has its own bit type, integer width, popcount function, and bitwise operator syntax.
+
+In DuckDB, the proof of concept uses `UBIGINT`, `bit_count`, `&`, `~`, and shifts. A 365-day panel does not fit in one SQL integer, so each unit is stored in six 64-bit chunks.
+
+## Data Layout
+
+The proof of concept keeps two representations:
+
+1. a materialized long table with one row per unit-time observation;
+2. a packed table with one row per unit and 64-period chunk.
+
+For a panel with 365 days, the packed unit-major table has six rows per unit:
+
+```text
+unit | chunk | y_bits | w_bits | valid_mask
+```
+
+The `valid_mask` prevents unused high bits in the final chunk from entering complements such as `~w_bits`.
+
+The compressed-cell query also uses time masks. For each chunk and treatment time margin $D_t=d$, it builds a mask selecting the bit positions in that chunk where the time treatment count is $d$:
+
+```text
+chunk | d | mask
+```
+
+The direct moment query additionally uses a time-major packed representation:
+
+```text
+time_index | chunk | y_bits | w_bits | valid_mask
+```
+
+That transposed table lets DuckDB compute time margins $D_t$ and time outcome margins without materializing $NT$ rows.
+
+## Queries Used
+
+The following SQL is imported directly from the proof-of-concept script. These are the queries executed below.
+
+```{python}
+#| label: setup
+#| code-fold: true
+from pathlib import Path
+import sys
+import time
+
+import duckdb
+import numpy as np
+import pandas as pd
+
+candidate_roots = [Path.cwd(), Path.cwd().parent]
+repo_root = next(
+    root for root in candidate_roots if (root / "benchmarks" / "bitpacked_mundlak_poc.py").exists()
+)
+sys.path.insert(0, str(repo_root))
+
+from benchmarks.bitpacked_mundlak_poc import (
+    BITPACKED_COMPRESSION_SQL,
+    CHUNK_BITS,
+    DIRECT_MOMENTS_SQL,
+    MATERIALIZED_COMPRESSION_SQL,
+    bitpacked_compression,
+    fit_mundlak_from_bitpacked_moments,
+    fit_mundlak_from_compression,
+    make_binary_panel,
+    make_long_panel,
+    make_time_masks,
+    materialized_compression,
+    pack_time_chunks,
+    pack_unit_chunks,
+)
+```
+
+```{python}
+#| label: display-sql
+#| echo: false
+#| results: asis
+queries = [
+    ("Materialized long-panel compression", MATERIALIZED_COMPRESSION_SQL),
+    ("Bitpacked compressed-cell query", BITPACKED_COMPRESSION_SQL),
+    ("Direct bitpacked moment query", DIRECT_MOMENTS_SQL),
+]
+
+for title, sql in queries:
+    print(f"### {title}\n")
+    print("```sql")
+    print(sql.strip())
+    print("```\n")
+```
+
+## Why the Bitpacked Compression Is Exact
+
+For a unit $i$, let `Y_i` and `W_i` be bitstrings over the time dimension. Let `M_d` be a time mask selecting periods with $D_t=d$.
+
+The cell counts for $W_{it}=1$ are
+
+```text
+count(w = 1, C_i = c, D_t = d) += bit_count(W_i & M_d)
+sum_y(w = 1, C_i = c, D_t = d) += bit_count(Y_i & W_i & M_d)
+```
+
+The cell counts for $W_{it}=0$ are
+
+```text
+count(w = 0, C_i = c, D_t = d) += bit_count((~W_i) & M_d & valid_mask)
+sum_y(w = 0, C_i = c, D_t = d) += bit_count(Y_i & (~W_i) & M_d & valid_mask)
+```
+
+These are exactly the same sufficient statistics as the long-panel query because every unit-time row contributes to one and only one cell $(W_{it}, C_i, D_t)$, and the bit operations count those rows without expanding them.
+
+Once the compressed table exists, the estimator is the same weighted least-squares problem used by `duckreg`:
+
+$$
+\bar Y_g = X_g \theta + \varepsilon_g,
+$$
+
+weighted by the original row count $n_g$ in each compressed cell $g$.
+
+## The Faster Kernel: Direct Moments
+
+The compressed-cell route proves equivalence, but it is not necessarily the fastest path. If many time periods have distinct $D_t$ values, the bitpacked compression query still has to touch many masks. The sharper approach is to compute $X'X$ and $X'Y$ directly from bitpacked margins.
+
+Let
+
+$$
+S = \sum_i C_i = \sum_t D_t = \sum_{i,t} W_{it}.
+$$
+
+For $X_{it} = (1, W_{it}, C_i/T, D_t/N)$, the normal-equation matrix is
+
+$$
+X'X =
+\begin{pmatrix}
+NT & S & S & S \\
+S & S & \sum_i C_i^2/T & \sum_t D_t^2/N \\
+S & \sum_i C_i^2/T & \sum_i C_i^2/T & S^2/(NT) \\
+S & \sum_t D_t^2/N & S^2/(NT) & \sum_t D_t^2/N
+\end{pmatrix}.
+$$
+
+The right-hand side is
+
+$$
+X'Y =
+\begin{pmatrix}
+\sum_{i,t} Y_{it} \\
+\sum_{i,t} W_{it}Y_{it} \\
+\sum_i C_i \sum_t Y_{it}/T \\
+\sum_t D_t \sum_i Y_{it}/N
+\end{pmatrix}.
+$$
+
+All entries are recoverable from unit-major and time-major bitsets:
+
+- $\sum_i C_i$ and $\sum_i C_i^2$ from `bit_count(w_bits)`;
+- $\sum_t D_t$ and $\sum_t D_t^2$ from transposed `bit_count(w_bits)`;
+- $\sum Y$ from `bit_count(y_bits)`;
+- $\sum WY$ from `bit_count(y_bits & w_bits)`;
+- unit and time weighted outcome margins from grouped bit counts.
+
+This direct moment route is the part that most resembles a special-purpose numerical kernel.
+
+## Render-Time Check
+
+The following check creates a synthetic dense binary panel, registers both long and packed representations in DuckDB, and verifies that:
+
+1. materialized compression equals bitpacked compression;
+2. WLS from both compressed tables gives the same coefficients;
+3. the direct bitpacked moment estimator gives the same coefficients.
+
+```{python}
+#| label: run-proof
+#| code-fold: true
+n_units = 2_000
+n_times = 365
+seed = 20260629
+
+panel = make_binary_panel(n_units=n_units, n_times=n_times, seed=seed)
+con = duckdb.connect()
+
+start = time.perf_counter()
+long_panel = make_long_panel(panel)
+unit_bits = pack_unit_chunks(panel)
+time_masks = make_time_masks(panel)
+time_bits = pack_time_chunks(panel)
+setup_seconds = time.perf_counter() - start
+
+con.register("long_panel", long_panel)
+con.register("unit_bits", unit_bits)
+con.register("time_masks", time_masks)
+con.register("time_bits", time_bits)
+
+start = time.perf_counter()
+row_compressed = materialized_compression(con)
+row_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+bit_compressed = bitpacked_compression(con)
+bit_seconds = time.perf_counter() - start
+
+pd.testing.assert_frame_equal(
+    row_compressed.reset_index(drop=True),
+    bit_compressed.reset_index(drop=True),
+    check_dtype=False,
+)
+
+row_beta = fit_mundlak_from_compression(row_compressed, n_units, n_times)
+bit_beta = fit_mundlak_from_compression(bit_compressed, n_units, n_times)
+np.testing.assert_allclose(row_beta, bit_beta, rtol=0.0, atol=1e-12)
+
+start = time.perf_counter()
+direct_beta = fit_mundlak_from_bitpacked_moments(con, n_units, n_times)
+direct_seconds = time.perf_counter() - start
+np.testing.assert_allclose(row_beta, direct_beta, rtol=0.0, atol=1e-11)
+
+summary = pd.DataFrame(
+    {
+        "quantity": [
+            "DuckDB version",
+            "panel rows",
+            "unit-major packed rows",
+            "time-major packed rows",
+            "compressed cells",
+            "representation setup seconds",
+            "materialized compression seconds",
+            "bitpacked compression seconds",
+            "direct bitpacked moment seconds",
+        ],
+        "value": [
+            duckdb.__version__,
+            f"{n_units * n_times:,}",
+            f"{len(unit_bits):,}",
+            f"{len(time_bits):,}",
+            f"{len(bit_compressed):,}",
+            f"{setup_seconds:.4f}",
+            f"{row_seconds:.4f}",
+            f"{bit_seconds:.4f}",
+            f"{direct_seconds:.4f}",
+        ],
+    }
+)
+
+summary
+```
+
+```{python}
+#| label: coefficients
+#| code-fold: true
+pd.DataFrame(
+    {
+        "coefficient": ["intercept", "w", "avg_w_unit", "avg_w_time"],
+        "materialized_compression": row_beta,
+        "bitpacked_compression": bit_beta,
+        "direct_bitpacked_moments": direct_beta,
+        "max_abs_difference_vs_materialized": np.maximum(
+            np.abs(bit_beta - row_beta), np.abs(direct_beta - row_beta)
+        ),
+    }
+)
+```
+
+## What Is Dialect-Specific
+
+The same idea can be expressed in several database engines, but the details differ:
+
+- DuckDB: `UBIGINT`, `bit_count(x)`, `&`, `|`, `~`, and shifts are available. In DuckDB, `^` is exponentiation, not XOR.
+- Spark SQL: `BIGINT` is signed 64-bit, and `bit_count` exists, but arrays of words or binary columns are needed for 365 periods.
+- Postgres: integer bit operations exist, and `bit(n)`/`varbit` can be useful, but function names and performance characteristics differ.
+
+The portable object is the sufficient-statistic algebra. The engine-specific object is the packed representation and the popcount expression.
+
+## Practical Scope
+
+This fast path is most attractive when:
+
+- the panel is dense and balanced;
+- the time grid is fixed and moderately short;
+- outcome and treatment are binary;
+- the target model is linear or can be reduced to fixed low-dimensional sufficient statistics;
+- the packed representation is stored or produced upstream, not rebuilt for every query.
+
+It is less general when:
+
+- covariates are continuous;
+- there are many binary covariates and the design-cell space explodes;
+- the estimator is logit/probit and needs iterative likelihood weights;
+- inference requires cluster-level score objects beyond the global point-estimate moments;
+- the panel is sparse or irregular enough that bit positions no longer have a simple time interpretation.
+
+The clean implementation path for `duckreg` would therefore be a specialized binary balanced-panel backend, not a replacement for the general Ibis compression path. The compressed-cell query is useful as a correctness bridge. The direct moment query is the candidate performance kernel.
