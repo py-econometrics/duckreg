@@ -82,6 +82,45 @@ from benchmarks.bitpacked_mundlak_poc import (
 )
 ```
 
+### Bitmap Representation And Scaling
+
+The binary case stores each unit's panel history by concatenating the time series into fixed-width words. For unit $i$, bit position $t \bmod 64$ in chunk $\lfloor t / 64 \rfloor$ stores the value of $Y_{it}$ or $W_{it}$. If $T \le 64$, each binary variable is one word per unit. If $T = 365$, each binary variable is six words per unit.
+
+The unit-major table is therefore an $N \lceil T / 64 \rceil$ table of words rather than an $NT$ table of scalar observations. The information content is still proportional to $NT$ bits, but the physical representation is structured as packed words:
+
+$$
+\text{bytes per binary variable in unit-major layout}
+\approx
+8N \lceil T / 64 \rceil.
+$$
+
+For models with time margins, the implementation also keeps a time-major transpose. That table stores bit position $i \bmod 64$ in unit chunk $\lfloor i / 64 \rfloor$ for each time period. With binary $Y$ and binary $W$, keeping both unit-major and time-major layouts costs approximately
+
+$$
+8 \cdot 2
+\left(
+N \lceil T / 64 \rceil
++ T \lceil N / 64 \rceil
+\right)
+\approx
+NT / 2
+\text{ bytes},
+$$
+
+up to identifier columns and table overhead. At $N = 500{,}000$ and $T = 30$, this is only a few megabytes for the raw words. The important cost is fixed: build or ingest the packed layout once, then reuse it across moment queries. The benchmark below reports this layout construction separately from estimator runtime.
+
+Low-cardinality outcomes extend the same way. If $Y_{it} \in \{0, \dots, K\}$, store a bit mask for each outcome level, or for each nonzero level when zero can be implicit. For any subset $A$ represented by a treatment, cohort, event-time, or design mask,
+
+$$
+\sum_{(i,t) \in A} Y_{it}
+=
+\sum_{k=0}^K
+k \cdot
+\operatorname{popcount}(A \cap \{Y_{it} = k\}).
+$$
+
+The same bitplanes also give $\sum_{(i,t) \in A} Y_{it}^2$ by replacing $k$ with $k^2$. Thus binary outcomes are the one-bit special case, values such as $0,\dots,9$ are straightforward bitplane masks, and exact real-valued outcomes are outside this bitmap-only moment strategy unless they are quantized first.
+
 ## Five-Period Translation
 
 Start with a tiny long panel with five time periods. The bitmap convention here stores time period 0 in bit position 0. In the display table below, the leftmost character is period 0, so `00111` means untreated in periods 0 and 1, then treated in periods 2, 3, and 4.
