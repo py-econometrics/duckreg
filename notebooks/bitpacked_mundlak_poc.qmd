@@ -310,46 +310,165 @@ The event-study estimator uses the same multiplicities to recompute cohort-time 
 #| label: bootstrap-example
 #| code-fold: true
 bootstrap_config = {
-    "num_units": 20_000,
+    "num_units": 10_000,
     "num_periods": 30,
     "treatment_start_cohorts": (10, 15, 20),
-    "num_treated": (4_000, 6_000, 4_000),
+    "num_treated": (2_000, 3_000, 2_000),
     "seed": 20260701,
 }
 num_bootstraps = 200
 
 bootstrap_long = make_staggered_binary_adoption_panel(**bootstrap_config)
-bootstrap_panel = LongPanelBitPacker().fit_transform(bootstrap_long)
 
+start = time.perf_counter()
+pyfixest_clustered = pf.feols(
+    "Y_it ~ W_it | unit_id + time_id",
+    data=bootstrap_long,
+    vcov={"CRV1": "unit_id"},
+    lean=True,
+)
+pyfixest_inference_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+inference_backend = ibis.duckdb.connect()
+inference_backend.create_table("bootstrap_panel", bootstrap_long, overwrite=True)
+mundlak_setup_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+mundlak_boot = DBMundlak(
+    db_name=None,
+    connection=inference_backend,
+    table_name="bootstrap_panel",
+    outcome_var="Y_it",
+    covariates=["W_it"],
+    unit_col="unit_id",
+    time_col="time_id",
+    cluster_col="unit_id",
+    seed=20260702,
+    n_bootstraps=num_bootstraps,
+)
+mundlak_boot.fit()
+mundlak_inference_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+bootstrap_panel = LongPanelBitPacker().fit_transform(bootstrap_long)
+bitmap_setup_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
 static_boot = BitmapMundlak(
     bootstrap_panel,
     seed=20260702,
     n_bootstraps=num_bootstraps,
 ).fit()
+bitmap_inference_seconds = time.perf_counter() - start
 
+start = time.perf_counter()
 event_boot = BitmapMundlakEventStudy(
     bootstrap_panel,
     seed=20260702,
     n_bootstraps=num_bootstraps,
 ).fit()
+bitmap_event_inference_seconds = time.perf_counter() - start
 ```
 
 ```{python}
 #| label: static-bootstrap-table
 #| code-fold: true
 static_summary = static_boot.summary()
-static_coef_se = pd.DataFrame(
+static_summary_table = pd.DataFrame(
     {
         "term": static_summary["point_estimate"].index,
         "estimate": static_summary["point_estimate"].to_numpy(),
         "se": static_summary["standard_error"].to_numpy(),
     }
+).round({"estimate": 4, "se": 4})
+static_summary_table
+```
+
+```{python}
+#| label: static-se-comparison
+#| code-fold: true
+pyfixest_w_estimate = float(pyfixest_clustered.coef().loc["W_it"])
+pyfixest_w_se = float(pyfixest_clustered.se().loc["W_it"])
+
+mundlak_w_estimate = float(mundlak_boot.point_estimate.reshape(-1)[1])
+mundlak_w_se = float(np.sqrt(np.diag(mundlak_boot.vcov))[1])
+
+bitmap_w_estimate = float(static_summary["point_estimate"].loc["W_it"])
+bitmap_w_se = float(static_summary["standard_error"].loc["W_it"])
+
+static_se_comparison = pd.DataFrame(
+    {
+        "method": [
+            "pyfixest full FE",
+            "DBMundlak unit bootstrap",
+            "bitmap unit bootstrap",
+        ],
+        "inference": [
+            "analytic CRV1 clustered by unit",
+            f"{num_bootstraps} unit-resampled bootstrap draws",
+            f"{num_bootstraps} unit-resampled bootstrap draws",
+        ],
+        "W_it estimate": [
+            pyfixest_w_estimate,
+            mundlak_w_estimate,
+            bitmap_w_estimate,
+        ],
+        "W_it se": [
+            pyfixest_w_se,
+            mundlak_w_se,
+            bitmap_w_se,
+        ],
+    }
+).round({"W_it estimate": 4, "W_it se": 4})
+static_se_comparison
+```
+
+```{python}
+#| label: static-inference-runtime
+#| code-fold: true
+static_inference_runtime = pd.DataFrame(
+    {
+        "method": [
+            "pyfixest full FE",
+            "DBMundlak unit bootstrap",
+            "bitmap unit bootstrap",
+        ],
+        "setup_seconds": [
+            0.0,
+            mundlak_setup_seconds,
+            bitmap_setup_seconds,
+        ],
+        "fit_inference_seconds": [
+            pyfixest_inference_seconds,
+            mundlak_inference_seconds,
+            bitmap_inference_seconds,
+        ],
+    }
 )
-static_coef_se["coef(se)"] = static_coef_se.apply(
-    lambda row: f"{row['estimate']:.4f} ({row['se']:.4f})",
-    axis=1,
+static_inference_runtime["total_seconds"] = (
+    static_inference_runtime["setup_seconds"]
+    + static_inference_runtime["fit_inference_seconds"]
 )
-static_coef_se
+static_inference_runtime.round(4)
+```
+
+```{python}
+#| label: static-inference-runtime-figure
+#| code-fold: true
+fig, ax = plt.subplots(figsize=(8.8, 4.8), constrained_layout=True)
+runtime_plot = static_inference_runtime.copy()
+colors = ["#4C78A8", "#59A14F", "#E15759"]
+ax.bar(runtime_plot["method"], runtime_plot["total_seconds"], color=colors)
+ax.set_yscale("log")
+ax.set_ylabel("seconds, log scale")
+ax.set_title("Complete static estimation plus inference")
+ax.tick_params(axis="x", rotation=18)
+for i, value in enumerate(runtime_plot["total_seconds"]):
+    ax.text(i, value * 1.10, f"{value:.3f}s", ha="center", va="bottom")
+ax.grid(axis="y", which="both", alpha=0.25)
+ax.set_axisbelow(True)
+plt.show()
 ```
 
 ```{python}
@@ -371,15 +490,11 @@ def tidy_event_summary(summary):
                 }
             )
     frame = pd.DataFrame(rows).sort_values(["cohort", "time_index"])
-    frame["coef(se)"] = frame.apply(
-        lambda row: f"{row['estimate']:.4f} ({row['se']:.4f})",
-        axis=1,
-    )
     return frame
 
 
 event_coef_se = tidy_event_summary(event_boot.summary())
-event_coef_se
+event_coef_se.round({"estimate": 4, "se": 4})
 ```
 
 ```{python}
