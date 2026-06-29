@@ -67,18 +67,18 @@ candidate_roots = [Path.cwd(), Path.cwd().parent]
 repo_root = next(
     root
     for root in candidate_roots
-    if (root / "benchmarks" / "bitpacked_mundlak_poc.py").exists()
+    if (root / "duckreg" / "bitpacking.py").exists()
 )
 sys.path.insert(0, str(repo_root))
 
 from duckreg.dbreg import DBMundlak
-from benchmarks.bitpacked_mundlak_poc import (
+from duckreg.bitpacking import (
+    BitmapMundlak,
+    LongPanelBitPacker,
     STATIC_MUNDLAK_DIRECT_SQL,
     bitmap_translation_table,
-    fit_static_mundlak_bitmap_panel,
     make_five_period_demo_long_panel,
     make_one_shot_binary_adoption_panel,
-    pack_long_panel_to_bitmaps,
 )
 ```
 
@@ -129,7 +129,7 @@ Start with a tiny long panel with five time periods. The bitmap convention here 
 #| label: five-period-demo
 #| code-fold: true
 demo_long = make_five_period_demo_long_panel()
-demo_panel = pack_long_panel_to_bitmaps(demo_long)
+demo_panel = LongPanelBitPacker().fit_transform(demo_long)
 
 demo_long.head(20)
 ```
@@ -155,10 +155,12 @@ print(STATIC_MUNDLAK_DIRECT_SQL.strip())
 print("```")
 ```
 
-The query runs on two bitmap tables:
+The query runs on four bitmap tables:
 
-- `unit_bits`: one row per unit and 64-period chunk;
-- `time_bits`: one row per time period and 64-unit chunk.
+- `unit_bits`: treatment words by unit and 64-period chunk;
+- `time_bits`: treatment words by time period and 64-unit chunk;
+- `unit_outcome_bits`: outcome bitplanes by unit, 64-period chunk, and nonzero outcome value;
+- `time_outcome_bits`: outcome bitplanes by time period, 64-unit chunk, and nonzero outcome value.
 
 The output is not a compressed cell table. It is the small set of scalar moments needed to solve the Mundlak normal equations.
 
@@ -188,7 +190,7 @@ large_panel_long = make_one_shot_binary_adoption_panel(**large_config)
 data_generation_seconds = time.perf_counter() - start
 
 start = time.perf_counter()
-large_bitmap_panel = pack_long_panel_to_bitmaps(large_panel_long)
+large_bitmap_panel = LongPanelBitPacker().fit_transform(large_panel_long)
 bitmap_layout_seconds = time.perf_counter() - start
 
 start = time.perf_counter()
@@ -223,7 +225,8 @@ dbmundlak.fit()
 dbmundlak_seconds = time.perf_counter() - start
 
 start = time.perf_counter()
-bitmap_static = fit_static_mundlak_bitmap_panel(large_bitmap_panel)
+bitmap_static_model = BitmapMundlak(large_bitmap_panel).fit()
+bitmap_static = bitmap_static_model.point_estimate
 bitmap_seconds = time.perf_counter() - start
 
 runtime_df = pd.DataFrame(
@@ -261,14 +264,18 @@ size_df = pd.DataFrame(
         "quantity": [
             "long panel rows",
             "long panel memory MB",
-            "unit-major bitmap rows",
-            "time-major bitmap rows",
+            "unit-major treatment rows",
+            "time-major treatment rows",
+            "unit-major outcome bitplane rows",
+            "time-major outcome bitplane rows",
         ],
         "value": [
             f"{len(large_panel_long):,}",
             f"{large_panel_long.memory_usage(deep=True).sum() / 1e6:.1f}",
             f"{len(large_bitmap_panel.unit_bits):,}",
             f"{len(large_bitmap_panel.time_bits):,}",
+            f"{len(large_bitmap_panel.unit_outcome_bits):,}",
+            f"{len(large_bitmap_panel.time_outcome_bits):,}",
         ],
     }
 )

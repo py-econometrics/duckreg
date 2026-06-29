@@ -27,8 +27,17 @@ from .estimators import (
     DuckRegression,
 )
 from .regularized import DuckRidge
+from .bitpacking import (
+    BitmapMundlak,
+    BitmapMundlakEventStudy,
+    BitmapPanel,
+    LongPanelBitPacker,
+)
 
 __all__ = [
+    "BitmapMundlak",
+    "BitmapMundlakEventStudy",
+    "BitmapPanel",
     "DBDML",
     "DBDoubleDemeaning",
     "DBLogisticRegression",
@@ -50,6 +59,7 @@ __all__ = [
     "DuckReg",
     "DuckRegression",
     "DuckRidge",
+    "LongPanelBitPacker",
     "ridge_closed_form",
     "ridge_closed_form_batch",
     "wls",
