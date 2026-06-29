@@ -37,6 +37,20 @@ $$
 
 where $Y_{it}$ and $W_{it}$ are binary. The bitmap implementation stores panel histories in fixed-width integer words and computes $X'X$ and $X'Y$ from unit and time margins. The benchmark isolates estimator runtime from one-time layout costs so the comparison separates the computational kernel from data ingestion.
 
+The core pattern is:
+
+$$
+\text{full FE regression}
+\rightarrow
+\text{Mundlak sufficient statistics}
+\rightarrow
+\text{direct moment computation}
+\rightarrow
+\text{direct bitmap moment computation}.
+$$
+
+The bitmap layer is useful because the Mundlak normal equations reduce the regression to a handful of counts and intersections. For binary panels those counts can be computed with bitwise `AND` and `popcount` over packed machine words.
+
 The large benchmark below uses the one-shot adoption dimensions from `notebooks/event_study.ipynb`:
 
 ```text
@@ -84,7 +98,27 @@ from duckreg.bitpacking import (
 
 ### Bitmap Representation And Scaling
 
-The binary case stores each unit's panel history by concatenating the time series into fixed-width words. For unit $i$, bit position $t \bmod 64$ in chunk $\lfloor t / 64 \rfloor$ stores the value of $Y_{it}$ or $W_{it}$. If $T \le 64$, each binary variable is one word per unit. If $T = 365$, each binary variable is six words per unit.
+A bitmap stores a Boolean vector as bits inside an integer word. For example, a treatment path such as
+
+```text
+W_i = [1, 0, 1, 1, 0, 0, 1, 0]
+```
+
+can be stored in one byte, and for $T \le 64$ it fits in one `uint64`. The operation
+
+$$
+\sum_t W_{it}Y_{it}
+$$
+
+is then computed as
+
+$$
+\operatorname{popcount}(W_i \& Y_i),
+$$
+
+where `&` keeps only positions where both variables are one and `popcount` counts the one bits. One `AND` plus one `popcount` replaces up to 64 scalar row-level comparisons and additions.
+
+The binary case stores each unit's panel history by concatenating the time series into fixed-width words. For unit $i$, bit position $t \bmod 64$ in chunk $\lfloor t / 64 \rfloor$ stores the value of $W_{it}$ or a bitplane for $Y_{it}$. If $T \le 64$, each binary variable is one word per unit. If $T = 365$, each binary variable is six words per unit.
 
 The unit-major table is therefore an $N \lceil T / 64 \rceil$ table of words rather than an $NT$ table of scalar observations. The information content is still proportional to $NT$ bits, but the physical representation is structured as packed words:
 
@@ -109,6 +143,85 @@ $$
 
 up to identifier columns and table overhead. At $N = 500{,}000$ and $T = 30$, this is only a few megabytes for the raw words. The important cost is fixed: build or ingest the packed layout once, then reuse it across moment queries. The benchmark below reports this layout construction separately from estimator runtime.
 
+### Horizontal And Vertical Scans
+
+A row scan loops over every logical observation:
+
+$$
+O(NT)
+$$
+
+scalar row operations. A unit-major bitmap scan loops over units and 64-period chunks:
+
+$$
+O\left(N \left\lceil \frac{T}{64} \right\rceil\right)
+$$
+
+machine-word operations. For $T \le 64$, many unit-level statistics become $O(N)$ word scans. With $N = 500{,}000$ and $T = 30$, a long-table scan touches $15{,}000{,}000$ rows, while the unit-major bitmap scan touches $500{,}000$ words. The logical scan count falls by a factor of 30 rather than 64 because each word is only half full. With $T = 365$, the reduction is $365 / \lceil 365 / 64 \rceil \approx 60.8$.
+
+The same idea applies in the other direction. Unit-major packing is good for quantities such as
+
+$$
+\sum_t W_{it}, \quad
+\sum_t Y_{it}, \quad
+\sum_t W_{it}Y_{it},
+$$
+
+which feed unit-level Mundlak means. Time-major packing stores unit histories for each time period and is good for quantities such as
+
+$$
+\sum_i W_{it}, \quad
+\sum_i Y_{it},
+$$
+
+which feed time-level Mundlak means. Maintaining both layouts duplicates the bitmap words, but it avoids turning time margins back into row scans.
+
+### Mundlak Moments As Counts
+
+The Mundlak design uses
+
+$$
+1, \quad W_{it}, \quad \bar W_{i \cdot}, \quad \bar W_{\cdot t}, \quad Y_{it}.
+$$
+
+The hard-looking cross-products collapse once the unit and time counts are available. Let
+
+$$
+w_i = \sum_t W_{it}, \quad y_i = \sum_t Y_{it}, \quad w_t = \sum_i W_{it}.
+$$
+
+Then
+
+$$
+\sum_{it} W_{it}Y_{it}
+=
+\sum_i \operatorname{popcount}(W_i \& Y_i),
+$$
+
+and the unit-mean terms are
+
+$$
+\sum_{it} W_{it}\bar W_{i \cdot}
+=
+\sum_i \frac{w_i^2}{T},
+$$
+
+$$
+\sum_{it} \bar W_{i \cdot}Y_{it}
+=
+\sum_i \frac{w_i y_i}{T}.
+$$
+
+The time-mean terms are analogous:
+
+$$
+\sum_{it} W_{it}\bar W_{\cdot t}
+=
+\sum_t \frac{w_t^2}{N}.
+$$
+
+So the estimator does not need the expanded design matrix. It needs a small list of marginal counts and intersections, and those are exactly the operations bitmaps make cheap.
+
 Low-cardinality outcomes extend the same way. If $Y_{it} \in \{0, \dots, K\}$, store a bit mask for each outcome level, or for each nonzero level when zero can be implicit. For any subset $A$ represented by a treatment, cohort, event-time, or design mask,
 
 $$
@@ -120,6 +233,8 @@ k \cdot
 $$
 
 The same bitplanes also give $\sum_{(i,t) \in A} Y_{it}^2$ by replacing $k$ with $k^2$. Thus binary outcomes are the one-bit special case, values such as $0,\dots,9$ are straightforward bitplane masks, and exact real-valued outcomes are outside this bitmap-only moment strategy unless they are quantized first.
+
+The asymptotic class is still linear in the logical panel size. The gain comes from changing the unit of work from scalar rows to machine words, while also reducing memory traffic, branches, and interpreter overhead. This is why the bitmap kernel is attractive only when the layout is already available or amortized over repeated queries; packing a long table first is itself an $O(NT)$ operation.
 
 ## Five-Period Translation
 
