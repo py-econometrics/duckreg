@@ -1,0 +1,1019 @@
+---
+title: "Direct Bitmap Moments for Binary Panel Mundlak Designs"
+subtitle: "Runtime comparison on a 15 million row one-shot adoption problem"
+format:
+  html:
+    embed-resources: true
+    page-layout: full
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-summary: "Show code"
+execute:
+  echo: true
+  warning: false
+  message: false
+  cache: true
+jupyter: python3
+---
+
+## Overview
+
+This note compares three implementations of the same binary-treatment, binary-outcome two-way panel model on a dense balanced panel:
+
+1. `pyfixest` on the full long table;
+2. `DBMundlak` using the current sufficient-statistic groupby compression;
+3. a bitmap implementation that computes the Mundlak normal-equation moments directly from packed unit-major and time-major bitmaps.
+
+The static target model is the two-way Mundlak LPM,
+
+$$
+Y_{it}
+=
+\alpha + \beta W_{it}
++ \gamma \bar W_{i \cdot}
++ \delta \bar W_{\cdot t}
++ u_{it},
+$$
+
+where $Y_{it}$ and $W_{it}$ are binary. The bitmap implementation stores panel histories in fixed-width integer words and computes $X'X$ and $X'Y$ from unit and time margins.
+
+The computational reduction is:
+
+$$
+\text{full FE regression}
+\rightarrow
+\text{Mundlak sufficient statistics}
+\rightarrow
+\text{direct moment computation}
+\rightarrow
+\text{direct bitmap moment computation}.
+$$
+
+The Mundlak normal equations reduce the regression to a small set of counts and intersections. For binary panels those counts can be computed with bitwise `AND` and `popcount` over packed machine words.
+
+The public estimator API is:
+
+```python
+from duckreg import BitmapMundlak, BitmapMundlakEventStudy
+
+static_fit = BitmapMundlak.from_long(data).fit()
+event_fit = BitmapMundlakEventStudy.from_long(data).fit()
+```
+
+The `from_long(...)` constructors are convenience wrappers: each call packs the
+long panel before fitting. When the same panel feeds multiple estimators or many
+bootstrap draws, pack once with `LongPanelBitPacker().fit_transform(data)` and
+pass the resulting `BitmapPanel` to `BitmapMundlak` and
+`BitmapMundlakEventStudy`. Bootstrap replications then resample unit
+multiplicities against the cached layout; they do not pay the long-panel
+packing cost again.
+
+The lower-level packing classes and display helpers live in `duckreg.bitmap_utils`. They are used directly below to show the physical layout and to reuse a packed panel across repeated moment queries.
+
+## Code Setup
+
+```{python}
+#| label: setup
+#| code-fold: true
+import contextlib
+import io
+import os
+from pathlib import Path
+import gc
+import sys
+import time
+
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+os.environ.setdefault("POLARS_MAX_THREADS", "1")
+
+import ibis
+from joblib import Parallel, delayed
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import pyfixest as pf
+
+pd.set_option("display.max_rows", 200)
+pd.set_option("display.max_columns", 20)
+
+candidate_roots = [Path.cwd(), Path.cwd().parent]
+repo_root = next(
+    root
+    for root in candidate_roots
+    if (root / "duckreg" / "bitpacking.py").exists()
+)
+sys.path.insert(0, str(repo_root))
+
+from duckreg import BitmapMundlak, BitmapMundlakEventStudy
+from duckreg.bitmap_utils import (
+    LongPanelBitPacker,
+    STATIC_MUNDLAK_DIRECT_SQL,
+    bitmap_translation_table,
+    make_five_period_demo_long_panel,
+    make_one_shot_binary_adoption_panel,
+    make_staggered_binary_adoption_panel,
+)
+from duckreg.dbreg import DBMundlak
+```
+
+## Bitmap Layout
+
+### Representation And Scaling
+
+A bitmap stores a Boolean vector as bits inside an integer word. For example, a treatment path such as
+
+```text
+W_i = [1, 0, 1, 1, 0, 0, 1, 0]
+```
+
+can be stored in one byte, and for $T \le 64$ it fits in one `uint64`. The operation
+
+$$
+\sum_t W_{it}Y_{it}
+$$
+
+is then computed as
+
+$$
+\operatorname{popcount}(W_i \& Y_i),
+$$
+
+where `&` keeps only positions where both variables are one and `popcount` counts the one bits. One `AND` plus one `popcount` replaces up to 64 scalar row-level comparisons and additions.
+
+The binary case stores each unit's panel history by concatenating the time series into fixed-width words. For unit $i$, bit position $t \bmod 64$ in chunk $\lfloor t / 64 \rfloor$ stores the value of $W_{it}$ or a bitplane for $Y_{it}$. If $T \le 64$, each binary variable is one word per unit. If $T = 365$, each binary variable is six words per unit.
+
+The unit-major table has $N \lceil T / 64 \rceil$ rows of words. The logical panel still contains $NT$ scalar observations, and the physical representation stores those observations as packed words:
+
+$$
+\text{bytes per binary variable in unit-major layout}
+\approx
+8N \lceil T / 64 \rceil.
+$$
+
+For models with time margins, the implementation also keeps a time-major transpose. That table stores bit position $i \bmod 64$ in unit chunk $\lfloor i / 64 \rfloor$ for each time period. With binary $Y$ and binary $W$, keeping both unit-major and time-major layouts costs approximately
+
+$$
+8 \cdot 2
+\left(
+N \lceil T / 64 \rceil
++ T \lceil N / 64 \rceil
+\right)
+\approx
+NT / 2
+\text{ bytes},
+$$
+
+up to identifier columns and table overhead. At $N = 500{,}000$ and $T = 30$, this is only a few megabytes for the raw words. Layout construction is a one-time cost when the packed representation is reused across point estimates, event studies, and bootstrap draws. The benchmark below reports layout construction separately from estimator runtime.
+
+### Horizontal And Vertical Scans
+
+A row scan loops over every logical observation:
+
+$$
+O(NT)
+$$
+
+scalar row operations. A unit-major bitmap scan loops over units and 64-period chunks:
+
+$$
+O\left(N \left\lceil \frac{T}{64} \right\rceil\right)
+$$
+
+machine-word operations. For $T \le 64$, many unit-level statistics become $O(N)$ word scans. With $N = 500{,}000$ and $T = 30$, a long-table scan touches $15{,}000{,}000$ rows, while the unit-major bitmap scan touches $500{,}000$ words. The logical scan count falls by a factor of 30; each word has unused bits because the panel has fewer than 64 periods. With $T = 365$, the reduction is $365 / \lceil 365 / 64 \rceil \approx 60.8$.
+
+Time margins use the transposed layout. Unit-major packing is good for quantities such as
+
+$$
+\sum_t W_{it}, \quad
+\sum_t Y_{it}, \quad
+\sum_t W_{it}Y_{it},
+$$
+
+which feed unit-level Mundlak means. Time-major packing stores unit histories for each time period and is good for quantities such as
+
+$$
+\sum_i W_{it}, \quad
+\sum_i Y_{it},
+$$
+
+which feed time-level Mundlak means. Maintaining both layouts duplicates the bitmap words, but it avoids turning time margins back into row scans.
+
+### Mundlak Moments As Counts
+
+The Mundlak design uses
+
+$$
+1, \quad W_{it}, \quad \bar W_{i \cdot}, \quad \bar W_{\cdot t}, \quad Y_{it}.
+$$
+
+The hard-looking cross-products collapse once the unit and time counts are available. Let
+
+$$
+w_i = \sum_t W_{it}, \quad y_i = \sum_t Y_{it}, \quad w_t = \sum_i W_{it}.
+$$
+
+Then
+
+$$
+\sum_{it} W_{it}Y_{it}
+=
+\sum_i \operatorname{popcount}(W_i \& Y_i),
+$$
+
+and the unit-mean terms are
+
+$$
+\sum_{it} W_{it}\bar W_{i \cdot}
+=
+\sum_i \frac{w_i^2}{T},
+$$
+
+$$
+\sum_{it} \bar W_{i \cdot}Y_{it}
+=
+\sum_i \frac{w_i y_i}{T}.
+$$
+
+The time-mean terms are analogous:
+
+$$
+\sum_{it} W_{it}\bar W_{\cdot t}
+=
+\sum_t \frac{w_t^2}{N}.
+$$
+
+The estimator works from a small list of marginal counts and intersections. Those counts are the native operations of the packed layout.
+
+Low-cardinality outcomes extend the same way. If $Y_{it} \in \{0, \dots, K\}$, store a bit mask for each outcome level, or for each nonzero level when zero can be implicit. For any subset $A$ represented by a treatment, cohort, event-time, or design mask,
+
+$$
+\sum_{(i,t) \in A} Y_{it}
+=
+\sum_{k=0}^K
+k \cdot
+\operatorname{popcount}(A \cap \{Y_{it} = k\}).
+$$
+
+The bitplanes also give $\sum_{(i,t) \in A} Y_{it}^2$ by replacing $k$ with $k^2$. Binary outcomes are the one-bit special case. Small integer supports such as $0,\dots,9$ require a modest number of masks. Exact real-valued outcomes are outside this bitmap-only moment strategy unless they are quantized first.
+
+The asymptotic class is still linear in the logical panel size. The gain comes from changing the unit of work from scalar rows to machine words, while also reducing memory traffic, branches, and interpreter overhead. The bitmap kernel is most attractive when the layout is already available or amortized over repeated queries; packing a long table first is itself an $O(NT)$ operation.
+
+## Five-Period Example
+
+Start with a tiny long panel with five time periods. The bitmap convention here stores time period 0 in bit position 0. In the display table below, the leftmost character is period 0, so `00111` means untreated in periods 0 and 1, then treated in periods 2, 3, and 4.
+
+```{python}
+#| label: five-period-demo
+#| code-fold: true
+demo_long = make_five_period_demo_long_panel()
+demo_panel = LongPanelBitPacker().fit_transform(demo_long)
+
+demo_long.head(20)
+```
+
+```{python}
+#| label: five-period-bitmaps
+#| code-fold: true
+bitmap_translation_table(demo_panel)
+```
+
+The packed table has one row per unit because five periods fit in one 64-bit word. With 365 periods, the same layout has six rows per unit.
+
+## Direct Bitmap Query
+
+The static Mundlak bitmap query computes the seven scalar margins needed for $X'X$ and $X'Y$:
+
+```{python}
+#| label: display-static-sql
+#| echo: false
+#| results: asis
+print("```sql")
+print(STATIC_MUNDLAK_DIRECT_SQL.strip())
+print("```")
+```
+
+The query runs on four bitmap tables:
+
+- `unit_bits`: treatment words by unit and 64-period chunk;
+- `time_bits`: treatment words by time period and 64-unit chunk;
+- `unit_outcome_bits`: outcome bitplanes by unit, 64-period chunk, and nonzero outcome value;
+- `time_outcome_bits`: outcome bitplanes by time period, 64-unit chunk, and nonzero outcome value.
+
+The query returns the scalar moments needed to solve the Mundlak normal equations.
+
+## Point-Estimate Runtime Benchmark
+
+The point-estimate benchmark uses the one-shot adoption dimensions from `notebooks/event_study.ipynb`:
+
+```text
+num_units = 500_000
+num_treated = 250_000
+num_periods = 30
+```
+
+This produces a 15 million row long panel. The comparison reports three estimators for the same static model:
+
+1. `pyfixest` on the full 15 million row long table, estimating `Y_it ~ W_it | unit_id + time_id`;
+2. `DBMundlak`, which computes sufficient statistics by grouping the long table's Mundlak design rows in DuckDB;
+3. direct bitmap moments, which assumes the panel is available in packed unit-major and time-major bitmap layouts.
+
+The main runtime bars exclude data-generation time and one-time layout creation. Each method has a different natural storage assumption, so the second panel reports those layout costs separately.
+
+```{python}
+#| label: large-benchmark
+#| code-fold: true
+large_config = {
+    "num_units": 500_000,
+    "num_treated": 250_000,
+    "num_periods": 30,
+    "treatment_start": 15,
+    "seed": 20260629,
+}
+
+start = time.perf_counter()
+large_panel_long = make_one_shot_binary_adoption_panel(**large_config)
+data_generation_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+large_bitmap_panel = LongPanelBitPacker().fit_transform(large_panel_long)
+bitmap_layout_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+duckdb_backend = ibis.duckdb.connect()
+duckdb_backend.create_table("large_one_shot", large_panel_long, overwrite=True)
+duckdb_layout_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+pyfixest_fit = pf.feols(
+    "Y_it ~ W_it | unit_id + time_id",
+    data=large_panel_long,
+    lean=True,
+)
+pyfixest_seconds = time.perf_counter() - start
+
+gc.collect()
+
+start = time.perf_counter()
+dbmundlak = DBMundlak(
+    db_name=None,
+    connection=duckdb_backend,
+    table_name="large_one_shot",
+    outcome_var="Y_it",
+    covariates=["W_it"],
+    unit_col="unit_id",
+    time_col="time_id",
+    cluster_col="unit_id",
+    seed=42,
+    n_bootstraps=0,
+)
+dbmundlak.fit()
+dbmundlak_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+bitmap_static_model = BitmapMundlak(large_bitmap_panel).fit()
+bitmap_static = bitmap_static_model.point_estimate
+bitmap_seconds = time.perf_counter() - start
+
+runtime_df = pd.DataFrame(
+    {
+        "method": [
+            "pyfixest full data",
+            "DBMundlak groupby",
+            "bitmap direct moments",
+        ],
+        "seconds": [
+            pyfixest_seconds,
+            dbmundlak_seconds,
+            bitmap_seconds,
+        ],
+    }
+)
+
+layout_df = pd.DataFrame(
+    {
+        "stage": [
+            "data generation",
+            "DuckDB table creation",
+            "long panel to bitmap layout",
+        ],
+        "seconds": [
+            data_generation_seconds,
+            duckdb_layout_seconds,
+            bitmap_layout_seconds,
+        ],
+    }
+)
+
+size_df = pd.DataFrame(
+    {
+        "quantity": [
+            "long panel rows",
+            "long panel memory MB",
+            "unit-major treatment rows",
+            "time-major treatment rows",
+            "unit-major outcome bitplane rows",
+            "time-major outcome bitplane rows",
+        ],
+        "value": [
+            f"{len(large_panel_long):,}",
+            f"{large_panel_long.memory_usage(deep=True).sum() / 1e6:.1f}",
+            f"{len(large_bitmap_panel.unit_bits):,}",
+            f"{len(large_bitmap_panel.time_bits):,}",
+            f"{len(large_bitmap_panel.unit_outcome_bits):,}",
+            f"{len(large_bitmap_panel.time_outcome_bits):,}",
+        ],
+    }
+)
+```
+
+```{python}
+#| label: runtime-figure
+#| code-fold: true
+fig, axes = plt.subplots(1, 2, figsize=(13, 4.8), constrained_layout=True)
+
+runtime_colors = ["#4C78A8", "#59A14F", "#E15759"]
+axes[0].bar(runtime_df["method"], runtime_df["seconds"], color=runtime_colors)
+axes[0].set_yscale("log")
+axes[0].set_ylabel("seconds, log scale")
+axes[0].set_title("Estimator runtime on 15M rows")
+axes[0].tick_params(axis="x", rotation=20)
+for i, value in enumerate(runtime_df["seconds"]):
+    axes[0].text(i, value * 1.10, f"{value:.3f}s", ha="center", va="bottom")
+
+layout_colors = ["#9C755F", "#BAB0AC", "#F28E2B"]
+axes[1].bar(layout_df["stage"], layout_df["seconds"], color=layout_colors)
+axes[1].set_yscale("log")
+axes[1].set_ylabel("seconds, log scale")
+axes[1].set_title("One-time setup from generated long data")
+axes[1].tick_params(axis="x", rotation=20)
+for i, value in enumerate(layout_df["seconds"]):
+    axes[1].text(i, value * 1.10, f"{value:.3f}s", ha="center", va="bottom")
+
+for ax in axes:
+    ax.grid(axis="y", which="both", alpha=0.25)
+    ax.set_axisbelow(True)
+
+plt.show()
+```
+
+```{python}
+#| label: runtime-tables
+#| code-fold: true
+runtime_df
+```
+
+```{python}
+#| label: layout-table
+#| code-fold: true
+layout_df
+```
+
+```{python}
+#| label: size-table
+#| code-fold: true
+size_df
+```
+
+## Inference With Unit-Cluster Bootstrap
+
+The point-estimate benchmark uses the packed panel once. Unit-cluster bootstrap inference reuses it many times. One bootstrap replicate samples exactly $N$ units with replacement from the $N$ observed units. The replicate is stored as a vector of unit multiplicities $m_i$, where $m_i$ is the number of times unit $i$ appears in that full-sample resample.
+
+For the static estimator, unit-additive quantities become weighted sums over units. Time margins are recomputed as
+
+$$
+d_t^* = \sum_i m_i W_{it},
+\quad
+y_t^* = \sum_i m_i Y_{it}.
+$$
+
+The event-study estimator applies the same multiplicities to cohort-time counts and outcome sums. The long table and the long-format groupby compression stay out of the bootstrap loop.
+
+The example below uses a smaller staggered-adoption panel so the render can compare analytic cluster-robust inference from `pyfixest`, unit-cluster bootstrap inference from `DBMundlak`, and unit-cluster bootstrap inference from the bitmap estimator in one run.
+
+```{python}
+#| label: bootstrap-example
+#| code-fold: true
+bootstrap_config = {
+    "num_units": 10_000,
+    "num_periods": 30,
+    "treatment_start_cohorts": (10, 15, 20),
+    "num_treated": (2_000, 3_000, 2_000),
+    "seed": 20260701,
+}
+num_bootstraps = 200
+
+bootstrap_long = make_staggered_binary_adoption_panel(**bootstrap_config)
+
+start = time.perf_counter()
+pyfixest_clustered = pf.feols(
+    "Y_it ~ W_it | unit_id + time_id",
+    data=bootstrap_long,
+    vcov={"CRV1": "unit_id"},
+    lean=True,
+)
+pyfixest_inference_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+inference_backend = ibis.duckdb.connect()
+inference_backend.create_table("bootstrap_panel", bootstrap_long, overwrite=True)
+mundlak_setup_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+mundlak_boot = DBMundlak(
+    db_name=None,
+    connection=inference_backend,
+    table_name="bootstrap_panel",
+    outcome_var="Y_it",
+    covariates=["W_it"],
+    unit_col="unit_id",
+    time_col="time_id",
+    cluster_col="unit_id",
+    seed=20260702,
+    n_bootstraps=num_bootstraps,
+)
+mundlak_boot.fit()
+mundlak_inference_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+bootstrap_panel = LongPanelBitPacker().fit_transform(bootstrap_long)
+bitmap_setup_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+static_boot = BitmapMundlak(
+    bootstrap_panel,
+    seed=20260702,
+    n_bootstraps=num_bootstraps,
+).fit()
+bitmap_inference_seconds = time.perf_counter() - start
+
+start = time.perf_counter()
+event_boot = BitmapMundlakEventStudy(
+    bootstrap_panel,
+    seed=20260702,
+    n_bootstraps=num_bootstraps,
+).fit()
+bitmap_event_inference_seconds = time.perf_counter() - start
+```
+
+```{python}
+#| label: static-bootstrap-table
+#| code-fold: true
+static_summary = static_boot.summary()
+static_summary_table = pd.DataFrame(
+    {
+        "term": static_summary["point_estimate"].index,
+        "estimate": static_summary["point_estimate"].to_numpy(),
+        "se": static_summary["standard_error"].to_numpy(),
+    }
+).round({"estimate": 4, "se": 4})
+static_summary_table
+```
+
+```{python}
+#| label: static-se-comparison
+#| code-fold: true
+pyfixest_w_estimate = float(pyfixest_clustered.coef().loc["W_it"])
+pyfixest_w_se = float(pyfixest_clustered.se().loc["W_it"])
+
+mundlak_w_estimate = float(mundlak_boot.point_estimate.reshape(-1)[1])
+mundlak_w_se = float(np.sqrt(np.diag(mundlak_boot.vcov))[1])
+
+bitmap_w_estimate = float(static_summary["point_estimate"].loc["W_it"])
+bitmap_w_se = float(static_summary["standard_error"].loc["W_it"])
+
+static_se_comparison = pd.DataFrame(
+    {
+        "method": [
+            "pyfixest full FE",
+            "DBMundlak unit bootstrap",
+            "bitmap unit bootstrap",
+        ],
+        "inference": [
+            "analytic CRV1 clustered by unit",
+            f"B={num_bootstraps} full-sample unit bootstrap replicates",
+            f"B={num_bootstraps} full-sample unit bootstrap replicates",
+        ],
+        "W_it estimate": [
+            pyfixest_w_estimate,
+            mundlak_w_estimate,
+            bitmap_w_estimate,
+        ],
+        "W_it se": [
+            pyfixest_w_se,
+            mundlak_w_se,
+            bitmap_w_se,
+        ],
+    }
+).round({"W_it estimate": 4, "W_it se": 4})
+static_se_comparison
+```
+
+```{python}
+#| label: static-inference-runtime
+#| code-fold: true
+static_inference_runtime = pd.DataFrame(
+    {
+        "method": [
+            "pyfixest full FE",
+            "DBMundlak unit bootstrap",
+            "bitmap unit bootstrap",
+        ],
+        "setup_seconds": [
+            0.0,
+            mundlak_setup_seconds,
+            bitmap_setup_seconds,
+        ],
+        "fit_inference_seconds": [
+            pyfixest_inference_seconds,
+            mundlak_inference_seconds,
+            bitmap_inference_seconds,
+        ],
+    }
+)
+static_inference_runtime["total_seconds"] = (
+    static_inference_runtime["setup_seconds"]
+    + static_inference_runtime["fit_inference_seconds"]
+)
+static_inference_runtime.round(4)
+```
+
+```{python}
+#| label: static-inference-runtime-figure
+#| code-fold: true
+fig, ax = plt.subplots(figsize=(8.8, 4.8), constrained_layout=True)
+runtime_plot = static_inference_runtime.copy()
+colors = ["#4C78A8", "#59A14F", "#E15759"]
+ax.bar(runtime_plot["method"], runtime_plot["total_seconds"], color=colors)
+ax.set_yscale("log")
+ax.set_ylabel("seconds, log scale")
+ax.set_title("Complete static estimation plus inference")
+ax.tick_params(axis="x", rotation=18)
+for i, value in enumerate(runtime_plot["total_seconds"]):
+    ax.text(i, value * 1.10, f"{value:.3f}s", ha="center", va="bottom")
+ax.grid(axis="y", which="both", alpha=0.25)
+ax.set_axisbelow(True)
+plt.show()
+```
+
+### Coverage Over 1000 Replications
+
+The coverage experiment uses the one-shot adoption DGP with the sharkfin post-treatment effect path: $N=10{,}000$, $T=30$, $5{,}000$ treated units, and first treatment in period 15. Each Monte Carlo replication uses analytic unit-cluster CRV1 inference for `pyfixest` and $B=200$ full-sample unit bootstrap replicates for each compressed estimator.
+
+The DGP has a dynamic post-treatment effect, so the static coefficient is a projection estimand. For each replication, the target below is the coefficient on $W_{it}$ from the static Mundlak projection with $Y_{it}$ replaced by the DGP probability $\mathbb E[Y_{it} \mid W, \alpha_i, \lambda_t]$. The simulation is run directly in this notebook.
+
+```{python}
+#| label: coverage-summary
+#| code-fold: true
+coverage_config = {
+    "num_units": 10_000,
+    "num_periods": 30,
+    "num_treated": 5_000,
+    "treatment_start": 15,
+}
+coverage_replications = 1_000
+coverage_bootstraps = 200
+coverage_n_jobs = min(6, os.cpu_count() or 1)
+
+
+def logistic_probability(index):
+    return 1.0 / (1.0 + np.exp(-index))
+
+
+def make_one_shot_panel_with_probability(seed):
+    rng = np.random.default_rng(seed)
+    num_units = coverage_config["num_units"]
+    num_periods = coverage_config["num_periods"]
+    num_treated = coverage_config["num_treated"]
+    treatment_start = coverage_config["treatment_start"]
+
+    treated_units = rng.choice(num_units, size=num_treated, replace=False)
+    w = np.zeros((num_units, num_periods), dtype=np.uint8)
+    w[treated_units, treatment_start:] = 1
+
+    effect = np.zeros(num_periods)
+    event_time = np.arange(1, num_periods - treatment_start + 1)
+    post_effect = 0.07 * np.log(2.0 * event_time)
+    post_effect[8:] = 0.0
+    effect[treatment_start:] = post_effect
+
+    unit_score = rng.normal(scale=0.55, size=(num_units, 1))
+    time_score = 0.25 * np.sin(np.linspace(0.0, 2.5 * np.pi, num_periods))[None, :]
+    baseline_prob = logistic_probability(-0.8 + unit_score + time_score)
+    prob = np.clip(baseline_prob + w * effect[None, :], 0.01, 0.99)
+    y = rng.binomial(1, prob).astype(np.uint8)
+
+    unit_id = np.repeat(np.arange(num_units, dtype=np.int32), num_periods)
+    time_id = np.tile(np.arange(num_periods, dtype=np.int16), num_units)
+    long_panel = pd.DataFrame(
+        {
+            "unit_id": unit_id,
+            "time_id": time_id,
+            "Y_it": y.reshape(-1).astype(np.int8),
+            "W_it": w.reshape(-1).astype(np.int8),
+        }
+    )
+    return long_panel, prob, w
+
+
+def static_mundlak_projection_target(y_value, w_value):
+    num_units, num_periods = w_value.shape
+    w_float = w_value.astype(float, copy=False)
+    y_float = y_value.astype(float, copy=False)
+    unit_w = w_float.sum(axis=1)
+    time_w = w_float.sum(axis=0)
+    unit_y = y_float.sum(axis=1)
+    time_y = y_float.sum(axis=0)
+    sum_w = unit_w.sum()
+    sum_c2 = unit_w @ unit_w
+    sum_y = y_float.sum()
+    sum_wy = (w_float * y_float).sum()
+    sum_cy = unit_w @ unit_y
+    sum_d2 = time_w @ time_w
+    sum_dy = time_w @ time_y
+    num_obs = float(num_units * num_periods)
+    num_units_float = float(num_units)
+    num_periods_float = float(num_periods)
+    xtx = np.array(
+        [
+            [num_obs, sum_w, sum_w, sum_w],
+            [sum_w, sum_w, sum_c2 / num_periods_float, sum_d2 / num_units_float],
+            [
+                sum_w,
+                sum_c2 / num_periods_float,
+                sum_c2 / num_periods_float,
+                sum_w**2 / num_obs,
+            ],
+            [
+                sum_w,
+                sum_d2 / num_units_float,
+                sum_w**2 / num_obs,
+                sum_d2 / num_units_float,
+            ],
+        ],
+        dtype=float,
+    )
+    xty = np.array(
+        [
+            sum_y,
+            sum_wy,
+            sum_cy / num_periods_float,
+            sum_dy / num_units_float,
+        ],
+        dtype=float,
+    )
+    return float(np.linalg.lstsq(xtx, xty, rcond=None)[0][1])
+
+
+def interval_covered(estimate, standard_error, target):
+    radius = 1.96 * standard_error
+    return bool((estimate - radius) <= target <= (estimate + radius))
+
+
+def run_one_shot_coverage_replication(replication):
+    panel_long, prob, w = make_one_shot_panel_with_probability(20271000 + replication)
+    target = static_mundlak_projection_target(prob, w)
+
+    start = time.perf_counter()
+    pyfixest_fit = pf.feols(
+        "Y_it ~ W_it | unit_id + time_id",
+        data=panel_long,
+        vcov={"CRV1": "unit_id"},
+        lean=True,
+    )
+    pyfixest_seconds = time.perf_counter() - start
+    pyfixest_estimate = float(pyfixest_fit.coef().loc["W_it"])
+    pyfixest_se = float(pyfixest_fit.se().loc["W_it"])
+
+    start = time.perf_counter()
+    backend = ibis.duckdb.connect()
+    backend.create_table("coverage_panel", panel_long, overwrite=True)
+    dbmundlak_setup_seconds = time.perf_counter() - start
+    db_model = DBMundlak(
+        db_name=None,
+        connection=backend,
+        table_name="coverage_panel",
+        outcome_var="Y_it",
+        covariates=["W_it"],
+        unit_col="unit_id",
+        time_col="time_id",
+        cluster_col="unit_id",
+        seed=30310000 + replication,
+        n_bootstraps=coverage_bootstraps,
+    )
+    start = time.perf_counter()
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        db_model.fit()
+    dbmundlak_fit_seconds = time.perf_counter() - start
+    try:
+        backend.disconnect()
+    except Exception:
+        pass
+    dbmundlak_estimate = float(db_model.point_estimate.reshape(-1)[1])
+    dbmundlak_se = float(np.sqrt(np.diag(db_model.vcov))[1])
+
+    start = time.perf_counter()
+    bitmap_panel = LongPanelBitPacker().fit_transform(panel_long)
+    bitmap_setup_seconds = time.perf_counter() - start
+    start = time.perf_counter()
+    bitmap_model = BitmapMundlak(
+        bitmap_panel,
+        seed=30310000 + replication,
+        n_bootstraps=coverage_bootstraps,
+    ).fit()
+    bitmap_fit_seconds = time.perf_counter() - start
+    bitmap_estimate = float(bitmap_model.point_estimate.loc["W_it"])
+    bitmap_se = float(np.sqrt(np.diag(bitmap_model.vcov))[1])
+
+    return {
+        "replication": replication,
+        "target": target,
+        "pyfixest_estimate": pyfixest_estimate,
+        "pyfixest_se": pyfixest_se,
+        "pyfixest_covered": interval_covered(pyfixest_estimate, pyfixest_se, target),
+        "dbmundlak_estimate": dbmundlak_estimate,
+        "dbmundlak_se": dbmundlak_se,
+        "dbmundlak_covered": interval_covered(dbmundlak_estimate, dbmundlak_se, target),
+        "dbmundlak_setup_seconds": dbmundlak_setup_seconds,
+        "dbmundlak_fit_seconds": dbmundlak_fit_seconds,
+        "dbmundlak_total_seconds": dbmundlak_setup_seconds + dbmundlak_fit_seconds,
+        "bitmap_estimate": bitmap_estimate,
+        "bitmap_se": bitmap_se,
+        "bitmap_covered": interval_covered(bitmap_estimate, bitmap_se, target),
+        "bitmap_setup_seconds": bitmap_setup_seconds,
+        "bitmap_fit_seconds": bitmap_fit_seconds,
+        "bitmap_total_seconds": bitmap_setup_seconds + bitmap_fit_seconds,
+        "pyfixest_seconds": pyfixest_seconds,
+    }
+
+
+coverage_draws = pd.DataFrame(
+    Parallel(n_jobs=coverage_n_jobs, backend="loky")(
+        delayed(run_one_shot_coverage_replication)(replication)
+        for replication in range(coverage_replications)
+    )
+).sort_values("replication")
+
+coverage_summary = pd.DataFrame(
+    [
+        {
+            "method": "pyfixest full FE",
+            "inference": "analytic CRV1 clustered by unit",
+            "coverage": coverage_draws["pyfixest_covered"].mean(),
+            "mean_estimate": coverage_draws["pyfixest_estimate"].mean(),
+            "mean_se": coverage_draws["pyfixest_se"].mean(),
+            "empirical_sd": coverage_draws["pyfixest_estimate"].std(ddof=1),
+            "mean_total_seconds": coverage_draws["pyfixest_seconds"].mean(),
+            "mean_fit_inference_seconds": coverage_draws["pyfixest_seconds"].mean(),
+        },
+        {
+            "method": "DBMundlak groupby",
+            "inference": "B=200 full-sample unit bootstrap replicates",
+            "coverage": coverage_draws["dbmundlak_covered"].mean(),
+            "mean_estimate": coverage_draws["dbmundlak_estimate"].mean(),
+            "mean_se": coverage_draws["dbmundlak_se"].mean(),
+            "empirical_sd": coverage_draws["dbmundlak_estimate"].std(ddof=1),
+            "mean_total_seconds": coverage_draws["dbmundlak_total_seconds"].mean(),
+            "mean_fit_inference_seconds": coverage_draws["dbmundlak_fit_seconds"].mean(),
+        },
+        {
+            "method": "bitmap direct moments",
+            "inference": "B=200 full-sample unit bootstrap replicates",
+            "coverage": coverage_draws["bitmap_covered"].mean(),
+            "mean_estimate": coverage_draws["bitmap_estimate"].mean(),
+            "mean_se": coverage_draws["bitmap_se"].mean(),
+            "empirical_sd": coverage_draws["bitmap_estimate"].std(ddof=1),
+            "mean_total_seconds": coverage_draws["bitmap_total_seconds"].mean(),
+            "mean_fit_inference_seconds": coverage_draws["bitmap_fit_seconds"].mean(),
+        },
+    ]
+)
+coverage_summary["coverage_mc_se"] = np.sqrt(
+    coverage_summary["coverage"]
+    * (1.0 - coverage_summary["coverage"])
+    / coverage_replications
+)
+coverage_summary["mean_bootstrap_draw_ms"] = np.nan
+coverage_summary.loc[
+    coverage_summary["method"].isin(["DBMundlak groupby", "bitmap direct moments"]),
+    "mean_bootstrap_draw_ms",
+] = (
+    coverage_summary["mean_fit_inference_seconds"]
+    / coverage_bootstraps
+    * 1_000.0
+)
+
+coverage_summary[
+    [
+        "method",
+        "inference",
+        "coverage",
+        "coverage_mc_se",
+        "mean_estimate",
+        "mean_se",
+        "empirical_sd",
+        "mean_total_seconds",
+        "mean_fit_inference_seconds",
+        "mean_bootstrap_draw_ms",
+    ]
+].round(
+    {
+        "coverage": 3,
+        "coverage_mc_se": 3,
+        "mean_estimate": 4,
+        "mean_se": 4,
+        "empirical_sd": 4,
+        "mean_total_seconds": 3,
+        "mean_fit_inference_seconds": 3,
+        "mean_bootstrap_draw_ms": 3,
+    }
+)
+```
+
+The timing columns are per Monte Carlo replication. For the compressed estimators, `mean_total_seconds` includes table creation or bitmap packing; `mean_fit_inference_seconds` excludes that layout step and includes all $B=200$ bootstrap replicates. The final column divides the fit/inference time by $B$.
+
+The event-study example reports bitmap bootstrap intervals by cohort and event time. It uses the same packed panel as the static bootstrap example.
+
+```{python}
+#| label: event-bootstrap-table
+#| code-fold: true
+def tidy_event_summary(summary):
+    rows = []
+    for cohort, table in summary.items():
+        cohort_int = int(cohort)
+        for term, row in table.iterrows():
+            time_index = int(term.split("_")[-1])
+            rows.append(
+                {
+                    "cohort": cohort_int,
+                    "time_index": time_index,
+                    "event_time": time_index - cohort_int,
+                    "estimate": row["point_estimate"],
+                    "se": row["se"],
+                }
+            )
+    frame = pd.DataFrame(rows).sort_values(["cohort", "time_index"])
+    return frame
+
+
+event_coef_se = tidy_event_summary(event_boot.summary())
+```
+
+```{python}
+#| label: event-bootstrap-pointrange
+#| code-fold: true
+plot_df = event_coef_se.copy()
+plot_df["lower"] = plot_df["estimate"] - 1.96 * plot_df["se"]
+plot_df["upper"] = plot_df["estimate"] + 1.96 * plot_df["se"]
+
+fig, ax = plt.subplots(figsize=(9.5, 5.2), constrained_layout=True)
+colors = {
+    10: "#4C78A8",
+    15: "#59A14F",
+    20: "#E15759",
+}
+offsets = {
+    10: -0.16,
+    15: 0.0,
+    20: 0.16,
+}
+for cohort, group in plot_df.groupby("cohort"):
+    x = group["event_time"] + offsets.get(cohort, 0.0)
+    yerr = np.vstack(
+        [
+            group["estimate"] - group["lower"],
+            group["upper"] - group["estimate"],
+        ]
+    )
+    ax.errorbar(
+        x,
+        group["estimate"],
+        yerr=yerr,
+        fmt="o-",
+        markersize=3.5,
+        linewidth=1.1,
+        elinewidth=0.9,
+        capsize=2,
+        label=f"cohort {cohort}",
+        color=colors.get(cohort),
+    )
+
+ax.axhline(0, color="#333333", linewidth=0.9)
+ax.axvline(0, color="#333333", linewidth=0.8, linestyle=":")
+ax.set_xlabel("event time")
+ax.set_ylabel("estimate with 95% bootstrap interval")
+ax.set_title("Bitmap unit-cluster bootstrap event-study estimates")
+ax.legend(title="first treated period", frameon=False, ncol=3)
+ax.grid(axis="y", alpha=0.25)
+ax.set_axisbelow(True)
+plt.show()
+```
+
+## Interpretation
+
+The point-estimate benchmark separates kernel time from layout construction. `pyfixest` solves the full-data fixed-effect problem on the long table. `DBMundlak` follows the current `duckreg` sufficient-statistic route: create Mundlak-generated regressors, group identical design rows, and solve weighted least squares. The bitmap route starts from packed unit-major and time-major words and solves the moments directly.
+
+The setup panel is part of the result. When data arrive as a normal long panel, this prototype pays a Python-side packing cost before reaching the fast kernel. The intended deployment is a native packed representation for dense binary panels, so point-estimate, event-study, and bootstrap queries reuse the same layout.
