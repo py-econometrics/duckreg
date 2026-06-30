@@ -461,7 +461,7 @@ size_df
 
 ## Inference With Unit-Cluster Bootstrap
 
-The point-estimate benchmark uses the packed panel once. Unit-cluster bootstrap inference reuses it many times. A bootstrap draw can be represented as a vector of unit multiplicities $m_i$, where $m_i$ is the number of times unit $i$ appears in the resample.
+The point-estimate benchmark uses the packed panel once. Unit-cluster bootstrap inference reuses it many times. One bootstrap replicate samples exactly $N$ units with replacement from the $N$ observed units. The replicate is stored as a vector of unit multiplicities $m_i$, where $m_i$ is the number of times unit $i$ appears in that full-sample resample.
 
 For the static estimator, unit-additive quantities become weighted sums over units. Time margins are recomputed as
 
@@ -575,8 +575,8 @@ static_se_comparison = pd.DataFrame(
         ],
         "inference": [
             "analytic CRV1 clustered by unit",
-            f"{num_bootstraps} unit-resampled bootstrap draws",
-            f"{num_bootstraps} unit-resampled bootstrap draws",
+            f"B={num_bootstraps} full-sample unit bootstrap replicates",
+            f"B={num_bootstraps} full-sample unit bootstrap replicates",
         ],
         "W_it estimate": [
             pyfixest_w_estimate,
