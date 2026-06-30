@@ -473,7 +473,7 @@ $$
 
 The event-study estimator applies the same multiplicities to cohort-time counts and outcome sums. The long table and the long-format groupby compression stay out of the bootstrap loop.
 
-The example below uses a smaller staggered-adoption panel so the render can compare analytic cluster-robust inference from `pyfixest`, unit-resampled bootstrap inference from `DBMundlak`, and unit-resampled bootstrap inference from the bitmap estimator in one run.
+The example below uses a smaller staggered-adoption panel so the render can compare analytic cluster-robust inference from `pyfixest`, unit-cluster bootstrap inference from `DBMundlak`, and unit-cluster bootstrap inference from the bitmap estimator in one run.
 
 ```{python}
 #| label: bootstrap-example
@@ -638,6 +638,83 @@ for i, value in enumerate(runtime_plot["total_seconds"]):
 ax.grid(axis="y", which="both", alpha=0.25)
 ax.set_axisbelow(True)
 plt.show()
+```
+
+### Coverage Over 1000 Replications
+
+The coverage experiment uses the same staggered-adoption DGP as the static inference example: $N=10{,}000$, $T=30$, cohorts $(10, 15, 20)$, and treated counts $(2{,}000, 3{,}000, 2{,}000)$. Each Monte Carlo replication uses analytic unit-cluster CRV1 inference for `pyfixest` and $B=200$ full-sample unit bootstrap replicates for each compressed estimator.
+
+The DGP has cohort- and event-time-specific effects, so the static coefficient is a projection estimand. For each replication, the target below is the coefficient on $W_{it}$ from the static Mundlak projection with $Y_{it}$ replaced by the DGP probability $\mathbb E[Y_{it} \mid W, \alpha_i, \lambda_t]$.
+
+```{python}
+#| label: coverage-summary
+#| code-fold: true
+coverage_path = (
+    repo_root
+    / "notebooks"
+    / "bitpacked_mundlak_coverage_R1000_N10000_B200.csv"
+)
+coverage_draws = pd.read_csv(coverage_path)
+coverage_replications = len(coverage_draws)
+
+coverage_summary = pd.DataFrame(
+    [
+        {
+            "method": "pyfixest full FE",
+            "inference": "analytic CRV1 clustered by unit",
+            "coverage": coverage_draws["pyfixest_covered"].mean(),
+            "mean_estimate": coverage_draws["pyfixest_estimate"].mean(),
+            "mean_se": coverage_draws["pyfixest_se"].mean(),
+            "empirical_sd": coverage_draws["pyfixest_estimate"].std(ddof=1),
+            "mean_seconds": coverage_draws["pyfixest_seconds"].mean(),
+        },
+        {
+            "method": "DBMundlak groupby",
+            "inference": "B=200 full-sample unit bootstrap replicates",
+            "coverage": coverage_draws["dbmundlak_covered"].mean(),
+            "mean_estimate": coverage_draws["dbmundlak_estimate"].mean(),
+            "mean_se": coverage_draws["dbmundlak_se"].mean(),
+            "empirical_sd": coverage_draws["dbmundlak_estimate"].std(ddof=1),
+            "mean_seconds": coverage_draws["dbmundlak_seconds"].mean(),
+        },
+        {
+            "method": "bitmap direct moments",
+            "inference": "B=200 full-sample unit bootstrap replicates",
+            "coverage": coverage_draws["bitmap_covered"].mean(),
+            "mean_estimate": coverage_draws["bitmap_estimate"].mean(),
+            "mean_se": coverage_draws["bitmap_se"].mean(),
+            "empirical_sd": coverage_draws["bitmap_estimate"].std(ddof=1),
+            "mean_seconds": coverage_draws["bitmap_seconds"].mean(),
+        },
+    ]
+)
+coverage_summary["coverage_mc_se"] = np.sqrt(
+    coverage_summary["coverage"]
+    * (1.0 - coverage_summary["coverage"])
+    / coverage_replications
+)
+
+coverage_summary[
+    [
+        "method",
+        "inference",
+        "coverage",
+        "coverage_mc_se",
+        "mean_estimate",
+        "mean_se",
+        "empirical_sd",
+        "mean_seconds",
+    ]
+].round(
+    {
+        "coverage": 3,
+        "coverage_mc_se": 3,
+        "mean_estimate": 4,
+        "mean_se": 4,
+        "empirical_sd": 4,
+        "mean_seconds": 3,
+    }
+)
 ```
 
 The event-study example reports bitmap bootstrap intervals by cohort and event time. It uses the same packed panel as the static bootstrap example.
