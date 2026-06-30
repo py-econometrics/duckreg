@@ -3303,6 +3303,7 @@ Y_{it}
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>static_fit <span class="op">=</span> BitmapMundlak.from_long(data).fit()</span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>event_fit <span class="op">=</span> BitmapMundlakEventStudy.from_long(data).fit()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<p>The <code>from_long(...)</code> constructors are convenience wrappers: each call packs the long panel before fitting. When the same panel feeds multiple estimators or many bootstrap draws, pack once with <code>LongPanelBitPacker().fit_transform(data)</code> and pass the resulting <code>BitmapPanel</code> to <code>BitmapMundlak</code> and <code>BitmapMundlakEventStudy</code>. Bootstrap replications then resample unit multiplicities against the cached layout; they do not pay the long-panel packing cost again.</p>
 <p>The lower-level packing classes and display helpers live in <code>duckreg.bitmap_utils</code>. They are used directly below to show the physical layout and to reuse a packed panel across repeated moment queries.</p>
 </section>
 <section id="code-setup" class="level2">

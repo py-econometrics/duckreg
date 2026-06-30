@@ -61,6 +61,14 @@ static_fit = BitmapMundlak.from_long(data).fit()
 event_fit = BitmapMundlakEventStudy.from_long(data).fit()
 ```
 
+The `from_long(...)` constructors are convenience wrappers: each call packs the
+long panel before fitting. When the same panel feeds multiple estimators or many
+bootstrap draws, pack once with `LongPanelBitPacker().fit_transform(data)` and
+pass the resulting `BitmapPanel` to `BitmapMundlak` and
+`BitmapMundlakEventStudy`. Bootstrap replications then resample unit
+multiplicities against the cached layout; they do not pay the long-panel
+packing cost again.
+
 The lower-level packing classes and display helpers live in `duckreg.bitmap_utils`. They are used directly below to show the physical layout and to reuse a packed panel across repeated moment queries.
 
 ## Code Setup
