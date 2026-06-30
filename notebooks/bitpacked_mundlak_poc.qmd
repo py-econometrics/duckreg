@@ -67,12 +67,22 @@ The lower-level packing classes and display helpers live in `duckreg.bitmap_util
 ```{python}
 #| label: setup
 #| code-fold: true
+import contextlib
+import io
+import os
 from pathlib import Path
 import gc
 import sys
 import time
 
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+os.environ.setdefault("POLARS_MAX_THREADS", "1")
+
 import ibis
+from joblib import Parallel, delayed
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -642,20 +652,201 @@ plt.show()
 
 ### Coverage Over 1000 Replications
 
-The coverage experiment uses the same staggered-adoption DGP as the static inference example: $N=10{,}000$, $T=30$, cohorts $(10, 15, 20)$, and treated counts $(2{,}000, 3{,}000, 2{,}000)$. Each Monte Carlo replication uses analytic unit-cluster CRV1 inference for `pyfixest` and $B=200$ full-sample unit bootstrap replicates for each compressed estimator.
+The coverage experiment uses the one-shot adoption DGP with the sharkfin post-treatment effect path: $N=10{,}000$, $T=30$, $5{,}000$ treated units, and first treatment in period 15. Each Monte Carlo replication uses analytic unit-cluster CRV1 inference for `pyfixest` and $B=200$ full-sample unit bootstrap replicates for each compressed estimator.
 
-The DGP has cohort- and event-time-specific effects, so the static coefficient is a projection estimand. For each replication, the target below is the coefficient on $W_{it}$ from the static Mundlak projection with $Y_{it}$ replaced by the DGP probability $\mathbb E[Y_{it} \mid W, \alpha_i, \lambda_t]$.
+The DGP has a dynamic post-treatment effect, so the static coefficient is a projection estimand. For each replication, the target below is the coefficient on $W_{it}$ from the static Mundlak projection with $Y_{it}$ replaced by the DGP probability $\mathbb E[Y_{it} \mid W, \alpha_i, \lambda_t]$. The simulation is run directly in this notebook.
 
 ```{python}
 #| label: coverage-summary
 #| code-fold: true
-coverage_path = (
-    repo_root
-    / "notebooks"
-    / "bitpacked_mundlak_coverage_R1000_N10000_B200.csv"
-)
-coverage_draws = pd.read_csv(coverage_path)
-coverage_replications = len(coverage_draws)
+coverage_config = {
+    "num_units": 10_000,
+    "num_periods": 30,
+    "num_treated": 5_000,
+    "treatment_start": 15,
+}
+coverage_replications = 1_000
+coverage_bootstraps = 200
+coverage_n_jobs = min(6, os.cpu_count() or 1)
+
+
+def logistic_probability(index):
+    return 1.0 / (1.0 + np.exp(-index))
+
+
+def make_one_shot_panel_with_probability(seed):
+    rng = np.random.default_rng(seed)
+    num_units = coverage_config["num_units"]
+    num_periods = coverage_config["num_periods"]
+    num_treated = coverage_config["num_treated"]
+    treatment_start = coverage_config["treatment_start"]
+
+    treated_units = rng.choice(num_units, size=num_treated, replace=False)
+    w = np.zeros((num_units, num_periods), dtype=np.uint8)
+    w[treated_units, treatment_start:] = 1
+
+    effect = np.zeros(num_periods)
+    event_time = np.arange(1, num_periods - treatment_start + 1)
+    post_effect = 0.07 * np.log(2.0 * event_time)
+    post_effect[8:] = 0.0
+    effect[treatment_start:] = post_effect
+
+    unit_score = rng.normal(scale=0.55, size=(num_units, 1))
+    time_score = 0.25 * np.sin(np.linspace(0.0, 2.5 * np.pi, num_periods))[None, :]
+    baseline_prob = logistic_probability(-0.8 + unit_score + time_score)
+    prob = np.clip(baseline_prob + w * effect[None, :], 0.01, 0.99)
+    y = rng.binomial(1, prob).astype(np.uint8)
+
+    unit_id = np.repeat(np.arange(num_units, dtype=np.int32), num_periods)
+    time_id = np.tile(np.arange(num_periods, dtype=np.int16), num_units)
+    long_panel = pd.DataFrame(
+        {
+            "unit_id": unit_id,
+            "time_id": time_id,
+            "Y_it": y.reshape(-1).astype(np.int8),
+            "W_it": w.reshape(-1).astype(np.int8),
+        }
+    )
+    return long_panel, prob, w
+
+
+def static_mundlak_projection_target(y_value, w_value):
+    num_units, num_periods = w_value.shape
+    w_float = w_value.astype(float, copy=False)
+    y_float = y_value.astype(float, copy=False)
+    unit_w = w_float.sum(axis=1)
+    time_w = w_float.sum(axis=0)
+    unit_y = y_float.sum(axis=1)
+    time_y = y_float.sum(axis=0)
+    sum_w = unit_w.sum()
+    sum_c2 = unit_w @ unit_w
+    sum_y = y_float.sum()
+    sum_wy = (w_float * y_float).sum()
+    sum_cy = unit_w @ unit_y
+    sum_d2 = time_w @ time_w
+    sum_dy = time_w @ time_y
+    num_obs = float(num_units * num_periods)
+    num_units_float = float(num_units)
+    num_periods_float = float(num_periods)
+    xtx = np.array(
+        [
+            [num_obs, sum_w, sum_w, sum_w],
+            [sum_w, sum_w, sum_c2 / num_periods_float, sum_d2 / num_units_float],
+            [
+                sum_w,
+                sum_c2 / num_periods_float,
+                sum_c2 / num_periods_float,
+                sum_w**2 / num_obs,
+            ],
+            [
+                sum_w,
+                sum_d2 / num_units_float,
+                sum_w**2 / num_obs,
+                sum_d2 / num_units_float,
+            ],
+        ],
+        dtype=float,
+    )
+    xty = np.array(
+        [
+            sum_y,
+            sum_wy,
+            sum_cy / num_periods_float,
+            sum_dy / num_units_float,
+        ],
+        dtype=float,
+    )
+    return float(np.linalg.lstsq(xtx, xty, rcond=None)[0][1])
+
+
+def interval_covered(estimate, standard_error, target):
+    radius = 1.96 * standard_error
+    return bool((estimate - radius) <= target <= (estimate + radius))
+
+
+def run_one_shot_coverage_replication(replication):
+    panel_long, prob, w = make_one_shot_panel_with_probability(20271000 + replication)
+    target = static_mundlak_projection_target(prob, w)
+
+    start = time.perf_counter()
+    pyfixest_fit = pf.feols(
+        "Y_it ~ W_it | unit_id + time_id",
+        data=panel_long,
+        vcov={"CRV1": "unit_id"},
+        lean=True,
+    )
+    pyfixest_seconds = time.perf_counter() - start
+    pyfixest_estimate = float(pyfixest_fit.coef().loc["W_it"])
+    pyfixest_se = float(pyfixest_fit.se().loc["W_it"])
+
+    start = time.perf_counter()
+    backend = ibis.duckdb.connect()
+    backend.create_table("coverage_panel", panel_long, overwrite=True)
+    dbmundlak_setup_seconds = time.perf_counter() - start
+    db_model = DBMundlak(
+        db_name=None,
+        connection=backend,
+        table_name="coverage_panel",
+        outcome_var="Y_it",
+        covariates=["W_it"],
+        unit_col="unit_id",
+        time_col="time_id",
+        cluster_col="unit_id",
+        seed=30310000 + replication,
+        n_bootstraps=coverage_bootstraps,
+    )
+    start = time.perf_counter()
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        db_model.fit()
+    dbmundlak_fit_seconds = time.perf_counter() - start
+    try:
+        backend.disconnect()
+    except Exception:
+        pass
+    dbmundlak_estimate = float(db_model.point_estimate.reshape(-1)[1])
+    dbmundlak_se = float(np.sqrt(np.diag(db_model.vcov))[1])
+
+    start = time.perf_counter()
+    bitmap_panel = LongPanelBitPacker().fit_transform(panel_long)
+    bitmap_setup_seconds = time.perf_counter() - start
+    start = time.perf_counter()
+    bitmap_model = BitmapMundlak(
+        bitmap_panel,
+        seed=30310000 + replication,
+        n_bootstraps=coverage_bootstraps,
+    ).fit()
+    bitmap_fit_seconds = time.perf_counter() - start
+    bitmap_estimate = float(bitmap_model.point_estimate.loc["W_it"])
+    bitmap_se = float(np.sqrt(np.diag(bitmap_model.vcov))[1])
+
+    return {
+        "replication": replication,
+        "target": target,
+        "pyfixest_estimate": pyfixest_estimate,
+        "pyfixest_se": pyfixest_se,
+        "pyfixest_covered": interval_covered(pyfixest_estimate, pyfixest_se, target),
+        "dbmundlak_estimate": dbmundlak_estimate,
+        "dbmundlak_se": dbmundlak_se,
+        "dbmundlak_covered": interval_covered(dbmundlak_estimate, dbmundlak_se, target),
+        "dbmundlak_setup_seconds": dbmundlak_setup_seconds,
+        "dbmundlak_fit_seconds": dbmundlak_fit_seconds,
+        "dbmundlak_total_seconds": dbmundlak_setup_seconds + dbmundlak_fit_seconds,
+        "bitmap_estimate": bitmap_estimate,
+        "bitmap_se": bitmap_se,
+        "bitmap_covered": interval_covered(bitmap_estimate, bitmap_se, target),
+        "bitmap_setup_seconds": bitmap_setup_seconds,
+        "bitmap_fit_seconds": bitmap_fit_seconds,
+        "bitmap_total_seconds": bitmap_setup_seconds + bitmap_fit_seconds,
+        "pyfixest_seconds": pyfixest_seconds,
+    }
+
+
+coverage_draws = pd.DataFrame(
+    Parallel(n_jobs=coverage_n_jobs, backend="loky")(
+        delayed(run_one_shot_coverage_replication)(replication)
+        for replication in range(coverage_replications)
+    )
+).sort_values("replication")
 
 coverage_summary = pd.DataFrame(
     [
@@ -666,7 +857,8 @@ coverage_summary = pd.DataFrame(
             "mean_estimate": coverage_draws["pyfixest_estimate"].mean(),
             "mean_se": coverage_draws["pyfixest_se"].mean(),
             "empirical_sd": coverage_draws["pyfixest_estimate"].std(ddof=1),
-            "mean_seconds": coverage_draws["pyfixest_seconds"].mean(),
+            "mean_total_seconds": coverage_draws["pyfixest_seconds"].mean(),
+            "mean_fit_inference_seconds": coverage_draws["pyfixest_seconds"].mean(),
         },
         {
             "method": "DBMundlak groupby",
@@ -675,7 +867,8 @@ coverage_summary = pd.DataFrame(
             "mean_estimate": coverage_draws["dbmundlak_estimate"].mean(),
             "mean_se": coverage_draws["dbmundlak_se"].mean(),
             "empirical_sd": coverage_draws["dbmundlak_estimate"].std(ddof=1),
-            "mean_seconds": coverage_draws["dbmundlak_seconds"].mean(),
+            "mean_total_seconds": coverage_draws["dbmundlak_total_seconds"].mean(),
+            "mean_fit_inference_seconds": coverage_draws["dbmundlak_fit_seconds"].mean(),
         },
         {
             "method": "bitmap direct moments",
@@ -684,7 +877,8 @@ coverage_summary = pd.DataFrame(
             "mean_estimate": coverage_draws["bitmap_estimate"].mean(),
             "mean_se": coverage_draws["bitmap_se"].mean(),
             "empirical_sd": coverage_draws["bitmap_estimate"].std(ddof=1),
-            "mean_seconds": coverage_draws["bitmap_seconds"].mean(),
+            "mean_total_seconds": coverage_draws["bitmap_total_seconds"].mean(),
+            "mean_fit_inference_seconds": coverage_draws["bitmap_fit_seconds"].mean(),
         },
     ]
 )
@@ -692,6 +886,15 @@ coverage_summary["coverage_mc_se"] = np.sqrt(
     coverage_summary["coverage"]
     * (1.0 - coverage_summary["coverage"])
     / coverage_replications
+)
+coverage_summary["mean_bootstrap_draw_ms"] = np.nan
+coverage_summary.loc[
+    coverage_summary["method"].isin(["DBMundlak groupby", "bitmap direct moments"]),
+    "mean_bootstrap_draw_ms",
+] = (
+    coverage_summary["mean_fit_inference_seconds"]
+    / coverage_bootstraps
+    * 1_000.0
 )
 
 coverage_summary[
@@ -703,7 +906,9 @@ coverage_summary[
         "mean_estimate",
         "mean_se",
         "empirical_sd",
-        "mean_seconds",
+        "mean_total_seconds",
+        "mean_fit_inference_seconds",
+        "mean_bootstrap_draw_ms",
     ]
 ].round(
     {
@@ -712,10 +917,14 @@ coverage_summary[
         "mean_estimate": 4,
         "mean_se": 4,
         "empirical_sd": 4,
-        "mean_seconds": 3,
+        "mean_total_seconds": 3,
+        "mean_fit_inference_seconds": 3,
+        "mean_bootstrap_draw_ms": 3,
     }
 )
 ```
+
+The timing columns are per Monte Carlo replication. For the compressed estimators, `mean_total_seconds` includes table creation or bitmap packing; `mean_fit_inference_seconds` excludes that layout step and includes all $B=200$ bootstrap replicates. The final column divides the fit/inference time by $B$.
 
 The event-study example reports bitmap bootstrap intervals by cohort and event time. It uses the same packed panel as the static bootstrap example.
 
