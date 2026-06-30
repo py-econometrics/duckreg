@@ -32,7 +32,7 @@ Multiple outcomes are supported:
 formula = "Y + Y2 ~ D + f1 + f2"
 ```
 
-Fixed-effect separators such as `Y ~ D | unit + time` are intentionally rejected. Use `DBMundlak`, `DBDoubleDemeaning`, or `DBMundlakEventStudy` for those designs.
+Fixed-effect separators such as `Y ~ D | unit + time` are intentionally rejected. Use `DBMundlak`, `DBDoubleDemeaning`, or `DBMundlakEventStudy` for those designs. For dense binary or low-cardinality panels, see [Bitpacked Panels](bitpacked-mundlak.qmd).
 
 ## Basic Fit
 

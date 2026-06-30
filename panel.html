@@ -4841,7 +4841,7 @@ return!"\t\n\x0B\f\r                　\u2028\u2029
 )) {"Symbol"in self&&"iterator"in Symbol&&"function"==typeof Array.prototype[Symbol.iterator]?CreateMethodProperty(Array.prototype,"values",Array.prototype[Symbol.iterator]):CreateMethodProperty(Array.prototype,"values",function r(){var r=ToObject(this);return new ArrayIterator(r,"value")});}if (!("Symbol"in self&&"iterator"in self.Symbol&&!!Array.prototype[self.Symbol.iterator]
 )) {CreateMethodProperty(Array.prototype,Symbol.iterator,Array.prototype.values);}var StringIterator=function(){var t=function(e){if(!(this instanceof t))return new t(e);e=String(e),Iterator.call(this,e),Object.defineProperty(this,"__length__",{value:e.length,configurable:!1,enumerable:!1,writable:!1})};return Object.setPrototypeOf&&Object.setPrototypeOf(t,Iterator),t.prototype=Object.create(Iterator.prototype,{constructor:{value:t,configurable:!0,enumerable:!1,writable:!0},_next:{value:function(){if(this.__list__)return this.__nextIndex__<this.__length__?this.__nextIndex__++:void this._unBind()},configurable:!0,enumerable:!1,writable:!0},_resolve:{value:function(t){var e,r=this.__list__[t];return this.__nextIndex__===this.__length__?r:(e=r.charCodeAt(0),e>=55296&&e<=56319?r+this.__list__[this.__nextIndex__++]:r)},configurable:!0,enumerable:!1,writable:!0},toString:{value:function(){return"[object String Iterator]"},configurable:!0,enumerable:!1,writable:!0}}),t}();if (!("Symbol"in self&&"iterator"in self.Symbol&&!!String.prototype[self.Symbol.iterator]
 )) {CreateMethodProperty(String.prototype,Symbol.iterator,function(){var r=RequireObjectCoercible(this),t=ToString(r);return new StringIterator(t)});}})('object' === typeof window && window || 'object' === typeof self && self || 'object' === typeof global && global || {});</script>
-  
+
   <script>
     (function () {
       var script = document.createElement("script");
@@ -4891,6 +4891,15 @@ max-width: 1180px;
 table {
 font-size: 0.94rem;
 }
+.cell-output-display {
+overflow-x: auto;
+}
+pre.sourceCode {
+overflow-x: auto;
+}
+pre.sourceCode code {
+white-space: pre;
+}
 code {
 white-space: pre-wrap;
 }
@@ -4918,53 +4927,57 @@ border-radius: 6px;
           <div class="collapse navbar-collapse" id="navbarCollapse">
             <ul class="navbar-nav navbar-nav-scroll me-auto">
   <li class="nav-item">
-    <a class="nav-link active" href="./index.html" aria-current="page"> 
+    <a class="nav-link active" href="./index.html" aria-current="page">
 <span class="menu-text">Home</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./ibis.html"> 
+    <a class="nav-link" href="./ibis.html">
 <span class="menu-text">Ibis</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./compression.html"> 
+    <a class="nav-link" href="./compression.html">
 <span class="menu-text">Compression</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./linear.html"> 
+    <a class="nav-link" href="./linear.html">
 <span class="menu-text">Linear</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./panel.html"> 
+    <a class="nav-link" href="./panel.html">
 <span class="menu-text">Panel</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./dml.html"> 
+    <a class="nav-link" href="./bitpacked-mundlak.html">
+<span class="menu-text">Bitpacked Panels</span></a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="./dml.html">
 <span class="menu-text">DML</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./glm.html"> 
+    <a class="nav-link" href="./glm.html">
 <span class="menu-text">GLMs</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./fisher-scoring.html"> 
+    <a class="nav-link" href="./fisher-scoring.html">
 <span class="menu-text">Fisher Scoring</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./ridge.html"> 
+    <a class="nav-link" href="./ridge.html">
 <span class="menu-text">Ridge</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./inference.html"> 
+    <a class="nav-link" href="./inference.html">
 <span class="menu-text">Inference</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./examples.html"> 
+    <a class="nav-link" href="./examples.html">
 <span class="menu-text">Examples</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./performance.html"> 
+    <a class="nav-link" href="./performance.html">
 <span class="menu-text">Performance</span></a>
-  </li>  
+  </li>
 </ul>
           </div> <!-- /navcollapse -->
             <div class="quarto-navbar-tools">
@@ -4977,7 +4990,7 @@ border-radius: 6px;
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
         <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="./panel.html">Panel Estimators</a></li></ol></nav>
-        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         </a>
       <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
         <i class="bi bi-search"></i>
@@ -4994,76 +5007,82 @@ border-radius: 6px;
         <div id="quarto-search" class title="Search"></div>
         </div>
         </div>
-    <div class="sidebar-menu-container"> 
+    <div class="sidebar-menu-container">
     <ul class="list-unstyled mt-1">
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./index.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">duckreg</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./ibis.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Ibis Backends</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./compression.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Compression and Estimator Lifecycle</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./linear.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Linear Regression API</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./panel.html" class="sidebar-item-text sidebar-link active">
  <span class="menu-text">Panel Estimators</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
+  <a href="./bitpacked-mundlak.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Bitpacked Panel Mundlak</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container">
   <a href="./dml.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Compressed Double Machine Learning</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./glm.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Generalized Linear Models</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./fisher-scoring.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Fisher Scoring and Multinomial GLMs</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./ridge.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Compressed Ridge Regression</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./inference.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Inference and Variance Estimation</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./examples.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Executed Examples</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./performance.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Performance Comparisons</span></a>
   </div>
@@ -5076,7 +5095,7 @@ border-radius: 6px;
     <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
         <nav id="TOC" role="doc-toc" class="toc-active">
     <h2 id="toc-title">On this page</h2>
-   
+
   <ul>
   <li><a href="#mundlak" id="toc-mundlak" class="nav-link active" data-scroll-target="#mundlak">Mundlak</a></li>
   <li><a href="#double-demeaning" id="toc-double-demeaning" class="nav-link" data-scroll-target="#double-demeaning">Double Demeaning</a></li>
@@ -5097,17 +5116,18 @@ border-radius: 6px;
 
 <div class="quarto-title-meta column-body">
 
-    
-  
-    
+
+
+
   </div>
-  
+
 
 
 </header>
 
 
 <p>Panel estimators create fixed-effect style design variables before compression. This keeps the compressed table small when <span class="math inline">\(N\)</span> is large and <span class="math inline">\(T\)</span> is modest.</p>
+<p>For dense balanced panels with binary treatment and binary or low-cardinality outcomes, <a href="./bitpacked-mundlak.html">Bitpacked Panels</a> documents the specialized bitmap estimators. Those estimators compute the same Mundlak-style moments from packed unit-major and time-major words.</p>
 <section id="mundlak" class="level2">
 <h2 class="anchored" data-anchor-id="mundlak">Mundlak</h2>
 <p><code>DBMundlak</code> augments the original covariates with unit means and, optionally, time means. For a covariate <span class="math inline">\(W_{it}\)</span>, the two-way design contains</p>
@@ -5128,7 +5148,7 @@ Y_{it}
 + \bar{W}_{\cdot t}&#39;\delta
 + u_{it}.
 \]</span></p>
-<div id="9a69e338" class="cell" data-execution_count="1">
+<div id="b4a58999" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBMundlak</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DBMundlak(</span>
@@ -5146,7 +5166,7 @@ Y_{it}
 <span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>The right-hand side is ordered as:</p>
-<div id="9db5e31e" class="cell" data-execution_count="2">
+<div id="5b13db87" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>[<span class="st">&quot;Intercept&quot;</span>, <span class="st">&quot;D&quot;</span>, <span class="st">&quot;X&quot;</span>, <span class="st">&quot;avg_D_unit&quot;</span>, <span class="st">&quot;avg_X_unit&quot;</span>, <span class="st">&quot;avg_D_time&quot;</span>, <span class="st">&quot;avg_X_time&quot;</span>]</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
@@ -5166,7 +5186,7 @@ W_{it}
 Y_{it} = \alpha + \tau \ddot{W}_{it} + u_{it}
 \]</span></p>
 <p>on the compressed residualized treatment values.</p>
-<div id="21822814" class="cell" data-execution_count="3">
+<div id="5b695d28" class="cell" data-execution_count="3">
 <div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBDoubleDemeaning</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DBDoubleDemeaning(</span>
@@ -5188,7 +5208,7 @@ Y_{it} = \alpha + \tau \ddot{W}_{it} + u_{it}
 <section id="event-study" class="level2">
 <h2 class="anchored" data-anchor-id="event-study">Event Study</h2>
 <p><code>DBMundlakEventStudy</code> builds cohort indicators, time indicators, and cohort-by-time treatment interactions. It estimates event-study profiles by cohort after compression.</p>
-<div id="1112a950" class="cell" data-execution_count="4">
+<div id="493854e3" class="cell" data-execution_count="4">
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBMundlakEventStudy</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DBMundlakEventStudy(</span>
@@ -5235,6 +5255,14 @@ Y_{it} = \alpha + \tau \ddot{W}_{it} + u_{it}
 <td><code>DBMundlakEventStudy</code></td>
 <td>Infer treatment cohorts, create indicator columns, and compress the generated design.</td>
 </tr>
+<tr class="even">
+<td><code>BitmapMundlak</code></td>
+<td>Pack dense low-cardinality panels into bitmaps, then compute static Mundlak moments directly.</td>
+</tr>
+<tr class="odd">
+<td><code>BitmapMundlakEventStudy</code></td>
+<td>Combine cohort masks with time-major outcome bitplanes to compute cohort-time event-study moments.</td>
+</tr>
 </tbody>
 </table>
 <p>The compatibility <code>Duck*</code> panel classes expose the same statistical designs but use older SQL-string internals.</p>
@@ -5262,7 +5290,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       toggleBodyColorMode(bsSheetEl);
     }
   }
-  toggleBodyColorPrimary();  
+  toggleBodyColorPrimary();
   const icon = "";
   const anchorJS = new window.AnchorJS();
   anchorJS.options = {
@@ -5272,7 +5300,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
   anchorJS.add('.anchored');
   const isCodeAnnotation = (el) => {
     for (const clz of el.classList) {
-      if (clz.startsWith('code-annotation-')) {                     
+      if (clz.startsWith('code-annotation-')) {
         return true;
       }
     }
@@ -5292,11 +5320,11 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       button.setAttribute("data-bs-toggle", "tooltip");
       button.setAttribute("data-bs-placement", "left");
       button.setAttribute("data-bs-title", "Copied!");
-      tooltip = new bootstrap.Tooltip(button, 
-        { trigger: "manual", 
+      tooltip = new bootstrap.Tooltip(button,
+        { trigger: "manual",
           customClass: "code-copy-button-tooltip",
           offset: [0, -8]});
-      tooltip.show();    
+      tooltip.show();
     }
     setTimeout(function() {
       if (tooltip) {
@@ -5374,7 +5402,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
     if (onUntriggerFn) {
       config.onUntrigger = onUntriggerFn;
     }
-    window.tippy(el, config); 
+    window.tippy(el, config);
   }
   const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
   for (var i=0; i<noterefs.length; i++) {
@@ -5450,7 +5478,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
     tippyHover(xref, undefined, function(instance) {
       instance.disable();
       let url = xref.getAttribute('href');
-      let hash = undefined; 
+      let hash = undefined;
       if (url.startsWith('#')) {
         hash = url;
       } else {
@@ -5478,7 +5506,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
             if (note !== null) {
               const html = processXRef(id, note);
               instance.setContent(html);
-            } 
+            }
           }).finally(() => {
             instance.enable();
             instance.show();
@@ -5502,7 +5530,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
             }
             const html = processXRef(null, note);
             instance.setContent(html);
-          } 
+          }
         }).finally(() => {
           instance.enable();
           instance.show();
@@ -5542,7 +5570,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
             height = bottom - top;
           }
           if (top !== null && height !== null && parent !== null) {
-            // cook up a div (if necessary) and position it 
+            // cook up a div (if necessary) and position it
             let div = window.document.getElementById("code-annotation-line-highlight");
             if (div === null) {
               div = window.document.createElement("div");

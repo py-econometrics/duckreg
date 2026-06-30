@@ -14,6 +14,18 @@ table {
   font-size: 0.94rem;
 }
 
+.cell-output-display {
+  overflow-x: auto;
+}
+
+pre.sourceCode {
+  overflow-x: auto;
+}
+
+pre.sourceCode code {
+  white-space: pre;
+}
+
 code {
   white-space: pre-wrap;
 }

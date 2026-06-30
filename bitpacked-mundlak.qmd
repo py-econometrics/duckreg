@@ -1,0 +1,239 @@
+---
+title: "Bitpacked Panel Mundlak"
+description: "Direct bitmap moments for dense low-cardinality panel designs."
+execute:
+  eval: false
+  echo: true
+  warning: false
+  message: false
+---
+
+`BitmapMundlak` and `BitmapMundlakEventStudy` are specialized panel estimators for dense balanced panels with binary treatment and binary or low-cardinality outcomes. They target the same Mundlak-style designs as `DBMundlak` and `DBMundlakEventStudy`, while computing the needed moments from packed bitmap layouts instead of grouping a long panel table.
+
+The static model is
+
+$$
+Y_{it}
+=
+\alpha
++ \beta W_{it}
++ \gamma \bar W_{i \cdot}
++ \delta \bar W_{\cdot t}
++ u_{it},
+$$
+
+where $W_{it}$ is binary. When $Y_{it}$ is also binary, the required counts are intersections of treatment, outcome, unit, time, and cohort masks. Those intersections are native bitmap operations.
+
+## When This Applies
+
+This path is useful when the panel is:
+
+| Requirement | Reason |
+|---|---|
+| Dense and balanced | Bit positions have a fixed unit-time meaning. |
+| Binary treatment | Treatment histories are packed into integer words. |
+| Binary or low-cardinality outcome | Outcome values can be represented by one bitplane per stored value. |
+| Reused across estimators or bootstrap draws | Packing is a fixed setup cost, while moment queries reuse the layout. |
+
+The default outcome-cardinality limit is 64 distinct values. Values such as `0/1` are the easiest case. Small integer support such as `0` through `9` is also natural: store one bitplane per nonzero outcome value, then compute sums as value-weighted popcounts. Real-valued outcomes are outside this representation unless they are discretized before packing.
+
+## API
+
+The public estimators live at the top level:
+
+```{python}
+from duckreg import BitmapMundlak, BitmapMundlakEventStudy
+```
+
+For exploratory use, the `from_long(...)` constructors pack the long panel and then fit:
+
+```{python}
+static_fit = BitmapMundlak.from_long(
+    data,
+    unit_col="unit_id",
+    time_col="time_id",
+    outcome_col="Y_it",
+    treatment_col="W_it",
+    n_bootstraps=200,
+).fit()
+
+event_fit = BitmapMundlakEventStudy.from_long(
+    data,
+    unit_col="unit_id",
+    time_col="time_id",
+    outcome_col="Y_it",
+    treatment_col="W_it",
+    n_bootstraps=200,
+).fit()
+```
+
+For performance-sensitive use, pack once and reuse the layout:
+
+```{python}
+from duckreg.bitmap_utils import LongPanelBitPacker
+
+panel = LongPanelBitPacker(
+    unit_col="unit_id",
+    time_col="time_id",
+    outcome_col="Y_it",
+    treatment_col="W_it",
+).fit_transform(data)
+
+static_fit = BitmapMundlak(panel, n_bootstraps=200).fit()
+event_fit = BitmapMundlakEventStudy(panel, n_bootstraps=200).fit()
+```
+
+This distinction matters. Each `from_long(...)` call pays the long-panel-to-bitmap packing cost. Passing a shared `BitmapPanel` lets the static estimator, event-study estimator, and bootstrap replications reuse the same layout.
+
+## Long Panel Contract
+
+The packer expects one row per unit-period observation:
+
+| unit_id | time_id | Y_it | W_it |
+|---:|---:|---:|---:|
+| 0 | 0 | 0 | 0 |
+| 0 | 1 | 0 | 0 |
+| 0 | 2 | 1 | 1 |
+| 1 | 0 | 0 | 0 |
+| 1 | 1 | 1 | 0 |
+
+The current packer enforces:
+
+1. No duplicate unit-time rows.
+2. A balanced panel over observed unit and time identifiers.
+3. Zero-based consecutive integer time identifiers.
+4. Binary treatment values.
+5. Outcome cardinality no larger than `max_outcome_cardinality`.
+
+## Storage Layout
+
+For a binary outcome and treatment, the unit-major layout stores each unit's time history in 64-bit chunks. With $N$ units and $T$ periods, the treatment table has
+
+$$
+N \left\lceil \frac{T}{64} \right\rceil
+$$
+
+rows of words. The time-major layout stores each time period's cross-section in 64-unit chunks, with
+
+$$
+T \left\lceil \frac{N}{64} \right\rceil
+$$
+
+rows of words. The same idea is used for outcome bitplanes.
+
+For outcome support $\mathcal Y$, the packer stores one bitplane for each nonzero outcome value by default. Outcome sums are reconstructed as
+
+$$
+\sum_{v \in \mathcal Y \setminus \{0\}}
+v \cdot \operatorname{popcount}(Y_v \cap M),
+$$
+
+where $Y_v$ is the bitplane for outcome value $v$ and $M$ is the relevant treatment, cohort, unit, time, or valid-bit mask.
+
+The raw word count scales like an $N$-row representation when $T \le 64$, and more generally like $N \lceil T/64 \rceil$ for unit-major words plus $T \lceil N/64 \rceil$ for time-major words. The logical panel still has $NT$ observations. Packing changes the unit of computation from scalar rows to machine words.
+
+## Moment Kernels
+
+The static estimator computes a small set of Mundlak moments. For example, unit treatment totals are popcounts over unit-major treatment words:
+
+```{sql}
+SELECT
+  unit_index,
+  SUM(bit_count(w_bits & valid_mask))::DOUBLE AS c
+FROM unit_bits
+GROUP BY unit_index
+```
+
+Outcome sums by unit use outcome bitplanes:
+
+```{sql}
+SELECT
+  u.unit_index,
+  SUM(y.outcome_value::DOUBLE * bit_count(y.y_bits & u.valid_mask)) AS y_sum,
+  SUM(y.outcome_value::DOUBLE * bit_count(y.y_bits & u.w_bits & u.valid_mask)) AS wy_sum
+FROM unit_bits AS u
+JOIN unit_outcome_bits AS y USING (unit_index, chunk)
+GROUP BY u.unit_index
+```
+
+Time totals use the transposed time-major layout. These unit and time margins are enough to form $X'X$ and $X'Y$ for the static Mundlak normal equations.
+
+The event-study estimator uses cohort masks. For cohort $g$ and time $t$, it needs the number of units in the cohort and the outcome sum in that cohort-time cell:
+
+```{sql}
+SELECT
+  m.cohort::INTEGER AS cohort,
+  t.time_index::INTEGER AS time_index,
+  SUM(bit_count(m.mask & t.valid_mask))::DOUBLE AS n_units
+FROM time_bits AS t
+JOIN cohort_masks AS m USING (chunk)
+GROUP BY m.cohort, t.time_index
+```
+
+The current SQL fragments target DuckDB because `bit_count` is not exposed by Ibis as a backend-neutral expression in this implementation.
+
+## Unit-Cluster Bootstrap
+
+A full-sample unit bootstrap draw samples $N$ unit identifiers with replacement from the $N$ observed units. The draw can be represented as multiplicities
+
+$$
+m_i = \#\{\text{drawn positions equal to unit } i\}.
+$$
+
+The long panel and bitmap layout stay outside the bootstrap loop. Each replicate applies $m_i$ to cached unit or cohort-time sufficient statistics, recomputes the small moment system, and stores the resulting coefficient vector.
+
+For the static estimator, unit-additive quantities become weighted sums. Time margins are recomputed as
+
+$$
+d_t^* = \sum_i m_i W_{it},
+\qquad
+y_t^* = \sum_i m_i Y_{it}.
+$$
+
+For the event-study estimator, the same multiplicities update cohort-time counts and outcome sums. This avoids the long-format bootstrap path that resamples unit identifiers, joins back to the long table, and recompresses the generated design.
+
+## Benchmark Summary
+
+The research memo benchmark uses a one-shot adoption panel with $500{,}000$ units, $250{,}000$ treated units, and $30$ periods, for a 15 million row long panel. The point-estimate timings below exclude data generation and one-time layout creation.
+
+| Method | Kernel seconds |
+|---|---:|
+| `pyfixest` full data | 8.156 |
+| `DBMundlak` groupby | 0.151 |
+| bitmap direct moments | 0.174 |
+
+The setup costs from the generated long panel were:
+
+| Stage | Seconds |
+|---|---:|
+| data generation | 0.779 |
+| DuckDB table creation | 0.494 |
+| long panel to bitmap layout | 12.793 |
+
+The bitmap setup cost is visible when the input arrives as a long panel. It is amortized when the packed representation is reused.
+
+The same rendered memo reports complete static estimation plus inference on a smaller panel with $B=200$ full-sample unit bootstrap replicates for the compressed estimators:
+
+| Method | Setup seconds | Fit and inference seconds | Total seconds |
+|---|---:|---:|---:|
+| `pyfixest` full FE with analytic CRV1 | 0.000 | 9.466 | 9.466 |
+| `DBMundlak` unit bootstrap | 0.023 | 1.136 | 1.159 |
+| bitmap unit bootstrap | 0.246 | 0.089 | 0.335 |
+
+In the 1000-replication sharkfin one-shot DGP coverage exercise, the static estimand was the coefficient on $W_{it}$ in the Mundlak projection of the DGP probability. The compressed estimators used $B=200$ unit bootstrap replicates.
+
+| Method | Inference | Coverage | Mean total seconds | Mean bootstrap draw ms |
+|---|---|---:|---:|---:|
+| `pyfixest` full FE | analytic CRV1 clustered by unit | 0.949 | 4.317 |  |
+| `DBMundlak` groupby | full-sample unit bootstrap | 0.946 | 1.671 | 8.154 |
+| bitmap direct moments | full-sample unit bootstrap | 0.946 | 0.611 | 0.951 |
+
+Absolute timings are hardware-dependent. The main comparison is the separation between one-time layout construction and repeated moment queries. For repeated estimation and bootstrap inference on the same dense binary panel, that separation is the point of the bitmap layout.
+
+## Related Pages
+
+- [Panel Estimators](panel.qmd) covers the general `DBMundlak`, `DBDoubleDemeaning`, and `DBMundlakEventStudy` APIs.
+- [Compression](compression.qmd) explains grouped sufficient statistics for the existing `DB*` estimators.
+- [Inference](inference.qmd) covers analytic and bootstrap covariance paths.
+- [Performance](performance.qmd) contains a compact executed benchmark for the general compression path.
+- The full research memo is in the repository at `notebooks/bitpacked_mundlak_poc.qmd`.

@@ -48,7 +48,7 @@ for bootstrap_draw in range(B):
     beta_b = wls(boot_X, boot_y, boot_n)
 ```
 
-Panel event-study bootstrap uses the same idea with the generated event-study design.
+Panel event-study bootstrap uses the same idea with the generated event-study design. The [bitpacked panel estimators](bitpacked-mundlak.qmd) use full-sample unit multiplicities against a cached bitmap layout, so bootstrap draws do not rebuild the long panel or bitmap representation.
 
 ## GLM Covariance
 
@@ -83,6 +83,8 @@ The grouped score contribution $U_g$ is available because the compressed table s
 | `DBMundlak` | Cluster bootstrap when `cluster_col` is provided. |
 | `DBDoubleDemeaning` | Point estimate currently; bootstrap is not implemented in the `DB*` path. |
 | `DBMundlakEventStudy` | Cluster bootstrap by generated event-study design. |
+| `BitmapMundlak` | Unit bootstrap using multiplicities against a packed panel layout. |
+| `BitmapMundlakEventStudy` | Unit bootstrap using multiplicities against cached cohort-time bitmap moments. |
 | `DBLogisticRegression` | Fisher covariance, or grouped robust sandwich with `fit_vcov(robust=True)`. |
 | `DBPoissonRegression` | Fisher covariance, or grouped robust sandwich with `fit_vcov(robust=True)`. |
 | `DBMultinomialLogisticRegression` | Inverse multinomial Fisher information. |

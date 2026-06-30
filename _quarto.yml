@@ -16,6 +16,8 @@ website:
         text: Linear
       - href: panel.qmd
         text: Panel
+      - href: bitpacked-mundlak.qmd
+        text: Bitpacked Panels
       - href: dml.qmd
         text: DML
       - href: glm.qmd
@@ -39,6 +41,7 @@ website:
       - compression.qmd
       - linear.qmd
       - panel.qmd
+      - bitpacked-mundlak.qmd
       - dml.qmd
       - glm.qmd
       - fisher-scoring.qmd

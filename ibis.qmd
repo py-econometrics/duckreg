@@ -107,6 +107,8 @@ The estimators rely on ordinary relational operations:
 
 The implementation avoids backend-specific constructs such as DuckDB `unnest(?)` in the `DB*` path. The compatibility `Duck*` estimators still contain older DuckDB-oriented SQL in some methods.
 
+The [bitpacked panel estimators](bitpacked-mundlak.qmd) are currently DuckDB-oriented because the direct bitmap SQL uses `bit_count`/popcount expressions that are not exposed through the backend-neutral Ibis expression layer in this implementation.
+
 ## Migration From `Duck*` To `DB*`
 
 The constructor shapes are intentionally close:

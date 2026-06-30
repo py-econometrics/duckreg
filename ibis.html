@@ -4752,6 +4752,15 @@ max-width: 1180px;
 table {
 font-size: 0.94rem;
 }
+.cell-output-display {
+overflow-x: auto;
+}
+pre.sourceCode {
+overflow-x: auto;
+}
+pre.sourceCode code {
+white-space: pre;
+}
 code {
 white-space: pre-wrap;
 }
@@ -4779,53 +4788,57 @@ border-radius: 6px;
           <div class="collapse navbar-collapse" id="navbarCollapse">
             <ul class="navbar-nav navbar-nav-scroll me-auto">
   <li class="nav-item">
-    <a class="nav-link active" href="./index.html" aria-current="page"> 
+    <a class="nav-link active" href="./index.html" aria-current="page">
 <span class="menu-text">Home</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./ibis.html"> 
+    <a class="nav-link" href="./ibis.html">
 <span class="menu-text">Ibis</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./compression.html"> 
+    <a class="nav-link" href="./compression.html">
 <span class="menu-text">Compression</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./linear.html"> 
+    <a class="nav-link" href="./linear.html">
 <span class="menu-text">Linear</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./panel.html"> 
+    <a class="nav-link" href="./panel.html">
 <span class="menu-text">Panel</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./dml.html"> 
+    <a class="nav-link" href="./bitpacked-mundlak.html">
+<span class="menu-text">Bitpacked Panels</span></a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="./dml.html">
 <span class="menu-text">DML</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./glm.html"> 
+    <a class="nav-link" href="./glm.html">
 <span class="menu-text">GLMs</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./fisher-scoring.html"> 
+    <a class="nav-link" href="./fisher-scoring.html">
 <span class="menu-text">Fisher Scoring</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./ridge.html"> 
+    <a class="nav-link" href="./ridge.html">
 <span class="menu-text">Ridge</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./inference.html"> 
+    <a class="nav-link" href="./inference.html">
 <span class="menu-text">Inference</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./examples.html"> 
+    <a class="nav-link" href="./examples.html">
 <span class="menu-text">Examples</span></a>
-  </li>  
+  </li>
   <li class="nav-item">
-    <a class="nav-link" href="./performance.html"> 
+    <a class="nav-link" href="./performance.html">
 <span class="menu-text">Performance</span></a>
-  </li>  
+  </li>
 </ul>
           </div> <!-- /navcollapse -->
             <div class="quarto-navbar-tools">
@@ -4838,7 +4851,7 @@ border-radius: 6px;
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
         <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="./ibis.html">Ibis Backends</a></li></ol></nav>
-        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         </a>
       <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
         <i class="bi bi-search"></i>
@@ -4855,76 +4868,82 @@ border-radius: 6px;
         <div id="quarto-search" class title="Search"></div>
         </div>
         </div>
-    <div class="sidebar-menu-container"> 
+    <div class="sidebar-menu-container">
     <ul class="list-unstyled mt-1">
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./index.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">duckreg</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./ibis.html" class="sidebar-item-text sidebar-link active">
  <span class="menu-text">Ibis Backends</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./compression.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Compression and Estimator Lifecycle</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./linear.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Linear Regression API</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./panel.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Panel Estimators</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
+  <a href="./bitpacked-mundlak.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Bitpacked Panel Mundlak</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container">
   <a href="./dml.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Compressed Double Machine Learning</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./glm.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Generalized Linear Models</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./fisher-scoring.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Fisher Scoring and Multinomial GLMs</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./ridge.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Compressed Ridge Regression</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./inference.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Inference and Variance Estimation</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./examples.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Executed Examples</span></a>
   </div>
 </li>
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
+  <div class="sidebar-item-container">
   <a href="./performance.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Performance Comparisons</span></a>
   </div>
@@ -4937,7 +4956,7 @@ border-radius: 6px;
     <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
         <nav id="TOC" role="doc-toc" class="toc-active">
     <h2 id="toc-title">On this page</h2>
-   
+
   <ul>
   <li><a href="#preferred-api" id="toc-preferred-api" class="nav-link active" data-scroll-target="#preferred-api">Preferred API</a></li>
   <li><a href="#databricks" id="toc-databricks" class="nav-link" data-scroll-target="#databricks">Databricks</a></li>
@@ -4960,11 +4979,11 @@ border-radius: 6px;
 
 <div class="quarto-title-meta column-body">
 
-    
-  
-    
+
+
+
   </div>
-  
+
 
 
 </header>
@@ -4974,7 +4993,7 @@ border-radius: 6px;
 <section id="preferred-api" class="level2">
 <h2 class="anchored" data-anchor-id="preferred-api">Preferred API</h2>
 <p>Use the <code>DB*</code> estimators for backend-neutral work:</p>
-<div id="0c150a23" class="cell" data-execution_count="1">
+<div id="02568d82" class="cell" data-execution_count="1">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> ibis</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBRegression</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -4994,7 +5013,7 @@ border-radius: 6px;
 <span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>model.summary()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>For local DuckDB use, <code>db_name</code> is still enough:</p>
-<div id="ad1e275e" class="cell" data-execution_count="2">
+<div id="8f76329c" class="cell" data-execution_count="2">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBRegression</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> DBRegression(</span>
@@ -5011,7 +5030,7 @@ border-radius: 6px;
 <h2 class="anchored" data-anchor-id="databricks">Databricks</h2>
 <p>Install the Databricks extra and pass a live Ibis backend:</p>
 <pre class="{bash}"><code>uv pip install &quot;duckreg[databricks]&quot;</code></pre>
-<div id="d1a3df65" class="cell" data-execution_count="3">
+<div id="0abc0595" class="cell" data-execution_count="3">
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> ibis</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBRegression</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -5118,11 +5137,12 @@ border-radius: 6px;
 </tbody>
 </table>
 <p>The implementation avoids backend-specific constructs such as DuckDB <code>unnest(?)</code> in the <code>DB*</code> path. The compatibility <code>Duck*</code> estimators still contain older DuckDB-oriented SQL in some methods.</p>
+<p>The <a href="./bitpacked-mundlak.html">bitpacked panel estimators</a> are currently DuckDB-oriented because the direct bitmap SQL uses <code>bit_count</code>/popcount expressions that are not exposed through the backend-neutral Ibis expression layer in this implementation.</p>
 </section>
 <section id="migration-from-duck-to-db" class="level2">
 <h2 class="anchored" data-anchor-id="migration-from-duck-to-db">Migration From <code>Duck*</code> To <code>DB*</code></h2>
 <p>The constructor shapes are intentionally close:</p>
-<div id="669075c1" class="cell" data-execution_count="4">
+<div id="96ef1bbe" class="cell" data-execution_count="4">
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DuckRegression, DBRegression</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>old <span class="op">=</span> DuckRegression(</span>
@@ -5148,7 +5168,7 @@ border-radius: 6px;
 <section id="current-limits" class="level2">
 <h2 class="anchored" data-anchor-id="current-limits">Current Limits</h2>
 <p><code>DBRegression</code> does not parse fixed effects in formulas like <code>Y ~ D | unit + time</code>. Use panel estimators instead:</p>
-<div id="2dc10573" class="cell" data-execution_count="5">
+<div id="7ecdee29" class="cell" data-execution_count="5">
 <div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> duckreg <span class="im">import</span> DBMundlak, DBDoubleDemeaning</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <p>GLM bootstraps are not implemented. Use <code>fit_vcov()</code> with <code>n_bootstraps=0</code> for <code>DBLogisticRegression</code>, <code>DBPoissonRegression</code>, and <code>DBMultinomialLogisticRegression</code>.</p>
@@ -5176,7 +5196,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       toggleBodyColorMode(bsSheetEl);
     }
   }
-  toggleBodyColorPrimary();  
+  toggleBodyColorPrimary();
   const icon = "";
   const anchorJS = new window.AnchorJS();
   anchorJS.options = {
@@ -5186,7 +5206,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
   anchorJS.add('.anchored');
   const isCodeAnnotation = (el) => {
     for (const clz of el.classList) {
-      if (clz.startsWith('code-annotation-')) {                     
+      if (clz.startsWith('code-annotation-')) {
         return true;
       }
     }
@@ -5206,11 +5226,11 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
       button.setAttribute("data-bs-toggle", "tooltip");
       button.setAttribute("data-bs-placement", "left");
       button.setAttribute("data-bs-title", "Copied!");
-      tooltip = new bootstrap.Tooltip(button, 
-        { trigger: "manual", 
+      tooltip = new bootstrap.Tooltip(button,
+        { trigger: "manual",
           customClass: "code-copy-button-tooltip",
           offset: [0, -8]});
-      tooltip.show();    
+      tooltip.show();
     }
     setTimeout(function() {
       if (tooltip) {
@@ -5288,7 +5308,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
     if (onUntriggerFn) {
       config.onUntrigger = onUntriggerFn;
     }
-    window.tippy(el, config); 
+    window.tippy(el, config);
   }
   const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
   for (var i=0; i<noterefs.length; i++) {
@@ -5364,7 +5384,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
     tippyHover(xref, undefined, function(instance) {
       instance.disable();
       let url = xref.getAttribute('href');
-      let hash = undefined; 
+      let hash = undefined;
       if (url.startsWith('#')) {
         hash = url;
       } else {
@@ -5392,7 +5412,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
             if (note !== null) {
               const html = processXRef(id, note);
               instance.setContent(html);
-            } 
+            }
           }).finally(() => {
             instance.enable();
             instance.show();
@@ -5416,7 +5436,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
             }
             const html = processXRef(null, note);
             instance.setContent(html);
-          } 
+          }
         }).finally(() => {
           instance.enable();
           instance.show();
@@ -5456,7 +5476,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
             height = bottom - top;
           }
           if (top !== null && height !== null && parent !== null) {
-            // cook up a div (if necessary) and position it 
+            // cook up a div (if necessary) and position it
             let div = window.document.getElementById("code-annotation-line-highlight");
             if (div === null) {
               div = window.document.createElement("div");

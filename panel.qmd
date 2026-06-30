@@ -4,6 +4,8 @@ title: "Panel Estimators"
 
 Panel estimators create fixed-effect style design variables before compression. This keeps the compressed table small when $N$ is large and $T$ is modest.
 
+For dense balanced panels with binary treatment and binary or low-cardinality outcomes, [Bitpacked Panels](bitpacked-mundlak.qmd) documents the specialized bitmap estimators. Those estimators compute the same Mundlak-style moments from packed unit-major and time-major words.
+
 ## Mundlak
 
 `DBMundlak` augments the original covariates with unit means and, optionally, time means. For a covariate $W_{it}$, the two-way design contains
@@ -127,5 +129,7 @@ The panel estimators avoid formula-level fixed effects in `DBRegression`. They u
 | `DBMundlak` | Group by unit/time to compute covariate means, then join them to the raw table. |
 | `DBDoubleDemeaning` | Join unit means, time means, and the overall treatment mean, then compute $\ddot{W}_{it}$. |
 | `DBMundlakEventStudy` | Infer treatment cohorts, create indicator columns, and compress the generated design. |
+| `BitmapMundlak` | Pack dense low-cardinality panels into bitmaps, then compute static Mundlak moments directly. |
+| `BitmapMundlakEventStudy` | Combine cohort masks with time-major outcome bitplanes to compute cohort-time event-study moments. |
 
 The compatibility `Duck*` panel classes expose the same statistical designs but use older SQL-string internals.

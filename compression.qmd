@@ -104,6 +104,8 @@ Compression is most powerful when the design has repeated rows. This is common i
 
 If every row has a unique continuous covariate vector, the compressed table can be nearly as large as the raw table. In that case `duckreg` still gives a uniform API, but the performance gains are smaller.
 
+Dense binary panels have another compression path. [Bitpacked Panels](bitpacked-mundlak.qmd) stores unit and time histories in packed integer words and computes Mundlak moments with bitwise intersections and popcounts. This is a different physical representation from the grouped sufficient-statistic tables used by the `DB*` estimators.
+
 ## Estimator-Specific Compression
 
 Different estimators define different design cells:
@@ -114,6 +116,8 @@ Different estimators define different design cells:
 | `DBMundlak` | Unique original covariates plus generated unit/time means. |
 | `DBDoubleDemeaning` | Unique values of the residualized treatment. |
 | `DBMundlakEventStudy` | Unique cohort, time, and cohort-by-time indicator rows. |
+| `BitmapMundlak` | Unit-major and time-major treatment/outcome bitmaps. |
+| `BitmapMundlakEventStudy` | Cohort masks crossed with time-major outcome bitmaps. |
 | `DBDML` | Discrete control groups with sums and cross-products. |
 | `DBLogisticRegression` | Unique RHS covariate values with success counts. |
 | `DBPoissonRegression` | Unique RHS covariate values with outcome-count sums. |

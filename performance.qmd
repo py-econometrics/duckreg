@@ -166,6 +166,8 @@ coef_table
 
 The compressed and full-data OLS point estimates match because the grouped sufficient statistics preserve the linear-model normal equations exactly. The performance gain comes from moving the grouping operation to the database and collecting only the compressed table.
 
+For dense balanced binary panels, [Bitpacked Panels](bitpacked-mundlak.qmd) documents a lower-level representation that packs unit and time histories into integer words. That path separates one-time layout construction from repeated point-estimate, event-study, and bootstrap moment queries.
+
 ## What To Expect On Larger Data
 
 The notebook benchmarks used larger local tables and found large speedups when the design compressed aggressively. The same pattern should hold on remote backends when:

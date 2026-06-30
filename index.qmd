@@ -39,6 +39,8 @@ The `DB*` classes are the preferred backend-neutral API. The `Duck*` classes rem
 | `DBMundlak` | One-way or two-way Mundlak panel regression. |
 | `DBDoubleDemeaning` | Two-way residualized treatment regression. |
 | `DBMundlakEventStudy` | Cohort-by-time event-study design with compressed WLS. |
+| `BitmapMundlak` | Direct bitmap moments for dense low-cardinality panel Mundlak designs. |
+| `BitmapMundlakEventStudy` | Bitmap cohort-time event-study moments for dense low-cardinality panels. |
 | `DBDML` | Leave-one-out partial linear estimator for discrete controls. |
 | `DBLogisticRegression` | Compressed binary logit through grouped Fisher scoring. |
 | `DBPoissonRegression` | Compressed Poisson regression through grouped Fisher scoring. |
@@ -60,6 +62,7 @@ Formula-level fixed effects were removed from `DuckRegression` and `DBRegression
 | [Compression](compression.qmd) | Sufficient-statistic algebra and estimator lifecycle. |
 | [Linear](linear.qmd) | OLS API, HC1 covariance, bootstrap, and multiple outcomes. |
 | [Panel](panel.qmd) | Mundlak, double demeaning, and event-study estimators. |
+| [Bitpacked Panels](bitpacked-mundlak.qmd) | Direct bitmap moments for dense binary and low-cardinality panel designs. |
 | [DML](dml.qmd) | Leave-one-out residualization and compressed cross-products. |
 | [GLMs](glm.qmd) | Logistic, Poisson, multinomial, and many-label count models. |
 | [Fisher Scoring](fisher-scoring.qmd) | Math behind the GLM implementation. |
