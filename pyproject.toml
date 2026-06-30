@@ -42,3 +42,12 @@ Repository = "https://github.com/py-econometrics/duckreg"
 [tool.setuptools.packages.find]
 include = ["duckreg", "duckreg.*"]
 exclude = ["tests", "tests.*"]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "joblib>=1.5.3",
+    "jupyter-cache>=1.0.1",
+    "matplotlib>=3.10.9",
+    "pyfixest>=0.50.1",
+]

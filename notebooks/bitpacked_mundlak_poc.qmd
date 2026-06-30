@@ -13,6 +13,7 @@ execute:
   echo: true
   warning: false
   message: false
+  cache: true
 jupyter: python3
 ---
 
@@ -951,7 +952,6 @@ def tidy_event_summary(summary):
 
 
 event_coef_se = tidy_event_summary(event_boot.summary())
-event_coef_se.round({"estimate": 4, "se": 4})
 ```
 
 ```{python}
