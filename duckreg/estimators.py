@@ -156,7 +156,7 @@ class DuckRegression(DuckReg):
         else:
             # Cluster bootstrap - FIX
             unique_groups = self.conn.execute(
-                f"SELECT DISTINCT {self.cluster_col} FROM {self.table_name}"
+                f"SELECT DISTINCT {self.cluster_col} FROM {self.table_name} ORDER BY {self.cluster_col}"
             ).fetchall()
             unique_groups = [group[0] for group in unique_groups]
             self.bootstrap_query = f"""
@@ -1079,7 +1079,7 @@ class DuckMundlak(DuckReg):
         else:
             # Cluster bootstrap
             unique_clusters = self.conn.execute(
-                f"SELECT DISTINCT {self.cluster_col} FROM {self.table_name}"
+                f"SELECT DISTINCT {self.cluster_col} FROM {self.table_name} ORDER BY {self.cluster_col}"
             ).fetchall()
             unique_clusters = [c[0] for c in unique_clusters]
 
@@ -1203,7 +1203,7 @@ class DuckMundlakEventStudy(DuckReg):
             f"{self.cohort_cte} SELECT MAX({self.time_col}) FROM cohort_data"
         ).fetchone()[0]
         cohorts = self.conn.execute(
-            f"{self.cohort_cte} SELECT DISTINCT cohort FROM cohort_data WHERE cohort IS NOT NULL"
+            f"{self.cohort_cte} SELECT DISTINCT cohort FROM cohort_data WHERE cohort IS NOT NULL ORDER BY cohort"
         ).fetchall()
         self.cohorts = [row[0] for row in cohorts]
         # generate_time_dummies
@@ -1334,7 +1334,7 @@ class DuckMundlakEventStudy(DuckReg):
     def bootstrap(self):
         # list all clusters
         unique_clusters = self.conn.execute(
-            f"{self.design_matrix_cte} SELECT DISTINCT {self.cluster_col} FROM transformed_panel_data"
+            f"{self.design_matrix_cte} SELECT DISTINCT {self.cluster_col} FROM transformed_panel_data ORDER BY {self.cluster_col}"
         ).fetchall()
         unique_clusters = [c[0] for c in unique_clusters]
 
@@ -1534,7 +1534,7 @@ class DuckDoubleDemeaning(DuckReg):
             """
         else:
             unique_clusters = self.conn.execute(
-                f"SELECT DISTINCT {self.cluster_col} FROM {self.table_name}"
+                f"SELECT DISTINCT {self.cluster_col} FROM {self.table_name} ORDER BY {self.cluster_col}"
             ).fetchall()
             unique_clusters = [c[0] for c in unique_clusters]
             self.bootstrap_query = f"""
