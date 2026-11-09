@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from .duckreg import DuckReg, wls
+from .duckreg import DuckReg, sorted_clusters, wls
 from .estimators import (
     X_MIN_PILOT,
     _add_intercept,
@@ -167,9 +167,9 @@ class DBRegression(DBReg):
                 boot_coefs[b, :] = wls(X, y, n).flatten()
         else:
             grouped = self.execute_expr(self.compression_expr(include_cluster=True))
-            clusters = self.execute_expr(
-                self.table_expr().select(self.cluster_col)
-            )[self.cluster_col].drop_duplicates().to_numpy()
+            clusters = sorted_clusters(
+                self.execute_expr(self.table_expr().select(self.cluster_col))[self.cluster_col]
+            ).to_numpy()
             for b in tqdm(range(self.n_bootstraps)):
                 sampled = pd.Series(self.rng.choice(clusters, size=len(clusters), replace=True))
                 mult = sampled.value_counts().rename_axis(self.cluster_col).reset_index(name="mult")
@@ -267,11 +267,13 @@ class DBDML(DBReg):
         return self._calculate_beta_from_compressed(self.df_compressed)
 
     def bootstrap(self):
-        n_groups = len(self.df_compressed)
+        # Fixed row order, so the seed alone decides which groups are drawn.
+        groups = self.df_compressed.sort_values(self.discrete_covars, ignore_index=True)
+        n_groups = len(groups)
         boot_coefs = np.zeros((self.n_bootstraps, len(self.treatment_vars)))
         for b in tqdm(range(self.n_bootstraps), desc="Bootstrapping"):
             idx = self.rng.choice(n_groups, size=n_groups, replace=True)
-            boot_coefs[b, :] = self._calculate_beta_from_compressed(self.df_compressed.iloc[idx])
+            boot_coefs[b, :] = self._calculate_beta_from_compressed(groups.iloc[idx])
         vcov = np.cov(boot_coefs, rowvar=False)
         return np.expand_dims(vcov, axis=0) if vcov.ndim == 0 else vcov
 
@@ -357,9 +359,9 @@ class DBMundlak(DBReg):
                     **{f"sum_{self.outcome_var}": self.design_matrix[self.outcome_var].sum()},
                 )
             )
-            clusters = self.execute_expr(
-                self.table_expr().select(self.cluster_col)
-            )[self.cluster_col].drop_duplicates().to_numpy()
+            clusters = sorted_clusters(
+                self.execute_expr(self.table_expr().select(self.cluster_col))[self.cluster_col]
+            ).to_numpy()
             boot_coefs = np.zeros((self.n_bootstraps, len(self.rhs) + 1))
             for b in tqdm(range(self.n_bootstraps)):
                 sampled = pd.Series(self.rng.choice(clusters, size=len(clusters), replace=True))
@@ -597,9 +599,9 @@ class DBMundlakEventStudy(DBReg):
 
     def bootstrap(self):
         grouped = self.execute_expr(self.compression_expr(include_cluster=True))
-        clusters = self.execute_expr(self.design_matrix.select(self.cluster_col))[
-            self.cluster_col
-        ].drop_duplicates().to_numpy()
+        clusters = sorted_clusters(
+            self.execute_expr(self.design_matrix.select(self.cluster_col))[self.cluster_col]
+        ).to_numpy()
         boot_coefs = {str(cohort): [] for cohort in self.cohorts}
         for _ in tqdm(range(self.n_bootstraps)):
             sampled = pd.Series(self.rng.choice(clusters, size=len(clusters), replace=True))

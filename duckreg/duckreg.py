@@ -6,6 +6,21 @@ import numpy as np
 import pandas as pd
 
 
+def sorted_clusters(values) -> pd.Series:
+    """Distinct values in sorted order.
+
+    A database returns rows in no guaranteed order, so a seeded bootstrap
+    that draws positions from an unsorted cluster list resamples different
+    clusters on each run. Sorting here rather than with ORDER BY gives the
+    same order on every backend, since backends sort strings differently.
+    """
+    return (
+        pd.Series(values)
+        .drop_duplicates()
+        .sort_values(kind="stable", na_position="last", ignore_index=True)
+    )
+
+
 def _looks_like_ibis_backend(obj: Any) -> bool:
     return all(hasattr(obj, name) for name in ("execute", "sql", "table"))
 
