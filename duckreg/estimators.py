@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import Union
 from tqdm import tqdm
-from .duckreg import DuckReg, wls
+from .duckreg import DuckReg, sorted_clusters, wls
 
 ################################################################################
 
@@ -156,9 +156,9 @@ class DuckRegression(DuckReg):
         else:
             # Cluster bootstrap - FIX
             unique_groups = self.conn.execute(
-                f"SELECT DISTINCT {self.cluster_col} FROM {self.table_name} ORDER BY {self.cluster_col}"
+                f"SELECT DISTINCT {self.cluster_col} FROM {self.table_name}"
             ).fetchall()
-            unique_groups = [group[0] for group in unique_groups]
+            unique_groups = sorted_clusters([group[0] for group in unique_groups]).tolist()
             self.bootstrap_query = f"""
             WITH resampled AS (
                 SELECT cluster_id, COUNT(*) as mult
@@ -899,13 +899,15 @@ class DuckDML(DuckReg):
         This is equivalent to resampling clusters defined by unique combinations
         of the discrete covariates.
         """
-        n_groups = len(self.df_compressed)
+        # Fixed row order, so the seed alone decides which groups are drawn.
+        groups = self.df_compressed.sort_values(self.discrete_covars, ignore_index=True)
+        n_groups = len(groups)
         n_treat = len(self.treatment_vars)
         boot_coefs = np.zeros((self.n_bootstraps, n_treat))
 
         for b in tqdm(range(self.n_bootstraps), desc="Bootstrapping"):
             resampled_indices = self.rng.choice(n_groups, size=n_groups, replace=True)
-            df_boot = self.df_compressed.iloc[resampled_indices]
+            df_boot = groups.iloc[resampled_indices]
             boot_coefs[b, :] = self._calculate_beta_from_compressed(df_boot)
 
         self.vcov = np.cov(boot_coefs, rowvar=False)
@@ -1079,9 +1081,9 @@ class DuckMundlak(DuckReg):
         else:
             # Cluster bootstrap
             unique_clusters = self.conn.execute(
-                f"SELECT DISTINCT {self.cluster_col} FROM {self.table_name} ORDER BY {self.cluster_col}"
+                f"SELECT DISTINCT {self.cluster_col} FROM {self.table_name}"
             ).fetchall()
-            unique_clusters = [c[0] for c in unique_clusters]
+            unique_clusters = sorted_clusters([c[0] for c in unique_clusters]).tolist()
 
             self.bootstrap_query = f"""
             WITH resampled AS (
@@ -1334,9 +1336,9 @@ class DuckMundlakEventStudy(DuckReg):
     def bootstrap(self):
         # list all clusters
         unique_clusters = self.conn.execute(
-            f"{self.design_matrix_cte} SELECT DISTINCT {self.cluster_col} FROM transformed_panel_data ORDER BY {self.cluster_col}"
+            f"{self.design_matrix_cte} SELECT DISTINCT {self.cluster_col} FROM transformed_panel_data"
         ).fetchall()
-        unique_clusters = [c[0] for c in unique_clusters]
+        unique_clusters = sorted_clusters([c[0] for c in unique_clusters]).tolist()
 
         boot_coefs = {str(cohort): [] for cohort in self.cohorts}
         
@@ -1534,9 +1536,9 @@ class DuckDoubleDemeaning(DuckReg):
             """
         else:
             unique_clusters = self.conn.execute(
-                f"SELECT DISTINCT {self.cluster_col} FROM {self.table_name} ORDER BY {self.cluster_col}"
+                f"SELECT DISTINCT {self.cluster_col} FROM {self.table_name}"
             ).fetchall()
-            unique_clusters = [c[0] for c in unique_clusters]
+            unique_clusters = sorted_clusters([c[0] for c in unique_clusters]).tolist()
             self.bootstrap_query = f"""
             WITH resampled AS (
                 SELECT cluster_id, COUNT(*) as mult
