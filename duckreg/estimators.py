@@ -403,7 +403,8 @@ class _DuckCanonicalGLM(DuckReg):
     def compress_data(self):
         group_by_cols = ", ".join(self.covars)
         self.agg_query = f"""
-        SELECT {group_by_cols}, COUNT(*) AS count, SUM({self.outcome_var}) AS sum_y
+        SELECT {group_by_cols}, COUNT(*) AS count, SUM({self.outcome_var}) AS sum_y,
+            SUM(POW({self.outcome_var}, 2)) AS sum_y_sq
         FROM {self.table_name}
         GROUP BY {group_by_cols}
         """
@@ -466,8 +467,12 @@ class _DuckCanonicalGLM(DuckReg):
                 mu = np.clip(_sigmoid(X @ self.point_estimate), 1e-9, 1 - 1e-9)
             else:
                 mu = np.exp(np.clip(X @ self.point_estimate, -30, 30))
-            grouped_scores = X * (y_sum - totals * mu)[:, None]
-            meat = grouped_scores.T @ grouped_scores
+            # X is constant within a cell, so the per-observation meat is
+            # X_g X_g' * sum_i (y_i - mu_g)^2. Squaring each cell's summed
+            # score instead treats cells as clusters.
+            y_sq_sum = self.df_compressed["sum_y_sq"].values.astype(float)
+            sq_resid = y_sq_sum - 2 * mu * y_sum + totals * mu**2
+            meat = X.T @ (sq_resid[:, None] * X)
             self.vcov = bread @ meat @ bread
         return self.vcov
 
