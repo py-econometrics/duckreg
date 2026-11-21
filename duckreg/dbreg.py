@@ -147,8 +147,8 @@ class DBRegression(DBReg):
         yprimeprime = self.df_compressed[f"sum_{self.outcome_vars[0]}_sq"].values.reshape(-1, 1)
         yhat = (X @ betahat).reshape(-1, 1)
         rss_g = (yhat**2) * n.reshape(-1, 1) - 2 * yhat * yprime + yprimeprime
-        bread = np.linalg.inv(X.T @ np.diag(n.flatten()) @ X)
-        meat = X.T @ np.diag(rss_g.flatten()) @ X
+        bread = np.linalg.inv(X.T @ (n.reshape(-1, 1) * X))
+        meat = X.T @ (rss_g * X)
         n_nk = n.sum() / (n.sum() - X.shape[1])
         self.vcov = n_nk * (bread @ meat @ bread)
 
