@@ -87,6 +87,21 @@ $$
 
 All the above regressions are run in compressed fashion through the configured Ibis backend. Formula-level fixed effects are not part of `DuckRegression`; use the panel-specific `DuckMundlak` or `DuckDoubleDemeaning` estimators for fixed-effect style designs.
 
+### Publishing a release
+
+One-time setup: in the existing [duckreg PyPI project's Publishing settings](https://pypi.org/manage/project/duckreg/settings/publishing/), add a [GitHub Trusted Publisher](https://docs.pypi.org/trusted-publishers/adding-a-publisher/) with:
+
+| Field | Value |
+| --- | --- |
+| Owner | `py-econometrics` |
+| Repository | `duckreg` |
+| Workflow name | `publish.yml` |
+| Environment name | `pypi` |
+
+In GitHub, create the `pypi` environment and limit deployments to release tags (`v*`), not branches. Limit who can create release tags, and add an environment reviewer if you want a separate approval before upload. No PyPI API token is needed in GitHub.
+
+For each release, bump `project.version` in `pyproject.toml`, run `uv lock`, and merge the version and lockfile changes to `master`. Then publish a non-prerelease GitHub Release with a matching tag (for example, `v0.4.2`) on the merged commit. The workflow runs the locked tests, builds and checks a wheel and source distribution, then uploads those artifacts to PyPI. A tag push alone does not publish, and pull requests only build and check the artifacts.
+
 Please cite the following paper if you use `duckreg` in your research: 
 
 ```
