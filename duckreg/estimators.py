@@ -402,8 +402,14 @@ class _DuckCanonicalGLM(DuckReg):
 
     def compress_data(self):
         group_by_cols = ", ".join(self.covars)
+        second_moment = (
+            f", VAR_POP({self.outcome_var}) AS _duckreg_var_y"
+            if self.family == "poisson"
+            else ""
+        )
         self.agg_query = f"""
-        SELECT {group_by_cols}, COUNT(*) AS count, SUM({self.outcome_var}) AS sum_y
+        SELECT {group_by_cols}, COUNT(*) AS count,
+               SUM({self.outcome_var}) AS sum_y{second_moment}
         FROM {self.table_name}
         GROUP BY {group_by_cols}
         """
@@ -456,6 +462,7 @@ class _DuckCanonicalGLM(DuckReg):
         return beta0 + _solve_step(info, score)
 
     def fit_vcov(self, robust: bool = False):
+        """Compute model-based covariance, or rowwise HC0 if robust=True."""
         _, info = self._score_info(self.point_estimate)
         bread = np.linalg.inv(info)
         if not robust:
@@ -464,10 +471,15 @@ class _DuckCanonicalGLM(DuckReg):
             X, y_sum, totals = self.collect_data(self.df_compressed)
             if self.family == "logistic":
                 mu = np.clip(_sigmoid(X @ self.point_estimate), 1e-9, 1 - 1e-9)
+                # Counts of ones and zeros suffice for the sum of squared scores.
+                rss = y_sum * (1 - mu) ** 2 + (totals - y_sum) * mu**2
             else:
                 mu = np.exp(np.clip(X @ self.point_estimate, -30, 30))
-            grouped_scores = X * (y_sum - totals * mu)[:, None]
-            meat = grouped_scores.T @ grouped_scores
+                # Center the second moment to avoid subtracting large raw moments.
+                var_y = self.df_compressed["_duckreg_var_y"].to_numpy(dtype=float)
+                rss = totals * (var_y + (y_sum / totals - mu) ** 2)
+            # Sum squared row residuals within cells, not squared cell residual sums.
+            meat = X.T @ (rss[:, None] * X)
             self.vcov = bread @ meat @ bread
         return self.vcov
 

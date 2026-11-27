@@ -26,6 +26,8 @@ dependencies = [
   "pandas",
   "tqdm",
   "ibis-framework[duckdb]",
+    # Ibis 12's DuckDB backend still uses APIs removed in DuckDB 2.
+    "duckdb<2",
 ]
 
 [project.optional-dependencies]

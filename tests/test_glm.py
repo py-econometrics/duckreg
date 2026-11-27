@@ -3,6 +3,7 @@ import os
 import duckdb
 import numpy as np
 import pandas as pd
+import pytest
 
 from duckreg.estimators import (
     DuckLogisticRegression,
@@ -25,6 +26,57 @@ def _write_db(tmp_path, df, table="data"):
     return db_path
 
 
+@pytest.mark.parametrize(
+    ("estimator", "first_cell", "second_cell", "expected_hc0"),
+    [
+        (DuckLogisticRegression, [0, 0, 1, 1], [0, 0, 1, 1], [[1, -1], [-1, 2]]),
+        (
+            DuckPoissonRegression,
+            [0, 0, 2, 2],
+            [1, 1, 1, 1],
+            [[0.25, -0.25], [-0.25, 0.25]],
+        ),
+    ],
+    ids=["logistic", "poisson"],
+)
+def test_canonical_glm_hc0_retains_within_cell_variation(
+    tmp_path, estimator, first_cell, second_cell, expected_hc0
+):
+    # Both cells have zero summed score, but individual scores need not be zero.
+    df = pd.DataFrame({"y": first_cell + second_cell, "x": [0] * 4 + [1] * 4})
+    model = estimator(
+        db_name=_write_db(tmp_path, df),
+        table_name="data",
+        formula="y ~ x",
+        seed=123,
+        method="irls",
+        n_bootstraps=0,
+    )
+    model.fit()
+    assert len(model.df_compressed) == 2
+    np.testing.assert_allclose(model.point_estimate, np.zeros(2), atol=1e-10)
+    np.testing.assert_allclose(model.fit_vcov(robust=True), expected_hc0, atol=1e-10)
+
+
+def _assert_expanded_glm_covariances(model, X, y):
+    beta = model.point_estimate.copy()
+    eta = X @ beta
+    if model.family == "logistic":
+        mu = 1 / (1 + np.exp(-eta))
+        var = mu * (1 - mu)
+    else:
+        mu = np.exp(eta)
+        var = mu
+    bread = np.linalg.inv(X.T @ (var[:, None] * X))
+    row_scores = X * (y - mu)[:, None]
+    expected_hc0 = bread @ (row_scores.T @ row_scores) @ bread
+    np.testing.assert_allclose(model.fit_vcov(), bread, rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(
+        model.fit_vcov(robust=True), expected_hc0, rtol=1e-10, atol=1e-12
+    )
+    np.testing.assert_array_equal(model.point_estimate, beta)
+
+
 def test_logistic_regression_matches_uncompressed_irls(tmp_path):
     rng = np.random.default_rng(123)
     n = 5000
@@ -45,11 +97,11 @@ def test_logistic_regression_matches_uncompressed_irls(tmp_path):
         n_bootstraps=0,
     )
     model.fit()
-    model.fit_vcov()
 
     X = _add_intercept(df[["x1", "x2"]].values)
     expected = _weighted_logistic_irls(X, df["y"].values, np.ones(n))
     np.testing.assert_allclose(model.point_estimate, expected, rtol=1e-8, atol=1e-8)
+    _assert_expanded_glm_covariances(model, X, df["y"].values)
     assert model.summary()["standard_error"].shape == (3,)
     assert model.df_compressed["count"].sum() == n
 
@@ -73,11 +125,11 @@ def test_poisson_regression_matches_uncompressed_irls(tmp_path):
         n_bootstraps=0,
     )
     model.fit()
-    model.fit_vcov()
 
     X = _add_intercept(df[["x1", "x2"]].values)
     expected = _weighted_poisson_irls(X, df["y"].values, np.ones(n))
     np.testing.assert_allclose(model.point_estimate, expected, rtol=1e-8, atol=1e-8)
+    _assert_expanded_glm_covariances(model, X, df["y"].values)
     assert model.summary()["standard_error"].shape == (3,)
     assert model.df_compressed["count"].sum() == n
 
